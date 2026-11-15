@@ -26,7 +26,8 @@ Read the section you need; ADR 0001 records why it is shaped this way.
 | Conversation | `src/familiar/conversation.py` | Owns history; streams LLM output, splits sentences, hands them to TTS. |
 | Sentences | `src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
 | Transcript | `src/familiar/transcript.py` | Append-only JSONL log, the raw material for future memory. |
-| Director | `src/familiar/director.py` | M2. Decides when the companion speaks. |
+| Director | `src/familiar/director.py` | Decides when the companion speaks (priorities, TTL, cooldowns, idle chatter). |
+| SCS games | `src/familiar/games/scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
 | Backends | `src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |
 
 ## Interfaces (summary)

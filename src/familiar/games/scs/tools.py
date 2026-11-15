@@ -16,6 +16,8 @@ async def watch(settings: dict, game: str, print_fn: Callable[[str], object] = p
     if game not in adapters:
         raise ConfigError(f"Unknown SCS game: {game}")
     adapter = adapters[game](settings)
+    source = settings.get("replay") or settings.get("url", DEFAULT_URL)
+    print_fn(f"Watching {game.upper()} telemetry from {source}; events appear once the game runs.")
 
     async def consume() -> None:
         async for event in adapter.events():

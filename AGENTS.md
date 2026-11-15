@@ -9,9 +9,9 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Milestone: **M1 Voice loop**: built; `say`, both STT and both TTS backends verified live 2026-11-15.
-- Next task: user assigns the HOTAS button (`familiar ptt-setup`) and tests `familiar voice` end to end; tune latency from the transcript "timing" records. Then M2 (ATS).
-- Known: free-tier `gemini-3.8-flash` stalls, so the LLM default is flash-lite. ElevenLabs free tier is 10k chars/month, so speech falls back to Gemini automatically. Local config reads `GEMINI_FREE_KEY`.
+- Milestone: **M2 ATS**: adapter, Director, interjections and 126 verified landmarks merged; replay-tested 2026-11-15, not yet driven live.
+- Next task: live drive with `familiar voice --game ats`; confirm telemetry unit/heading assumptions (`games/scs/telemetry.py` constants) and the HUD units; tune Director cooldowns from the transcript.
+- Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. Local config reads `GEMINI_FREE_KEY`.
 
 ## Rules
 - Python 3.12 via uv: `uv sync`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
@@ -26,8 +26,9 @@ API tier) is the first backend; others plug in via entry points.
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
 - `docs/plugins.md`: how to add an LLM/STT/TTS/game backend. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.
-- `docs/decisions/`: ADRs. Read 0001 before changing the overall structure.
+- `docs/decisions/`: ADRs. Read 0001 before changing the overall structure, 0002 before changing how location/landmarks work.
 - `config.example.toml`: every config key with defaults.
 - `personas/`: persona YAML files.
-- `src/familiar/`: package; `backends/` holds built-in plugins.
+- `src/familiar/`: package; `backends/` holds built-in plugins, `games/scs/` the ATS/ETS2 adapter (`knowledge/<game>/` landmark packs).
+- `scripts/`: data builders and landmark checkers (`verify_landmarks.py`, `factcheck_landmarks.py`). Run both before adding landmarks.
 - `tests/`: pytest suite.
