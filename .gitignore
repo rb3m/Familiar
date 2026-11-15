@@ -6,4 +6,4 @@ __pycache__/
 dist/
 config.toml
 .env
-data/
+/data/
