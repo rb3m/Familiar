@@ -20,6 +20,9 @@ class AppConfig:
     language: str = "en"
     persona: str = "mira"
     personas_dir: Path = Path("personas")
+    user_personas_dir: Path = field(
+        default_factory=lambda: Path("~/.config/familiar/personas").expanduser()
+    )
     transcript_dir: Path = Path("data/transcripts")
     llm: BackendConfig = field(default_factory=lambda: BackendConfig("gemini"))
     ptt: BackendConfig = field(default_factory=lambda: BackendConfig("terminal"))
@@ -106,6 +109,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         language=language,
         persona=persona,
         personas_dir=_path(data.get("personas_dir", "personas"), base),
+        user_personas_dir=_path(data.get("user_personas_dir", "~/.config/familiar/personas"), base),
         transcript_dir=_path(data.get("transcript_dir", "data/transcripts"), base),
         llm=llm,
         ptt=_backend(data, "ptt", "terminal"),

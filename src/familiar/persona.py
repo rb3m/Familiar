@@ -1,6 +1,7 @@
 """Persona data, language-specific voices, and system prompt construction."""
 
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -63,13 +64,20 @@ class Persona:
         return self.languages.get(language, {}).get("voices", {}).get(tts_backend)
 
 
-def _validate(data: object) -> dict:
+def validate_id(persona_id: object) -> None:
+    """Reject IDs that cannot safely name a persona file."""
+    if not isinstance(persona_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,39}", persona_id):
+        raise ConfigError(f"Invalid persona id {persona_id!r}")
+
+
+def validate_persona(data: object) -> dict:
     if not isinstance(data, dict):
         raise ConfigError("Persona must be a YAML mapping")
     for key in ("id", "display_name", "source", "prompt"):
         if not isinstance(data.get(key), str) or not data[key].strip():
             raise ConfigError(f"Persona {key} must be a non-empty string")
     chattiness = data.get("chattiness")
+    validate_id(data["id"])
     if (
         isinstance(chattiness, bool)
         or not isinstance(chattiness, (int, float))
@@ -98,19 +106,45 @@ def _validate(data: object) -> dict:
     ):
         raise ConfigError("Persona game_hooks must map game names to strings")
     truthfulness = data.get("truthfulness", "strict")
-    if truthfulness not in TRUTHFULNESS_RULES:
+    if not isinstance(truthfulness, str) or truthfulness not in TRUTHFULNESS_RULES:
         allowed = ", ".join(TRUTHFULNESS_RULES)
         raise ConfigError(f"Persona truthfulness must be one of: {allowed}")
     return {**data, "style_rules": rules, "game_hooks": hooks, "truthfulness": truthfulness}
 
 
-def load_persona(personas_dir: str | Path, persona_id: str) -> Persona:
+_validate = validate_persona
+
+
+def load_persona(
+    personas_dir: str | Path,
+    persona_id: str,
+    user_personas_dir: str | Path = "~/.config/familiar/personas",
+) -> Persona:
     """Load and validate a persona YAML file from its directory."""
-    if Path(persona_id).name != persona_id or persona_id in {"", ".", ".."}:
-        raise ConfigError(f"Invalid persona id {persona_id!r}")
-    path = Path(personas_dir) / f"{persona_id}.yaml"
+    validate_id(persona_id)
+    paths = [Path(user_personas_dir).expanduser(), Path(personas_dir)]
+    path = next(
+        (
+            directory / f"{persona_id}.yaml"
+            for directory in paths
+            if (directory / f"{persona_id}.yaml").is_file()
+        ),
+        Path(personas_dir) / f"{persona_id}.yaml",
+    )
     try:
         data = _validate(yaml.safe_load(path.read_text(encoding="utf-8")))
     except (OSError, yaml.YAMLError) as exc:
         raise ConfigError(f"Cannot read persona {path}: {exc}") from exc
     return Persona(**{key: data[key] for key in Persona.__dataclass_fields__})
+
+
+def list_personas(dirs: list[Path]) -> list[tuple[Persona, bool]]:
+    """List user then builtin directories, with the first ID taking precedence."""
+    found: dict[str, tuple[Persona, bool]] = {}
+    for index, directory in enumerate(dirs):
+        for path in sorted(Path(directory).expanduser().glob("*.yaml")):
+            if path.stem in found:
+                continue
+            persona = load_persona(path.parent, path.stem, path.parent)
+            found[persona.id] = (persona, index > 0)
+    return [found[key] for key in sorted(found)]

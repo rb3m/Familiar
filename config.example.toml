@@ -4,6 +4,8 @@
 language = "en"            # en | es | ja (persona must support it)
 persona = "mira"        # file name in personas_dir, without .yaml
 personas_dir = "personas"
+# GUI-created personas live here and take precedence over personas_dir.
+user_personas_dir = "~/.config/familiar/personas"
 transcript_dir = "data/transcripts"
 # game = "ats"             # optional default; chat/voice --game overrides it
 
