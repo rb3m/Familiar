@@ -12,6 +12,7 @@ from familiar.interfaces import ConfigError
 class BackendConfig:
     backend: str
     settings: dict = field(default_factory=dict)
+    fallback: "BackendConfig | None" = None
 
 
 @dataclass
@@ -21,6 +22,7 @@ class AppConfig:
     personas_dir: Path = Path("personas")
     transcript_dir: Path = Path("data/transcripts")
     llm: BackendConfig = field(default_factory=lambda: BackendConfig("gemini"))
+    ptt: BackendConfig = field(default_factory=lambda: BackendConfig("terminal"))
     stt: BackendConfig | None = None
     tts: BackendConfig | None = None
 
@@ -37,7 +39,15 @@ def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig
     settings = section.get(name, {})
     if not isinstance(settings, dict):
         raise ConfigError(f"[{kind}.{name}] must be a table")
-    return BackendConfig(name, settings.copy())
+    fallback = section.get("fallback")
+    if fallback is None:
+        return BackendConfig(name, settings.copy())
+    if not isinstance(fallback, str) or not fallback or fallback == name:
+        raise ConfigError(f"{kind}.fallback must name a different backend")
+    fallback_settings = section.get(fallback, {})
+    if not isinstance(fallback_settings, dict):
+        raise ConfigError(f"[{kind}.{fallback}] must be a table")
+    return BackendConfig(name, settings.copy(), BackendConfig(fallback, fallback_settings.copy()))
 
 
 def _path(value: object, base: Path) -> Path:
@@ -77,6 +87,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         personas_dir=_path(data.get("personas_dir", "personas"), base),
         transcript_dir=_path(data.get("transcript_dir", "data/transcripts"), base),
         llm=llm,
+        ptt=_backend(data, "ptt", "terminal"),
         stt=_backend(data, "stt"),
         tts=_backend(data, "tts"),
     )

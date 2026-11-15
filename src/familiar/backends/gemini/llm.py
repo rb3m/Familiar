@@ -1,7 +1,6 @@
 """Google GenAI asynchronous text streaming backend."""
 
 import asyncio
-import os
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
@@ -11,12 +10,13 @@ from google.genai import errors, types
 from familiar.interfaces import (
     PLUGIN_API_VERSION,
     BackendError,
-    ConfigError,
     LLMChunk,
     Message,
     ToolCall,
     ToolSpec,
 )
+
+from .client import make_client
 
 RETRYABLE_CODES = frozenset({429, 500, 503, 504})
 
@@ -77,14 +77,7 @@ class GeminiLLM:
     def _get_client(self) -> genai.Client:
         if self._client is not None:
             return self._client
-        variable = self.settings["api_key_env"]
-        if not isinstance(variable, str) or not variable:
-            raise ConfigError("Gemini api_key_env must name an environment variable")
-        key = os.environ.get(variable)
-        if not key:
-            raise ConfigError(f"Environment variable {variable!r} is missing or empty")
-        http_options = types.HttpOptions(timeout=int(self.read_timeout * 1000))
-        self._client = genai.Client(api_key=key, http_options=http_options)
+        self._client = make_client(self.settings, api_version=None)
         return self._client
 
     def _attempts(self) -> list[tuple[str, float]]:

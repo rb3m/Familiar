@@ -10,6 +10,7 @@ GROUPS = {
     "tts": "familiar.tts",
     "games": "familiar.games",
 }
+GROUPS["ptt"] = "familiar.ptt"
 
 
 def _entries(kind: str) -> list:

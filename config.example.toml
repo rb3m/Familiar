@@ -19,18 +19,40 @@ fallback_models = ["gemini-3.8-flash"]   # tried after retries run out
 first_chunk_timeout_seconds = 8.0   # an overloaded model may stall silently; give up and fall back
 timeout_seconds = 30.0
 
-# M1: speech backends
-# [stt]
-# backend = "gemini"
-# [stt.gemini]
-# model = "gemini-3.5-transcribe"
-# api_key_env = "GEMINI_API_KEY"
-#
-# [tts]
-# backend = "gemini"        # or "elevenlabs"
-# [tts.gemini]
-# model = "gemini-3.8-flash-tts"
-# api_key_env = "GEMINI_API_KEY"
-# [tts.elevenlabs]
-# model = "eleven_flash_v2_5"
-# api_key_env = "ELEVENLABS_API_KEY"
+# Speech settings are scoped by backend, including the optional fallback.
+[stt]
+backend = "elevenlabs"
+fallback = "gemini"
+
+[stt.elevenlabs]
+model = "scribe_v2"
+api_key_env = "ELEVENLABS_API_KEY"
+timeout_seconds = 30.0
+
+[stt.gemini]
+model = "gemini-3.5-transcribe"
+api_key_env = "GEMINI_API_KEY"
+timeout_seconds = 30.0
+
+[tts]
+backend = "elevenlabs"
+fallback = "gemini"
+
+[tts.elevenlabs]
+model = "eleven_flash_v2_5"
+api_key_env = "ELEVENLABS_API_KEY"
+timeout_seconds = 30.0
+
+[tts.gemini]
+model = "gemini-3.8-flash-lite-tts"
+api_key_env = "GEMINI_API_KEY"
+timeout_seconds = 30.0
+
+[ptt]
+backend = "terminal"       # Enter starts recording, Enter stops; Ctrl-C exits
+
+# Linux joystick/HOTAS: run familiar ptt-setup to detect device and button.
+# Set backend = "evdev" above to enable. The game retains access to the device.
+# [ptt.evdev]
+# device = "Thrustmaster"  # substring of device name, or /dev/input/eventN
+# button = "BTN_TRIGGER"  # evdev button name or integer code
