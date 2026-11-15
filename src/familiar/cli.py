@@ -113,7 +113,9 @@ class _Runtime:
 @asynccontextmanager
 async def _runtime(args: argparse.Namespace) -> AsyncIterator[_Runtime]:
     config = load_config(args.config)
-    persona = load_persona(config.personas_dir, args.persona or config.persona)
+    persona = load_persona(
+        config.personas_dir, args.persona or config.persona, config.user_personas_dir
+    )
     language = args.language or config.language
     persona.system_prompt(language)
     async with AsyncExitStack() as stack:
@@ -286,6 +288,12 @@ async def _ptt_setup(args: argparse.Namespace) -> None:
     print(f"Saved to {path}: push-to-talk = {button} on {device}.")
 
 
+async def _gui(args: argparse.Namespace) -> None:
+    from familiar.gui.server import serve
+
+    await serve(args.port, args.no_browser, args.config)
+
+
 async def _watch(args: argparse.Namespace) -> None:
     from familiar.games.scs.tools import watch
 
@@ -450,6 +458,10 @@ def main() -> None:
         if name in {"chat", "voice"}:
             command.add_argument("--game", metavar="NAME")
     commands.add_parser("plugins", help="List installed backends")
+    gui = commands.add_parser("gui", help="Open the Familiar launcher")
+    gui.add_argument("--port", type=int, default=8765)
+    gui.add_argument("--no-browser", action="store_true")
+    gui.add_argument("--config")
     ptt_setup = commands.add_parser("ptt-setup", help="Detect and save a joystick PTT button")
     ptt_setup.add_argument("--config")
     voices = commands.add_parser("voices", help="List ElevenLabs voices and quota")
@@ -471,6 +483,7 @@ def main() -> None:
             return
         handlers = {
             "landmarks": _landmarks,
+            "gui": _gui,
             "watch": _watch,
             "telemetry-record": _telemetry_record,
             "chat": _chat,
