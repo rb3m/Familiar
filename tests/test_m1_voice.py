@@ -107,7 +107,9 @@ class PTT:
 
 def make_session(**overrides):
     persona = SimpleNamespace(
-        display_name="Test", voice=lambda *args: "fake-voice", system_prompt=lambda _: "prompt"
+        display_name="Test",
+        voice=lambda *args: "fake-voice",
+        system_prompt=lambda _language, _game=None: "prompt",
     )
     log = Log()
     conversation = Conversation(LLM(), persona, "en", log)

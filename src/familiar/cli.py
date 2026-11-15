@@ -5,7 +5,7 @@ import asyncio
 import signal
 import sys
 from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,8 +13,9 @@ from familiar.audio.player import Player
 from familiar.audio.recorder import Recorder
 from familiar.config import AppConfig, BackendConfig, load_config
 from familiar.conversation import Conversation
+from familiar.director import Director, feed_events
 from familiar.fallback import FallbackSTT, FallbackTTS, close_backend
-from familiar.interfaces import BackendError, ConfigError, PluginError
+from familiar.interfaces import BackendError, ConfigError, GameAdapter, GameEvent, PluginError
 from familiar.persona import Persona, load_persona
 from familiar.plugins import GROUPS, available, load
 from familiar.transcript import TranscriptLog
@@ -23,15 +24,35 @@ from familiar.voice import VoiceSession
 _ERRORS = (ConfigError, PluginError, BackendError)
 
 
-async def _reply(conversation: Conversation, text: str) -> None:
-    print(f"{conversation.persona.display_name}: ", end="", flush=True)
-    async for sentence in conversation.ask(text):
-        print(sentence, end=" ", flush=True)
-    print()
+async def _reply(
+    conversation: Conversation,
+    text: str = "",
+    director: Director | None = None,
+    event: GameEvent | None = None,
+) -> None:
+    label = conversation.persona.display_name
+    if event is not None:
+        label += f" (event: {event.kind})"
+    source = conversation.ask(text) if event is None else conversation.interject(event)
+    said = False
+    if director is not None:
+        director.set_busy("speaking", True)
+    try:
+        async with aclosing(source) as sentences:
+            async for sentence in sentences:
+                print(f"{label}: {sentence}", flush=True)
+                said = True
+    finally:
+        if director is not None:
+            if said:
+                director.notify_spoke()
+            director.set_busy("speaking", False)
 
 
-async def _cancellable_reply(conversation: Conversation, text: str) -> None:
-    task = asyncio.create_task(_reply(conversation, text))
+async def _cancellable_reply(
+    conversation: Conversation, text: str, director: Director | None = None
+) -> None:
+    task = asyncio.create_task(_reply(conversation, text, director))
     loop = asyncio.get_running_loop()
     previous = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, lambda *_: loop.call_soon_threadsafe(task.cancel))
@@ -62,6 +83,26 @@ class _Runtime:
             return FallbackSTT(primary, secondary)
         return FallbackTTS(primary, secondary, lambda name: self.persona.voice(name, self.language))
 
+    def conversation(
+        self, args: argparse.Namespace
+    ) -> tuple[Conversation, GameAdapter | None, Director | None]:
+        name = args.game or self.config.game
+        adapter = None
+        director = None
+        if name:
+            adapter = load("games", name, self.config.games.get(name, {}))
+            self.stack.push_async_callback(close_backend, adapter)
+            director = Director(self.persona.chattiness, self.config.director)
+        conversation = Conversation(
+            self.backend("llm", self.config.llm),
+            self.persona,
+            self.language,
+            TranscriptLog(self.config.transcript_dir),
+            context=adapter.describe if adapter is not None else None,
+            game=adapter.game if adapter is not None else None,
+        )
+        return conversation, adapter, director
+
     def speech(self, kind: str) -> Any:
         spec = getattr(self.config, kind)
         if spec is None:
@@ -81,24 +122,78 @@ async def _runtime(args: argparse.Namespace) -> AsyncIterator[_Runtime]:
 
 async def _chat(args: argparse.Namespace) -> None:
     async with _runtime(args) as runtime:
-        llm = runtime.backend("llm", runtime.config.llm)
-        conversation = Conversation(
-            llm,
-            runtime.persona,
-            runtime.language,
-            TranscriptLog(runtime.config.transcript_dir),
-        )
-        print(f"Chatting with {runtime.persona.display_name}. Type /quit to exit.")
-        while True:
+        conversation, adapter, director = runtime.conversation(args)
+        interjection: asyncio.Task | None = None
+        reply_lock = asyncio.Lock()
+        user_busy = False
+        tasks: list[asyncio.Task] = []
+
+        async def cancel_interjection() -> None:
+            if interjection is not None:
+                interjection.cancel()
+                await asyncio.gather(interjection, return_exceptions=True)
+                if director is not None:
+                    director.set_busy("speaking", False)
+                    director.set_busy("critical", False)
+
+        async def speak_event(event: GameEvent) -> None:
+            assert director is not None
+            critical = director.preempts(event)
+            director.set_busy("critical", critical)
             try:
-                text = input("> ").strip()
-            except EOFError:
-                print()
-                return
-            if text == "/quit":
-                return
-            if text:
-                await _cancellable_reply(conversation, text)
+                await _reply(conversation, director=director, event=event)
+            except _ERRORS as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+            finally:
+                director.set_busy("critical", False)
+
+        async def events() -> None:
+            nonlocal interjection
+            assert director is not None
+            while True:
+                event = await director.next()
+                async with reply_lock:
+                    await cancel_interjection()
+                    if user_busy:
+                        director.submit(event)
+                        continue
+                    director.set_busy("speaking", True)
+                    director.set_busy("critical", director.preempts(event))
+                    interjection = asyncio.create_task(speak_event(event))
+
+        if adapter is not None and director is not None:
+            tasks = [
+                asyncio.create_task(feed_events(adapter, director)),
+                asyncio.create_task(events()),
+            ]
+        print(f"Chatting with {runtime.persona.display_name}. Type /quit to exit.")
+        try:
+            while True:
+                try:
+                    text = (await asyncio.to_thread(input, "> ")).strip()
+                except EOFError:
+                    print()
+                    return
+                if text == "/quit":
+                    return
+                if not text:
+                    continue
+                user_busy = True
+                if director is not None:
+                    director.set_busy("user", True)
+                async with reply_lock:
+                    await cancel_interjection()
+                try:
+                    await _cancellable_reply(conversation, text, director)
+                finally:
+                    user_busy = False
+                    if director is not None:
+                        director.set_busy("user", False)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await cancel_interjection()
 
 
 def _elevenlabs(backend: Any) -> Any:
@@ -127,9 +222,8 @@ async def _voice(args: argparse.Namespace) -> None:
                 await _print_quota(elevenlabs)
             except BackendError as exc:
                 print(f"Cannot check ElevenLabs quota: {exc}", file=sys.stderr)
-        llm = runtime.backend("llm", runtime.config.llm)
-        transcript = TranscriptLog(runtime.config.transcript_dir)
-        conversation = Conversation(llm, runtime.persona, runtime.language, transcript)
+        conversation, adapter, director = runtime.conversation(args)
+        transcript = conversation.transcript
         ptt = runtime.backend("ptt", runtime.config.ptt)
         # VoiceSession owns cleanup once started; remove the setup cleanup callbacks.
         runtime.stack.pop_all()
@@ -143,6 +237,8 @@ async def _voice(args: argparse.Namespace) -> None:
             runtime.persona,
             runtime.language,
             transcript,
+            adapter=adapter,
+            director=director,
         ).run()
 
 
@@ -190,6 +286,25 @@ async def _ptt_setup(args: argparse.Namespace) -> None:
     print(f"Saved to {path}: push-to-talk = {button} on {device}.")
 
 
+async def _watch(args: argparse.Namespace) -> None:
+    from familiar.games.scs.tools import watch
+
+    config = load_config(args.config)
+    game = args.game or config.game or "ats"
+    settings = dict(config.games.get(game, {}))
+    if args.replay is not None:
+        settings["replay"] = args.replay
+    await watch(settings, game)
+
+
+async def _telemetry_record(args: argparse.Namespace) -> None:
+    from familiar.games.scs.tools import record
+
+    config = load_config(args.config)
+    game = args.game or config.game or "ats"
+    await record(config.games.get(game, {}), args.file)
+
+
 def main() -> None:
     """Dispatch the text REPL or list installed backend entry points."""
     parser = argparse.ArgumentParser(prog="familiar")
@@ -205,11 +320,21 @@ def main() -> None:
         command.add_argument("--language")
         if name == "say":
             command.add_argument("text")
+        if name in {"chat", "voice"}:
+            command.add_argument("--game", metavar="NAME")
     commands.add_parser("plugins", help="List installed backends")
     ptt_setup = commands.add_parser("ptt-setup", help="Detect and save a joystick PTT button")
     ptt_setup.add_argument("--config")
     voices = commands.add_parser("voices", help="List ElevenLabs voices and quota")
     voices.add_argument("--config")
+    watch = commands.add_parser("watch", help="Watch live game telemetry")
+    watch.add_argument("--config")
+    watch.add_argument("--game", required=True, metavar="NAME")
+    watch.add_argument("--replay", metavar="FILE")
+    record = commands.add_parser("telemetry-record", help="Record game telemetry")
+    record.add_argument("file", metavar="FILE")
+    record.add_argument("--config")
+    record.add_argument("--game", metavar="NAME")
     args = parser.parse_args()
     try:
         if args.command == "plugins":
@@ -217,6 +342,8 @@ def main() -> None:
                 print(f"{kind}: {', '.join(available(kind)) or '(none)'}")
             return
         handlers = {
+            "watch": _watch,
+            "telemetry-record": _telemetry_record,
             "chat": _chat,
             "voice": _voice,
             "say": _say,

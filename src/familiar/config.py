@@ -25,6 +25,9 @@ class AppConfig:
     ptt: BackendConfig = field(default_factory=lambda: BackendConfig("terminal"))
     stt: BackendConfig | None = None
     tts: BackendConfig | None = None
+    game: str | None = None
+    games: dict[str, dict] = field(default_factory=dict)
+    director: dict = field(default_factory=dict)
 
 
 def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig | None:
@@ -85,9 +88,21 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     persona = data.get("persona", "mira")
     if not isinstance(language, str) or not isinstance(persona, str):
         raise ConfigError("language and persona must be strings")
+    game = data.get("game")
+    if game is not None and (not isinstance(game, str) or not game):
+        raise ConfigError("game must be a non-empty string")
+    games = data.get("games", {})
+    if not isinstance(games, dict) or any(not isinstance(v, dict) for v in games.values()):
+        raise ConfigError("[games.<name>] must be a table")
+    director = data.get("director", {})
+    if not isinstance(director, dict):
+        raise ConfigError("[director] must be a table")
     llm = _backend(data, "llm", "gemini")
     assert llm is not None
     return AppConfig(
+        game=game,
+        games=games,
+        director=director,
         language=language,
         persona=persona,
         personas_dir=_path(data.get("personas_dir", "personas"), base),

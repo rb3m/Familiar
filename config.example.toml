@@ -5,6 +5,7 @@ language = "en"            # en | es | ja (persona must support it)
 persona = "mira"        # file name in personas_dir, without .yaml
 personas_dir = "personas"
 transcript_dir = "data/transcripts"
+# game = "ats"             # optional default; chat/voice --game overrides it
 
 [llm]
 backend = "gemini"
@@ -56,3 +57,17 @@ backend = "terminal"       # Enter starts recording, Enter stops; Ctrl-C exits
 # [ptt.evdev]
 # device = "Thrustmaster"  # substring of device name, or /dev/input/eventN
 # button = "BTN_TRIGGER"  # evdev button name or integer code
+
+# Game backends receive their own settings table; absent tables default to {}.
+[games.ats]
+url = "http://localhost:25555/api/ets2/telemetry"
+poll_interval_s = 1.0
+units = "imperial"         # display only; internal telemetry remains SI
+knowledge_paths = []      # curated landmark/lore packs
+
+[director]
+enabled = true
+idle_minutes = 12
+notable_cooldown_s = 40
+ambient_cooldown_s = 300
+# Cooldowns and idle interval scale by (1.5 - persona.chattiness).
