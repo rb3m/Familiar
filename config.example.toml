@@ -1,0 +1,31 @@
+# Copy to config.toml (git-ignored) or ~/.config/familiar/config.toml and adjust.
+# Secrets never go here: settings name the environment variable that holds them.
+
+language = "en"            # en | es | ja (persona must support it)
+persona = "mira"        # file name in personas_dir, without .yaml
+personas_dir = "personas"
+transcript_dir = "data/transcripts"
+
+[llm]
+backend = "gemini"
+
+[llm.gemini]
+model = "gemini-3.8-flash"     # free tier; "gemini-3.5-flash-lite" is faster and cheaper
+api_key_env = "GEMINI_API_KEY"
+temperature = 0.8
+
+# M1: speech backends
+# [stt]
+# backend = "gemini"
+# [stt.gemini]
+# model = "gemini-3.5-transcribe"
+# api_key_env = "GEMINI_API_KEY"
+#
+# [tts]
+# backend = "gemini"        # or "elevenlabs"
+# [tts.gemini]
+# model = "gemini-3.8-flash-tts"
+# api_key_env = "GEMINI_API_KEY"
+# [tts.elevenlabs]
+# model = "eleven_flash_v2_5"
+# api_key_env = "ELEVENLABS_API_KEY"
