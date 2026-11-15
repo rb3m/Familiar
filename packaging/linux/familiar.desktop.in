@@ -2,8 +2,8 @@
 Type=Application
 Name=Familiar
 GenericName=Voice Companion
-Comment=Talk with your AI companion (push-to-talk)
-Exec=@LAUNCHER@ voice
+Comment=Pick a game and a companion, then talk (push-to-talk)
+Exec=@LAUNCHER@ gui
 Icon=familiar
 Terminal=false
 Categories=Utility;
@@ -11,17 +11,17 @@ Keywords=voice;companion;assistant;ats;
 Actions=ats-ember;ats-mira;ets2-ember;desk-mira;
 
 [Desktop Action ats-ember]
-Name=American Truck Simulator – Ember
+Name=Terminal: American Truck Simulator – Ember
 Exec=@LAUNCHER@ voice --game ats --persona ember
 
 [Desktop Action ats-mira]
-Name=American Truck Simulator – Mira
+Name=Terminal: American Truck Simulator – Mira
 Exec=@LAUNCHER@ voice --game ats --persona mira
 
 [Desktop Action ets2-ember]
-Name=Euro Truck Simulator 2 – Ember
+Name=Terminal: Euro Truck Simulator 2 – Ember
 Exec=@LAUNCHER@ voice --game ets2 --persona ember
 
 [Desktop Action desk-mira]
-Name=Desk chat – Mira
+Name=Terminal: Desk chat – Mira
 Exec=@LAUNCHER@ voice --persona mira

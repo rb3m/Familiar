@@ -1025,3 +1025,10 @@ output {
     scroll-behavior:auto!important;
   }
 }
+
+/* Headings and messages receive focus programmatically (for screen readers) when a view
+   changes; they are not interactive, so no visible focus ring. */
+[tabindex="-1"]:focus,
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}

@@ -20,13 +20,16 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   "defaults": {"game": "ats" | null, "persona": "mira", "language": "en"},
   "session": Session, "quota": {"used": 120, "limit": 10000} | null}`
   - `PersonaSummary` = `{"id", "display_name", "source", "truthfulness", "chattiness",
-    "languages": ["en", "ja"], "builtin": bool}`; `builtin` = shipped in the repo `personas/`
-    (read-only; editing saves a user copy with the same id, which then takes precedence).
+    "languages": ["en", "ja"], "builtin": bool, "overrides_builtin": bool}`; `builtin` = shipped
+    in the repo `personas/` (read-only; editing saves a user copy with the same id, which then
+    takes precedence); `overrides_builtin` = a user copy shadowing a shipped persona (DELETE
+    restores the original, so the UI labels it "Reset to built-in").
   - `Session` = `{"running": bool, "game": str | null, "persona": str | null, "language": str | null,
     "started_at": ISO-8601 | null, "exit_code": int | null}`
   - Game names: ats "American Truck Simulator", ets2 "Euro Truck Simulator 2"; unknown ids
     title-cased. The list comes from installed `familiar.games` plugins.
-- `GET /api/personas/{id}` → full persona as JSON (same keys as the YAML) + `"builtin": bool`.
+- `GET /api/personas/{id}` → full persona as JSON (same keys as the YAML) + `"builtin": bool`
+  and `"overrides_builtin": bool`.
 - `PUT /api/personas/{id}` body = full persona JSON → validated with the persona loader rules;
   saved as YAML in the user personas dir; `200` → PersonaSummary; `400` on validation error.
   The id in the URL wins over any id in the body. Ids: `^[a-z0-9][a-z0-9_-]{0,39}$`.
@@ -35,6 +38,8 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
 - `POST /api/personas/draft` body `{"character": "Mira", "source": "an original story"
   (optional), "notes": "..." (optional)}` → the LLM drafts a persona (JSON in the same shape,
   validated, NOT saved) → `200` persona JSON; `502` with error if the LLM output is unusable.
+  Draft voices: Gemini names outside the known list become "Kore"; ElevenLabs is always null
+  (the LLM cannot know the user's voice library).
 - `GET /api/voices` → `{"gemini": ["Achernar", "Kore", ...30 names], "elevenlabs":
   [{"id", "name", "labels": {...}}] , "elevenlabs_error": str | null}`.
 - `POST /api/voices/test` body `{"backend": "elevenlabs" | "gemini", "voice": "id-or-name",

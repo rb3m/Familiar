@@ -440,8 +440,20 @@ async def _curate_landmarks(args: argparse.Namespace) -> None:
     print(f"Merged into {pack}: added {added}, skipped {skipped}")
 
 
+def _graceful_signals() -> None:
+    """Make Ctrl-C (SIGINT) and SIGTERM both stop Familiar through KeyboardInterrupt.
+
+    A process started in the background by a non-interactive shell inherits SIGINT as ignored,
+    and then Python never installs its handler; the GUI's session manager stops sessions with
+    SIGINT, so restore it explicitly. SIGTERM gets the same clean shutdown (mic, HOTAS, audio).
+    """
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
+
+
 def main() -> None:
     """Dispatch the text REPL or list installed backend entry points."""
+    _graceful_signals()
     parser = argparse.ArgumentParser(prog="familiar")
     commands = parser.add_subparsers(dest="command", required=True)
     for name, help_text in {

@@ -28,6 +28,26 @@ from familiar.plugins import available, load
 from .personas import save_persona
 from .session import SessionConflictError, SessionManager
 
+
+def sanitize_draft_voices(persona: dict) -> dict:
+    """An LLM cannot know the user's voice library: keep only real Gemini voice names and leave
+    ElevenLabs empty for the user to pick (drafts once invented ElevenLabs ids)."""
+    languages = persona.get("languages")
+    if not isinstance(languages, dict) or not languages:
+        languages = {"en": {}}
+    cleaned = {}
+    for language, settings in languages.items():
+        voices = settings.get("voices", {}) if isinstance(settings, dict) else {}
+        gemini = voices.get("gemini") if isinstance(voices, dict) else None
+        cleaned[language] = {
+            "voices": {
+                "gemini": gemini if gemini in GEMINI_VOICES else "Kore",
+                "elevenlabs": None,
+            }
+        }
+    return {**persona, "languages": cleaned}
+
+
 GEMINI_VOICES = sorted(
     [
         "Zephyr",
@@ -67,7 +87,7 @@ LOGO = Path(__file__).resolve().parents[3] / "assets" / "familiar.svg"
 API = web.AppKey("api", object)
 
 
-def summary(persona: dict, builtin: bool) -> dict:
+def summary(persona: dict, builtin: bool, overrides_builtin: bool = False) -> dict:
     return {
         **{
             key: persona[key]
@@ -75,6 +95,7 @@ def summary(persona: dict, builtin: bool) -> dict:
         },
         "languages": list(persona["languages"]),
         "builtin": builtin,
+        "overrides_builtin": overrides_builtin,
     }
 
 
@@ -103,6 +124,12 @@ class APIService:
 
     def personas(self) -> list[tuple[Any, bool]]:
         return list_personas([self.config.user_personas_dir, self.config.personas_dir])
+
+    def overrides_builtin(self, persona_id: str) -> bool:
+        """A user persona with the same id as a shipped one (deleting it restores the original)."""
+        user_copy = Path(self.config.user_personas_dir).expanduser() / f"{persona_id}.yaml"
+        shipped = Path(self.config.personas_dir) / f"{persona_id}.yaml"
+        return user_copy.is_file() and shipped.is_file()
 
     def persona(self, persona_id: str) -> tuple[dict, bool]:
         validate_id(persona_id)
@@ -149,7 +176,10 @@ class APIService:
                     {"id": game, "name": names.get(game, game.title())}
                     for game in available("games")
                 ],
-                "personas": [summary(asdict(p), builtin) for p, builtin in self.personas()],
+                "personas": [
+                    summary(asdict(p), builtin, self.overrides_builtin(p.id))
+                    for p, builtin in self.personas()
+                ],
                 "languages": [{"id": key, "name": name} for key, name in LANGUAGE_NAMES.items()],
                 "defaults": {
                     "game": self.config.game,
@@ -163,15 +193,17 @@ class APIService:
 
     async def get_persona(self, request: web.Request) -> web.Response:
         persona, builtin = self.persona(request.match_info["id"])
-        return web.json_response({**persona, "builtin": builtin})
+        overrides = self.overrides_builtin(persona["id"])
+        return web.json_response({**persona, "builtin": builtin, "overrides_builtin": overrides})
 
     async def put_persona(self, request: web.Request) -> web.Response:
         persona_id = request.match_info["id"]
         validate_id(persona_id)
         data = {**await body(request), "id": persona_id}
         data.pop("builtin", None)
+        data.pop("overrides_builtin", None)
         data = save_persona(self.config.user_personas_dir, data)
-        return web.json_response(summary(data, False))
+        return web.json_response(summary(data, False, self.overrides_builtin(data["id"])))
 
     async def delete_persona(self, request: web.Request) -> web.Response:
         persona_id = request.match_info["id"]
@@ -241,11 +273,7 @@ class APIService:
             persona = json.loads(reply)
             if not isinstance(persona, dict):
                 raise ValueError("Expected a persona object")
-            languages = persona.setdefault("languages", {})
-            voices = languages.setdefault("en", {}).setdefault("voices", {})
-            voices.setdefault("gemini", "Kore")
-            voices.setdefault("elevenlabs", None)
-            persona = validate_persona(persona)
+            persona = validate_persona(sanitize_draft_voices(persona))
             return web.json_response(persona)
         except Exception as exc:
             raise web.HTTPBadGateway(reason=f"Cannot draft persona: {exc}") from exc
@@ -435,8 +463,15 @@ def create_app(
 
 
 async def serve(port: int, no_browser: bool, config_path: str | None) -> None:
+    from . import runtime
     from .launcher import open_window
 
+    existing = runtime.running_url()
+    if existing is not None:
+        print(f"Familiar is already running: {existing}", flush=True)
+        if not no_browser:
+            open_window(existing)
+        return
     path = find_config_path(config_path)
     app = create_app(load_config(path), path)
     runner = web.AppRunner(app, shutdown_timeout=1)
@@ -447,8 +482,10 @@ async def serve(port: int, no_browser: bool, config_path: str | None) -> None:
         actual_port = runner.addresses[0][1]
         url = f"http://127.0.0.1:{actual_port}/?token={app[API].token}"
         print(url, flush=True)
+        runtime.write(url, app[API].token)
         if not no_browser:
             open_window(url)
         await app[API].shutdown.wait()
     finally:
+        runtime.remove()
         await runner.cleanup()

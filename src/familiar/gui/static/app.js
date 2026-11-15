@@ -2,7 +2,6 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const token = new URLSearchParams(location.search).get('token') || '';
 const storageKey = 'familiar.launcher.choices';
-const builtinKey = 'familiar.launcher.builtins';
 const languageNames = { en: 'English', es: 'Español', ja: '日本語' };
 const samples = {
   en: 'Hello! I’m ready for our next adventure.',
@@ -27,8 +26,6 @@ let followTranscript = true;
 let lastBubble = null;
 let replayCounts = new Map();
 const lineCounts = new Map();
-const savedBuiltins = readStorage(builtinKey, []);
-const knownBuiltins = new Set(Array.isArray(savedBuiltins) ? savedBuiltins : []);
 
 function readStorage(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
@@ -205,13 +202,13 @@ function renderPersonas() {
     duplicateButton.setAttribute('aria-label', `Duplicate ${persona.display_name}`);
     actions.append(editButton, duplicateButton);
     if (!persona.builtin) {
-      const label = knownBuiltins.has(persona.id) ? 'Reset to built-in' : 'Delete';
+      const label = persona.overrides_builtin ? 'Reset to built-in' : 'Delete';
       const remove = button(label, () => busy(remove, () => deletePersona(persona)), 'danger');
       remove.setAttribute('aria-label', `${label}: ${persona.display_name}`);
       actions.append(remove);
     }
     item.append(actions);
-    if (!persona.builtin && !knownBuiltins.has(persona.id)) {
+    if (persona.overrides_builtin) {
       item.append(element('small', '', 'Deleting an override restores its built-in persona.'));
     }
     library.append(item);
@@ -276,10 +273,6 @@ function applySession(session) {
 
 function applyState(nextState) {
   state = nextState;
-  for (const persona of state.personas) {
-    if (persona.builtin) knownBuiltins.add(persona.id);
-  }
-  writeStorage(builtinKey, [...knownBuiltins]);
   normalizeChoices(state.session.running ? state.session : choices);
   renderGames();
   renderPersonas();
@@ -511,7 +504,7 @@ function collectPersona() {
     if (Object.hasOwn(gameHooks, id)) throw new Error(`Game hook “${id}” appears more than once.`);
     gameHooks[id] = text;
   }
-  const { builtin, ...original } = editor.data;
+  const { builtin, overrides_builtin: overridesBuiltin, ...original } = editor.data;
   return { ...original, id: form.get('id').trim(), display_name: form.get('display_name').trim(),
     source: form.get('source').trim(), truthfulness: form.get('truthfulness'),
     chattiness: Number(form.get('chattiness')), prompt: form.get('prompt').trim(),
@@ -530,7 +523,6 @@ async function savePersona(event) {
     const data = collectPersona();
     if (editor.isNew && state.personas.some((persona) => persona.id === data.id)) throw new Error('That persona ID already exists. Choose a new ID, or edit the existing persona.');
     await api(personaPath(data.id), { method: 'PUT', body: JSON.stringify(data) });
-    if (editor.data.builtin) knownBuiltins.add(data.id);
     editor = { data: { ...data, builtin: false }, isNew: false };
     $('#edit-id').readOnly = true;
     $('#id-field').hidden = true;
@@ -550,9 +542,9 @@ async function savePersona(event) {
 
 async function deletePersona(persona) {
   if (!canLeaveEditor()) return;
-  const reset = knownBuiltins.has(persona.id);
-  const question = reset ? `Reset ${persona.display_name} to the built-in version? Your custom copy will be removed.`
-    : `Delete ${persona.display_name}? If this is a custom copy of a built-in persona, the built-in version will be restored.`;
+  const question = persona.overrides_builtin
+    ? `Reset ${persona.display_name} to the built-in version? Your custom copy will be removed.`
+    : `Delete ${persona.display_name}? This cannot be undone.`;
   if (!window.confirm(question)) return;
   setEditorBusy(true);
   try {

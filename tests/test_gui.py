@@ -146,18 +146,30 @@ async def test_persona_crud(client):
         assert (await client.put("/api/personas/mira", json=data)).status == 400
     for bad_id in ("UPPER", "bad.id", "-bad", "a" * 41):
         assert (await client.put(f"/api/personas/{bad_id}", json=persona())).status == 400
+    assert (await (await client.get("/api/state")).json())["personas"][0][
+        "overrides_builtin"
+    ] is False
     response = await client.put("/api/personas/mira", json=persona("ignored"))
-    assert (await response.json())["builtin"] is False
+    saved = await response.json()
+    assert saved["builtin"] is False
+    assert saved["overrides_builtin"] is True
     data = await (await client.get("/api/personas/mira")).json()
     assert data["id"] == "mira"
     assert data["builtin"] is False
+    assert data["overrides_builtin"] is True
     state = await (await client.get("/api/state")).json()
     assert len(state["personas"]) == 1
     assert state["personas"][0]["builtin"] is False
+    assert state["personas"][0]["overrides_builtin"] is True
+    custom = await (await client.put("/api/personas/custom", json=persona())).json()
+    assert custom["overrides_builtin"] is False
     assert (await client.delete("/api/personas/mira")).status == 200
-    assert (await (await client.get("/api/personas/mira")).json())["builtin"] is True
+    restored = await (await client.get("/api/personas/mira")).json()
+    assert restored["builtin"] is True
+    assert restored["overrides_builtin"] is False
     assert (await client.delete("/api/personas/missing")).status == 404
     assert (await client.put("/api/personas/custom", data="garbage")).status == 400
+    assert (await client.delete("/api/personas/custom")).status == 200
 
 
 @pytest.mark.asyncio
@@ -461,3 +473,21 @@ async def test_session_endpoints_and_shutdown(client, monkeypatch):
     assert not api.sessions.state["running"]
     assert (await client.post("/api/shutdown")).status == 200
     await asyncio.wait_for(api.shutdown.wait(), 1)
+
+
+def test_sanitize_draft_voices_keeps_real_gemini_and_clears_elevenlabs():
+    from familiar.gui.server import sanitize_draft_voices
+
+    drafted = {
+        "id": "x",
+        "languages": {
+            "en": {"voices": {"gemini": "Puck", "elevenlabs": "InventedId123"}},
+            "ja": {"voices": {"gemini": "NotAVoice"}},
+        },
+    }
+    cleaned = sanitize_draft_voices(drafted)["languages"]
+    assert cleaned["en"]["voices"] == {"gemini": "Puck", "elevenlabs": None}
+    assert cleaned["ja"]["voices"] == {"gemini": "Kore", "elevenlabs": None}
+    assert sanitize_draft_voices({"id": "x"})["languages"] == {
+        "en": {"voices": {"gemini": "Kore", "elevenlabs": None}}
+    }
