@@ -107,7 +107,7 @@ def test_units():
     assert imperial.distance(72.42) == "45 mi"
     assert imperial.volume(144) == "38 gal"
     assert imperial.money(1234) == "$1,234"
-    assert imperial.mass(9071.8474) == "10.0 short tons"
+    assert imperial.mass(9071.8474) == "20,000 lb"
     assert metric.speed(100) == "100 km/h"
     assert metric.distance(72.42) == "72 km"
     assert metric.volume(144) == "144 L"

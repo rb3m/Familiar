@@ -40,6 +40,7 @@ def wiki_coordinates(client: httpx.Client, titles: list[str]) -> dict[str, tuple
         "format": "json",
         "prop": "coordinates",
         "redirects": 1,
+        "colimit": "max",  # default is 10 pages per request
         "titles": "|".join(titles),
     }
     data = client.get(API, params=params).json()["query"]

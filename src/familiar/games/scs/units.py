@@ -36,7 +36,7 @@ class Units:
 
     def mass(self, kg: float) -> str:
         if self.system == "imperial":
-            return f"{kg / 907.18474:.1f} short tons"
+            return f"{kg * 2.20462:,.0f} lb"  # as the ATS HUD shows it
         return f"{kg / 1000:g} t"
 
 

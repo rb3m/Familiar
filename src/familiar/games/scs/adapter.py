@@ -78,7 +78,7 @@ class ScsAdapter:
         location = f"{lat:.4f}, {lon:.4f}"
         if place:
             state = STATE_NAMES.get(place.state, place.state)
-            location = f"near {place.name}, {state} ({self.units.distance(place.distance_km)})"
+            location = f"near {place.name}, {state}"  # no distance: compressed game map
         lines = [
             f"Location: {location}, heading {compass_point(s.heading)}",
             f"Speed: {self.units.speed(s.speed)} (limit {self.units.speed(s.speed_limit)})",
