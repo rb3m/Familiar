@@ -61,7 +61,11 @@ def test_knowledge_pack():
     nearby = pack.nearby(43.7339, -106.3402)
     assert [(p.id, d) for p, d in nearby] == [("kaycee", 0)]
     assert len(pack.landmarks) == 3
-    assert KnowledgePack.for_game("ats").landmarks == ()
+    bundled = KnowledgePack.for_game("ats")
+    assert len(bundled.landmarks) >= 100  # the verified ATS pack ships with the package
+    assert {"morton-pumpkin-capital"} <= {landmark.id for landmark in bundled.landmarks}
+    extended = KnowledgePack.for_game("ats", [str(FIXTURE)])
+    assert len(extended.landmarks) == len(bundled.landmarks) + 3
 
 
 @pytest.mark.parametrize(

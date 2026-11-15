@@ -1,6 +1,7 @@
 """Fact-check a landmark pack: each fact is judged against its Wikipedia article's text by an
 LLM (Gemini, via Familiar's own config) as supported, claim (true only as a stated claim), or
-unsupported, with a corrected wording. Writes a JSON report; does not modify the pack.
+unsupported, with a corrected wording. Writes a JSON report (resumable: rerun to continue);
+does not modify the pack.
 
 Usage: uv run python scripts/factcheck_landmarks.py PACK.yaml REPORT.json [--delay 4]
 """
@@ -9,6 +10,7 @@ import argparse
 import asyncio
 import json
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -38,7 +40,17 @@ def title_from(url: str) -> str:
     return urllib.parse.unquote(url.split("/wiki/", 1)[1]).split("#")[0].replace("_", " ")
 
 
-def article_text(client: httpx.Client, title: str) -> str:
+def article_text(client: httpx.Client, title: str, attempts: int = 4) -> str:
+    """Fetch the article's plain text, backing off on throttling or non-JSON error pages."""
+    for attempt in range(attempts):
+        try:
+            return _fetch_extract(client, title)
+        except (httpx.HTTPError, ValueError):
+            time.sleep(5 * 2**attempt)
+    return ""
+
+
+def _fetch_extract(client: httpx.Client, title: str) -> str:
     params = {
         "action": "query",
         "format": "json",
@@ -68,22 +80,27 @@ async def main() -> int:
     entries = yaml.safe_load(Path(args.pack).read_text())
     config = load_config()
     llm = plugins.load("llm", config.llm.backend, {**config.llm.settings, "temperature": 0})
-    report = []
+    report_path = Path(args.report)
+    report = json.loads(report_path.read_text()) if report_path.is_file() else []
+    done = {item["id"] for item in report}
     with httpx.Client(headers=HEADERS, timeout=30) as client:
-        for entry in entries:
+        for entry in (e for e in entries if e["id"] not in done):
             article = article_text(client, title_from(entry["source"]))
+            if not article:
+                print(f"{entry['id']}: SKIPPED (article unavailable)", flush=True)
+                continue
             try:
                 verdicts = await judge(llm, entry, article)
-            except (json.JSONDecodeError, Exception) as exc:  # keep going; report the failure
+            except Exception as exc:  # keep going; the failure is recorded in the report
                 verdicts = [{"n": 0, "verdict": "error", "fix": str(exc)[:200]}]
             report.append({"id": entry["id"], "facts": entry["facts"], "verdicts": verdicts})
+            report_path.write_text(json.dumps(report, indent=2))  # resumable progress
             bad = [v for v in verdicts if v.get("verdict") != "supported"]
             print(
                 f"{entry['id']}: {len(entry['facts']) - len(bad)}/{len(entry['facts'])} ok",
                 flush=True,
             )
             await asyncio.sleep(args.delay)
-    Path(args.report).write_text(json.dumps(report, indent=2))
     await llm.aclose()
     return 0
 

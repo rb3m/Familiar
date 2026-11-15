@@ -1,0 +1,1815 @@
+# ATS landmark pack: real-world landmarks near ATS highways (21 states as of 2026-11-15).
+# Researched by agy (web search); coordinates verified against Wikipedia (scripts/verify_landmarks.py,
+# all within 5 km); every fact judged against its article text (scripts/factcheck_landmarks.py) and
+# corrected or dropped (scripts/apply_factcheck.py). Run both checks again after editing.
+
+- id: cabazon-dinosaurs
+  name: Cabazon Dinosaurs
+  state: CA
+  lat: 33.9203
+  lon: -116.7728
+  radius_km: 15
+  kind: roadside
+  highway: I-10
+  facts:
+  - It features two enormous steel-and-concrete dinosaurs named Dinny the Dinosaur and Mr. Rex.
+  - The Brontosaurus is 150 feet long and the Tyrannosaurus rex stands 65 feet tall.
+  - The roadside dinosaurs are best known for their appearance in the film Pee-wee's Big Adventure (1985).
+  source: https://en.wikipedia.org/wiki/Cabazon_Dinosaurs
+- id: golden-gate-bridge
+  name: Golden Gate Bridge
+  state: CA
+  lat: 37.8197
+  lon: -122.4786
+  radius_km: 25
+  kind: engineering
+  highway: US-101
+  facts:
+  - The suspension bridge spans the Golden Gate strait connecting San Francisco to Marin County.
+  - It opened to traffic in 1937 and was the longest and tallest suspension bridge main span in the world
+    at the time.
+  - The bridge is painted in its signature international orange color to improve visibility in heavy fog.
+  source: https://en.wikipedia.org/wiki/Golden_Gate_Bridge
+- id: nut-tree
+  name: Nut Tree
+  state: CA
+  lat: 38.3699
+  lon: -121.9613
+  radius_km: 15
+  kind: quirky
+  highway: I-80
+  facts:
+  - It originated in 1921 as a roadside fruit stand along the historic Lincoln Highway in Vacaville.
+  - Beginning in 1980, it became home to a month-long harvest festival called Pumpkin Patch featuring
+    giant pumpkin displays and weigh-ins.
+  - The landmark complex expanded to feature its own passenger railroad and the Nut Tree Airport.
+  source: https://en.wikipedia.org/wiki/Nut_Tree
+- id: donner-pass
+  name: Donner Pass
+  state: CA
+  lat: 39.3144
+  lon: -120.3269
+  radius_km: 30
+  kind: historic
+  highway: I-80
+  facts:
+  - It is a 7,056-foot-high mountain pass in the northern Sierra Nevada above Donner Lake.
+  - The pass is notorious as the location where the emigrant Donner Party was trapped by snow in the winter
+    of 1846 to 1847.
+  - It served as a key route for the First Transcontinental Railroad and the historic Lincoln Highway.
+  source: https://en.wikipedia.org/wiki/Donner_Pass
+- id: mount-shasta
+  name: Mount Shasta
+  state: CA
+  lat: 41.4092
+  lon: -122.1949
+  radius_km: 60
+  kind: natural
+  highway: I-5
+  facts:
+  - It is a potentially active stratovolcano rising to an elevation of 14,179 feet in northern California.
+  - It is the second-highest peak in the Cascades.
+  - The mountain supports seven named glaciers, including Whitney Glacier, the longest glacier in California.
+  source: https://en.wikipedia.org/wiki/Mount_Shasta
+- id: roys-motel-and-cafe
+  name: Roy's Motel and Café
+  state: CA
+  lat: 34.559
+  lon: -115.7439
+  radius_km: 15
+  kind: roadside
+  highway: Historic Route 66
+  facts:
+  - It is an iconic Googie-style roadside complex located in the Mojave Desert town of Amboy, California.
+  - The complex opened in 1938 along historic U.S. Route 66 and is recognizable by its soaring neon boomerang
+    sign erected in 1959.
+  - It has served as a filming location for numerous movies, commercials, and music videos.
+  source: https://en.wikipedia.org/wiki/Roy%27s_Motel_and_Caf%C3%A9
+- id: hoover-dam
+  name: Hoover Dam
+  state: NV
+  lat: 36.0156
+  lon: -114.7378
+  radius_km: 30
+  kind: engineering
+  highway: US-93
+  facts:
+  - It is a massive concrete arch-gravity dam in the Black Canyon of the Colorado River on the Nevada-Arizona
+    border.
+  - Constructed between 1931 and 1936 during the Great Depression, it impounds Lake Mead.
+  - The dam was dedicated on September 30, 1935, by President Franklin D. Roosevelt.
+  source: https://en.wikipedia.org/wiki/Hoover_Dam
+- id: seven-magic-mountains
+  name: Seven Magic Mountains
+  state: NV
+  lat: 35.8399
+  lon: -115.271
+  radius_km: 15
+  kind: quirky
+  highway: I-15
+  facts:
+  - Seven Magic Mountains is an art installation created by Swiss artist Ugo Rondinone.
+  - The sculptures are between 30 and 35 ft tall, and the 33 locally sourced boulders are stacked in groups
+    ranging from three to six and covered in two layers of Day-Glo.
+  - Seven Magic Mountains is an art installation in Ivanpah Valley, along the far southern end of Las
+    Vegas Boulevard.
+  source: https://en.wikipedia.org/wiki/Seven_Magic_Mountains
+- id: clown-motel
+  name: Clown Motel
+  state: NV
+  lat: 38.0723
+  lon: -117.2377
+  radius_km: 15
+  kind: quirky
+  highway: US-95
+  facts:
+  - It is a clown-themed motel located in Tonopah, Nevada, featuring over 4,000 pieces of clown memorabilia.
+  - The building is located adjacent to the historic Tonopah Cemetery, where the father of the original
+    owners is buried.
+  - The 33-room Clown Motel was opened in 1985 by Leroy and Leona David in honor of their late father
+    Clarence David whose collection of over 150 clown statues was used to decorate the property.
+  source: https://en.wikipedia.org/wiki/Clown_Motel
+- id: valley-of-fire
+  name: Valley of Fire State Park
+  state: NV
+  lat: 36.4722
+  lon: -114.5375
+  radius_km: 40
+  kind: natural
+  highway: I-15
+  facts:
+  - It is Nevada's oldest state park, officially dedicated in 1935.
+  - The park derives its name from red sandstone formations, the Aztec Sandstone, which often appear to
+    be on fire when reflecting the sun's rays.
+  - Petroglyphs can be found at several sites and seen throughout the park.
+  source: https://en.wikipedia.org/wiki/Valley_of_Fire_State_Park
+- id: great-basin-national-park
+  name: Great Basin National Park
+  state: NV
+  lat: 39.006
+  lon: -114.22
+  radius_km: 50
+  kind: natural
+  highway: US-50
+  facts:
+  - The park preserves Wheeler Peak, which reaches 13,063 feet, and ancient bristlecone pine groves.
+  - Lehman Caves are a cave system made up of a marble and limestone solution that forms many cave decorations.
+  - The park is connected to U.S. Routes 6 and 50.
+  source: https://en.wikipedia.org/wiki/Great_Basin_National_Park
+- id: thunder-mountain-monument
+  name: Thunder Mountain Monument
+  state: NV
+  lat: 40.66
+  lon: -118.1335
+  radius_km: 15
+  kind: roadside
+  highway: I-80
+  facts:
+  - It is an outsider art environment and roadside sculpture park built alongside Interstate 80 in Imlay,
+    Nevada.
+  - The site was created beginning in 1969 by World War II veteran Frank Van Zant, known as Chief Rolling
+    Mountain Thunder.
+  - The complex includes several buildings and sculptures crafted from found desert items and concrete.
+  source: https://en.wikipedia.org/wiki/Thunder_Mountain_Monument
+- id: meteor-crater
+  name: Meteor Crater
+  state: AZ
+  lat: 35.0281
+  lon: -111.0233
+  radius_km: 25
+  kind: natural
+  highway: I-40
+  facts:
+  - Meteor Crater is an impact crater about 37 mi east of Flagstaff and 18 mi west of Winslow in the desert
+    of northern Arizona.
+  - The crater was created approximately 50,000 years ago during the Pleistocene epoch.
+  - It measures about 3,900 feet in diameter and is roughly 560 feet deep.
+  source: https://en.wikipedia.org/wiki/Meteor_Crater
+- id: london-bridge-arizona
+  name: London Bridge
+  state: AZ
+  lat: 34.4717
+  lon: -114.3472
+  radius_km: 20
+  kind: historic
+  highway: I-40
+  facts:
+  - It is an 1830s stone arch bridge originally built across the River Thames in London, England.
+  - In 1968, entrepreneur Robert P. McCulloch purchased the dismantled bridge and had it reassembled in
+    Lake Havasu City.
+  - It spans the Bridgewater Channel Canal.
+  source: https://en.wikipedia.org/wiki/London_Bridge_(Lake_Havasu_City)
+- id: wigwam-motel-holbrook
+  name: Wigwam Motel
+  state: AZ
+  lat: 34.9022
+  lon: -110.1683
+  radius_km: 15
+  kind: roadside
+  highway: I-40
+  facts:
+  - The Holbrook Wigwam Village No. 6 features motel rooms constructed in the shape of concrete teepees.
+  - Built in 1950 along historic Route 66, it is listed on the National Register of Historic Places.
+  - Vintage restored automobiles from the 1960s and earlier are located throughout the parking area.
+  source: https://en.wikipedia.org/wiki/Wigwam_Motel
+- id: montezuma-castle
+  name: Montezuma Castle National Monument
+  state: AZ
+  lat: 34.6111
+  lon: -111.8367
+  radius_km: 20
+  kind: historic
+  highway: I-17
+  facts:
+  - It protects a well-preserved 20-room, five-story cliff dwelling built into a limestone recess.
+  - Archaeological evidence suggests that the dwelling was constructed as early as 1125 AD and occupied
+    until as late as 1395 AD.
+  - President Theodore Roosevelt declared it one of the first four National Monuments in 1906.
+  source: https://en.wikipedia.org/wiki/Montezuma_Castle_National_Monument
+- id: saguaro-national-park
+  name: Saguaro National Park
+  state: AZ
+  lat: 32.1792
+  lon: -110.7369
+  radius_km: 40
+  kind: natural
+  highway: I-10
+  facts:
+  - Both districts of the park preserve Sonoran Desert landscapes, fauna, and flora, including the giant
+    saguaro cactus, and that saguaros flourish in both districts.
+  - 'It is divided into two separate districts: the Rincon Mountain District to the east and the Tucson
+    Mountain District to the west.'
+  - The giant saguaro cactus is native only to the Sonoran Desert and can live for more than 150 years.
+  source: https://en.wikipedia.org/wiki/Saguaro_National_Park
+- id: glen-canyon-dam
+  name: Glen Canyon Dam
+  state: AZ
+  lat: 36.9375
+  lon: -111.4844
+  radius_km: 30
+  kind: engineering
+  highway: US-89
+  facts:
+  - It is a 710-foot-high concrete arch dam on the Colorado River near Page, Arizona.
+  - Lake Powell is "one of the largest man-made reservoirs in the U.S."
+  - The dam is "a major source of hydroelectricity, averaging over 4 billion kilowatt hours per year"
+    sent into the regional electric grid.
+  source: https://en.wikipedia.org/wiki/Glen_Canyon_Dam
+- id: blue-hole-santa-rosa
+  name: Blue Hole
+  state: NM
+  lat: 34.9404
+  lon: -104.6732
+  radius_km: 15
+  kind: natural
+  highway: I-40
+  facts:
+  - It is a bell-shaped artesian spring pool located along historic Route 66 in Santa Rosa, New Mexico.
+  - The spring maintains a constant water temperature of 62 degrees Fahrenheit year-round.
+  - It is renowned as one of the most popular inland scuba diving destinations in the United States.
+  source: https://en.wikipedia.org/wiki/Blue_Hole_(New_Mexico)
+- id: white-sands-national-park
+  name: White Sands National Park
+  state: NM
+  lat: 32.7792
+  lon: -106.1719
+  radius_km: 50
+  kind: natural
+  highway: US-70
+  facts:
+  - The park protects the southern 41% (or 115 mi2) of a 275-square-mile gypsum dunefield, which is the
+    largest of its kind on Earth.
+  - It was originally established as a national monument in 1933 and re-designated as a national park
+    in 2019.
+  source: https://en.wikipedia.org/wiki/White_Sands_National_Park
+- id: tinkertown-museum
+  name: Tinkertown Museum
+  state: NM
+  lat: 35.1692
+  lon: -106.3678
+  radius_km: 15
+  kind: quirky
+  highway: I-40
+  facts:
+  - The Tinkertown Museum is a folk art museum in Sandia Park, New Mexico, founded by artist Ross Ward.
+  - The museum building is constructed from over 50,000 glass bottles cemented into walls.
+  - The museum features Ward's hand-carved miniature Old West town, as well as a hand-carved circus.
+  source: https://en.wikipedia.org/wiki/Tinkertown_Museum
+- id: very-large-array
+  name: Very Large Array
+  state: NM
+  lat: 34.0787
+  lon: -107.6177
+  radius_km: 30
+  kind: engineering
+  highway: US-60
+  facts:
+  - It is a centimeter-wavelength radio astronomy observatory located on the Plains of San Agustin west
+    of Socorro.
+  - The array consists of 28 massive 25-meter diameter dish antennas arranged in a giant Y-shaped configuration.
+  - Antennas are moved along railroad tracks to reconfigure the array into four different baseline configurations.
+  source: https://en.wikipedia.org/wiki/Very_Large_Array
+- id: capulin-volcano
+  name: Capulin Volcano National Monument
+  state: NM
+  lat: 36.7822
+  lon: -103.97
+  radius_km: 30
+  kind: natural
+  highway: US-87
+  facts:
+  - The volcano formed during an eruption approximately 60,000 years ago.
+  source: https://en.wikipedia.org/wiki/Capulin_Volcano_National_Monument
+- id: san-miguel-mission-santa-fe
+  name: San Miguel Mission
+  state: NM
+  lat: 35.6834
+  lon: -105.9377
+  radius_km: 15
+  kind: historic
+  highway: I-25
+  facts:
+  - The original church was built around 1610.
+  source: https://en.wikipedia.org/wiki/San_Miguel_Mission
+- id: multnomah-falls
+  name: Multnomah Falls
+  state: OR
+  lat: 45.5759
+  lon: -122.1154
+  radius_km: 20
+  kind: natural
+  highway: I-84
+  facts:
+  - Multnomah Falls spans two tiers and is 620 feet in height in the Columbia River Gorge.
+  - It is the tallest waterfall in the state of Oregon.
+  - The iconic Benson Footbridge crosses the lower tier of the falls at a height of 105 feet.
+  source: https://en.wikipedia.org/wiki/Multnomah_Falls
+- id: vista-house
+  name: Vista House
+  state: OR
+  lat: 45.5396
+  lon: -122.2444
+  radius_km: 20
+  kind: historic
+  highway: I-84
+  facts:
+  - It is a historic memorial observatory built on Crown Point high above the Columbia River.
+  - Built between 1916 and 1918, it was designed in the Art Nouveau style as an observatory and rest stop
+    for motorists.
+  - The exterior is gray sandstone with a green tile roof.
+  source: https://en.wikipedia.org/wiki/Vista_House
+- id: prehistoric-gardens-oregon
+  name: Prehistoric Gardens
+  state: OR
+  lat: 42.6124
+  lon: -124.3927
+  radius_km: 15
+  kind: quirky
+  highway: US-101
+  facts:
+  - Prehistoric Gardens is a roadside attraction located on Oregon's Highway 101 Coastal Route in Port
+    Orford.
+  - The gardens feature 23 life-sized sculptures of dinosaurs created with a steel frame base and sculpted
+    with mesh-like metal lath and concrete by E.V. "Ernie" Nelson.
+  - The largest sculpture is an 86-foot-long brachiosaurus.
+  source: https://en.wikipedia.org/wiki/Prehistoric_Gardens
+- id: sea-lion-caves
+  name: Sea Lion Caves
+  state: OR
+  lat: 44.1224
+  lon: -124.1276
+  radius_km: 15
+  kind: roadside
+  highway: US-101
+  facts:
+  - It is the longest sea cave in the United States, with a measured length of 1,315 feet.
+  - It serves as a natural winter habitat for hundreds of wild Steller sea lions.
+  source: https://en.wikipedia.org/wiki/Sea_Lion_Caves
+- id: mount-hood
+  name: Mount Hood
+  state: OR
+  lat: 45.3736
+  lon: -121.6958
+  radius_km: 50
+  kind: natural
+  highway: US-26
+  facts:
+  - It is a potentially active stratovolcano rising to an elevation of 11,249 feet, making it Oregon's
+    highest peak.
+  - The mountain hosts twelve named glaciers and snowfields across its summit and flanks.
+  - Timberline Lodge is a National Historic Landmark located on the southern flank of Mount Hood, and
+    the Timberline Trail was built in the 1930s by the Civilian Conservation Corps.
+  source: https://en.wikipedia.org/wiki/Mount_Hood
+- id: astoria-megler-bridge
+  name: Astoria–Megler Bridge
+  state: OR
+  lat: 46.217
+  lon: -123.863
+  radius_km: 25
+  kind: engineering
+  highway: US-101
+  facts:
+  - It is a steel cantilever through-truss bridge spanning the lower Columbia River from Astoria, Oregon,
+    to Point Ellice near Megler, Washington.
+  - Opened in 1966, it is the longest continuous truss bridge in North America, measuring over 4 miles
+    in total length.
+  - The spiral bridge provides almost 200 feet of clearance over the shipping channel.
+  source: https://en.wikipedia.org/wiki/Astoria%E2%80%93Megler_Bridge
+- id: space-needle
+  name: Space Needle
+  state: WA
+  lat: 47.6204
+  lon: -122.3491
+  radius_km: 25
+  kind: engineering
+  highway: I-5
+  facts:
+  - It is a 605-foot observation tower built for the 1962 World's Fair in Seattle, Washington.
+  - The tower features a revolving restaurant and an indoor observation deck with a revolving glass floor
+    called the Loupe.
+  - It was engineered to withstand winds of up to 200 miles per hour and earthquakes of up to 9.0 magnitude.
+  source: https://en.wikipedia.org/wiki/Space_Needle
+- id: grand-coulee-dam
+  name: Grand Coulee Dam
+  state: WA
+  lat: 47.9572
+  lon: -118.9785
+  radius_km: 30
+  kind: engineering
+  highway: US-2
+  facts:
+  - It is a massive concrete gravity dam on the Columbia River, constructed between 1933 and 1942.
+  - It is the largest electric power-producing facility in the United States by nameplate capacity.
+  - The dam impounds Franklin D. Roosevelt Lake and supplies irrigation water to over 670,000 acres in
+    the Columbia Basin Project.
+  source: https://en.wikipedia.org/wiki/Grand_Coulee_Dam
+- id: mount-st-helens
+  name: Mount St. Helens
+  state: WA
+  lat: 46.1912
+  lon: -122.1944
+  radius_km: 50
+  kind: natural
+  highway: I-5
+  facts:
+  - It is an active stratovolcano in the Cascade Range famous for its catastrophic major eruption on May
+    18, 1980.
+  - The 1980 eruption triggered the largest recorded debris avalanche in history and blew off the mountain's
+    top 1,300 feet.
+  - Today it is preserved within the Mount St. Helens National Volcanic Monument for scientific study
+    and tourism.
+  source: https://en.wikipedia.org/wiki/Mount_St._Helens
+- id: grandfather-cuts-loose-the-ponies
+  name: Grandfather Cuts Loose the Ponies
+  state: WA
+  lat: 46.9663
+  lon: -119.9615
+  radius_km: 15
+  kind: roadside
+  highway: I-90
+  facts:
+  - It is a prominent roadside sculpture installation consisting of 15 life-sized steel wild horses galloping
+    along a cliff ridge above Interstate 90.
+  - Created by sculptor David Govedare in 1989, it commemorates Washington's state centennial.
+  - The figures overlook the Columbia River near Vantage in central Washington.
+  source: https://en.wikipedia.org/wiki/Grandfather_Cuts_Loose_the_Ponies
+- id: fremont-troll
+  name: Fremont Troll
+  state: WA
+  lat: 47.651
+  lon: -122.3473
+  radius_km: 15
+  kind: quirky
+  highway: I-5
+  facts:
+  - The Fremont Troll is an 18-foot public sculpture clutching a Volkswagen Beetle under the Aurora Bridge
+    in Seattle.
+  - 'The Troll was sculpted in 1990 by four artists: Steve Badanes, Will Martin, Donna Walter, and Ross
+    Whitehead.'
+  - The idea of a troll living under a bridge is derived from Scandinavian (Norwegian) folklore.
+  source: https://en.wikipedia.org/wiki/Fremont_Troll
+- id: mount-rainier
+  name: Mount Rainier
+  state: WA
+  lat: 46.8517
+  lon: -121.7603
+  radius_km: 60
+  kind: natural
+  highway: I-5
+  facts:
+  - It is an active stratovolcano rising to an elevation of 14,411 feet, making it the highest peak in
+    Washington.
+  - It is the most topographically prominent mountain in the contiguous United States.
+  - The mountain supports 26 major glaciers, the greatest volume of glacial ice on any single peak in
+    the lower 48 states.
+  source: https://en.wikipedia.org/wiki/Mount_Rainier
+- id: bonneville-salt-flats
+  name: Bonneville Salt Flats
+  state: UT
+  lat: 40.8
+  lon: -113.8
+  radius_km: 40
+  kind: natural
+  highway: I-80
+  facts:
+  - The flats formed through the evaporation of the ancient Pleistocene-era Lake Bonneville.
+  - It is globally famous as the venue for the Bonneville Speedway, where numerous land speed records
+    have been established.
+  source: https://en.wikipedia.org/wiki/Bonneville_Salt_Flats
+- id: delicate-arch
+  name: Delicate Arch
+  state: UT
+  lat: 38.7435
+  lon: -109.4993
+  radius_km: 30
+  kind: natural
+  highway: US-191
+  facts:
+  - It is a 52-foot-tall freestanding natural sandstone arch in Arches National Park near Moab, Utah.
+  - Delicate Arch is the most widely recognized landmark in Arches National Park and is depicted on Utah
+    license plates.
+  - The original sandstone fin was gradually worn away by weathering and erosion, leaving the arch formed
+    of Entrada Sandstone.
+  source: https://en.wikipedia.org/wiki/Delicate_Arch
+- id: bingham-canyon-mine
+  name: Bingham Canyon Mine
+  state: UT
+  lat: 40.523
+  lon: -112.151
+  radius_km: 30
+  kind: engineering
+  highway: I-15
+  facts:
+  - Also known as the Kennecott Copper Mine, it is one of the largest open-pit excavations in the world.
+  - The pit is approximately 0.75 miles deep and more than 2.5 miles wide across the Oquirrh Mountains.
+  - It has been in production since 1906 and was designated a National Historic Landmark in 1966.
+  source: https://en.wikipedia.org/wiki/Bingham_Canyon_Mine
+- id: hole-n-the-rock
+  name: Hole N" The Rock
+  state: UT
+  lat: 38.3908
+  lon: -109.4566
+  radius_km: 15
+  kind: quirky
+  highway: US-191
+  facts:
+  - It is a 5,000-square-foot home carved out of a sandstone cliff located in San Juan County, Utah.
+  - Albert Christensen began creating the home in 1940, working on the site for twelve years.
+  - The dwelling features 14 rooms, built-in rock furniture, a 65-foot chimney, and taxidermy displays.
+  source: https://en.wikipedia.org/wiki/Hole_N%22_The_Rock
+- id: spiral-jetty
+  name: Spiral Jetty
+  state: UT
+  lat: 41.4377
+  lon: -112.6689
+  radius_km: 25
+  kind: quirky
+  highway: I-84
+  facts:
+  - It is an earthwork sculpture constructed by American artist Robert Smithson in 1970.
+  - The 1,500-foot-long counterclockwise coil was built using over 6,000 tons of black basalt rocks and
+    earth on the shore of Great Salt Lake.
+  - Depending upon the water level of the Great Salt Lake, the sculpture is sometimes visible and sometimes
+    submerged.
+  source: https://en.wikipedia.org/wiki/Spiral_Jetty
+- id: mexican-hat-rock
+  name: Mexican Hat, Utah
+  state: UT
+  lat: 37.1761
+  lon: -109.8778
+  radius_km: 20
+  kind: roadside
+  highway: US-163
+  facts:
+  - The name comes from a curiously sombrero-shaped rock outcropping that measures 60-foot wide.
+  source: https://en.wikipedia.org/wiki/Mexican_Hat,_Utah
+- id: perrine-bridge
+  name: Perrine Bridge
+  state: ID
+  lat: 42.6
+  lon: -114.4537
+  radius_km: 25
+  kind: engineering
+  highway: US-93
+  facts:
+  - It is a 1,500-foot-long truss arch bridge carrying U.S. Route 93 across the Snake River Canyon near
+    Twin Falls.
+  - Rising 486 feet above the river, it is one of the highest bridges in the United States.
+  - The Perrine Bridge may be the only man-made structure in the United States where BASE jumping is allowed
+    year-round without a permit.
+  source: https://en.wikipedia.org/wiki/Perrine_Bridge
+- id: shoshone-falls
+  name: Shoshone Falls
+  state: ID
+  lat: 42.5953
+  lon: -114.4008
+  radius_km: 20
+  kind: natural
+  highway: I-84
+  facts:
+  - Shoshone Falls flows over a rim nearly one thousand feet wide and 925 feet wide, but mentions that
+    it flows over a vertical, horseshoe-shaped cliff that intersects weaker basalt layers.
+  - It was formed roughly 14,000 years ago during the catastrophic Bonneville Flood.
+  source: https://en.wikipedia.org/wiki/Shoshone_Falls
+- id: craters-of-the-moon
+  name: Craters of the Moon National Monument and Preserve
+  state: ID
+  lat: 43.4617
+  lon: -113.5627
+  radius_km: 40
+  kind: natural
+  highway: US-93
+  facts:
+  - The Craters of the Moon Lava Field spreads across 618 square miles (1,601 km2) and that the Monument
+    and Preserve cover a total area of 1,117 square miles (2,893 km2).
+  - The preserve features cinder cones, spatter cones, lava tubes, and deep fissure vents along the Great
+    Rift of Idaho.
+  - Apollo astronauts performed part of their training at Craters of the Moon Lava Field by learning to
+    look for and collect good rock specimens.
+  source: https://en.wikipedia.org/wiki/Craters_of_the_Moon_National_Monument_and_Preserve
+- id: dog-bark-park-inn
+  name: Dog Bark Park Inn
+  state: ID
+  lat: 46.0575
+  lon: -116.3445
+  radius_km: 15
+  kind: quirky
+  highway: US-95
+  facts:
+  - It is a hotel built in the shape of a beagle, colloquially known as "Sweet Willy" by local residents.
+  - Located in Cottonwood, Idaho, it was designed and built by chainsaw artists Dennis Sullivan and Frances
+    Conklin.
+  - The hotel features dog-themed contents, and the gallery features many breeds of dog carvings by chainsaw
+    artists Dennis Sullivan & Frances Conklin.
+  source: https://en.wikipedia.org/wiki/Dog_Bark_Park_Inn
+- id: old-mission-state-park
+  name: Old Mission State Park
+  state: ID
+  lat: 47.5487
+  lon: -116.3582
+  radius_km: 20
+  kind: historic
+  highway: I-90
+  facts:
+  - The park preserves the Mission of the Sacred Heart in Cataldo, the oldest standing building in Idaho.
+  - Built between 1850 and 1853 by Jesuit missionaries and members of the Coeur d'Alene tribe, it was
+    constructed without nails.
+  - The mission became a rest and supply station for traders, settlers, and miners traveling on the Mullan
+    Road.
+  source: https://en.wikipedia.org/wiki/Old_Mission_State_Park
+- id: massacre-rocks-state-park
+  name: Massacre Rocks State Park
+  state: ID
+  lat: 42.6808
+  lon: -112.9836
+  radius_km: 20
+  kind: historic
+  highway: I-86
+  facts:
+  - The park features a configuration of boulders along the south bank of the Snake River, known alternatively
+    as Massacre Rocks, "Gate of Death", or "Devil's Gate", which was a famous spot along the Oregon Trail
+    and California Trail.
+  - Settlers gave the narrow passage of the trail through the rocks the name Massacre Rocks, "Gate of
+    Death", or "Devil's Gate" from the fear of possible ambush by Native Americans, and diaries of settlers
+    indicate that settlers and Shoshone clashed near the rocks in August 1862.
+  - It features Register Rock, a large boulder inscribed with the carved names of nineteenth-century pioneers.
+  source: https://en.wikipedia.org/wiki/Massacre_Rocks_State_Park
+- id: eisenhower-tunnel
+  name: Eisenhower Tunnel
+  state: CO
+  lat: 39.6785
+  lon: -105.92
+  radius_km: 25
+  kind: engineering
+  highway: I-70
+  facts:
+  - It is a dual-bore vehicular tunnel carrying Interstate 70 through the Continental Divide in the Colorado
+    Rocky Mountains.
+  - At an elevation of 11,158 feet, it is the highest vehicular tunnel in the United States.
+  - The north bore opened in 1973 named after President Dwight D. Eisenhower, followed by the south bore
+    in 1979.
+  source: https://en.wikipedia.org/wiki/Eisenhower_Tunnel
+- id: royal-gorge-bridge
+  name: Royal Gorge Bridge
+  state: CO
+  lat: 38.4617
+  lon: -105.325
+  radius_km: 25
+  kind: engineering
+  highway: US-50
+  facts:
+  - It is a suspension bridge crossing 955 feet above the Arkansas River near Cañon City, Colorado.
+  - The bridge was built in six months between June and November 1929 and held the record of highest bridge
+    in the world from 1929 until 2001.
+  - The total length of the bridge is 1,260 feet (384 m) and the steel base structure is covered with
+    1292 wooden planks.
+  source: https://en.wikipedia.org/wiki/Royal_Gorge_Bridge
+- id: red-rocks-amphitheatre
+  name: Red Rocks Amphitheatre
+  state: CO
+  lat: 39.6653
+  lon: -105.2058
+  radius_km: 20
+  kind: historic
+  highway: I-70
+  facts:
+  - Red Rocks Amphitheatre is an open-air amphitheater near Morrison, Colorado.
+  - The venue is best recognized by its two massive monoliths, named 'Ship Rock' and 'Creation Rock',
+    as well as the smaller 'Stage Rock', which together flank its seating area and naturally form the
+    amphitheater.
+  - The venue seats over 9,500 people and has hosted iconic musical performances since opening in 1941.
+  source: https://en.wikipedia.org/wiki/Red_Rocks_Amphitheatre
+- id: garden-of-the-gods
+  name: Garden of the Gods
+  state: CO
+  lat: 38.8678
+  lon: -104.8911
+  radius_km: 25
+  kind: natural
+  highway: I-25
+  facts:
+  - Garden of the Gods is a public park in Colorado Springs with red, pink and white sandstones, conglomerates
+    and limestone that have been tilted vertically.
+  - The red rock formations were created during the Laramide Orogeny and were tilted vertically and faulted
+    into 'fins' by the immense mountain building forces caused by the uplift of the Rocky Mountains and
+    the Pikes Peak massif.
+  - It was designated a National Natural Landmark in 1971.
+  source: https://en.wikipedia.org/wiki/Garden_of_the_Gods
+- id: ufo-watchtower
+  name: UFO Watchtower
+  state: CO
+  lat: 37.7886
+  lon: -105.8872
+  radius_km: 15
+  kind: quirky
+  highway: CO-17
+  facts:
+  - It is an observation platform and campground located in the San Luis Valley near Hooper, Colorado.
+  - Judy Messoline converted her barn into a tourist attraction in 2000 when she was facing financial
+    troubles to capitalize on the view of the sky and market the viewing site as the place to see UFOs.
+  - Messoline created a "healing garden" where a rock garden celebrates three vortexes, and visitors leave
+    objects from photos and business cards to pens, keys, toys and personal items of lost loved ones.
+  source: https://en.wikipedia.org/wiki/UFO_Watchtower
+- id: bishop-castle
+  name: Bishop Castle
+  state: CO
+  lat: 38.0615
+  lon: -105.0944
+  radius_km: 20
+  kind: quirky
+  highway: I-25
+  facts:
+  - Bishop Castle is an "elaborate and intricate" "one-man project" built by Jim Bishop in the San Isabel
+    National Forest.
+  - Bishop began construction in 1969 using rocks gathered from the surrounding forest.
+  source: https://en.wikipedia.org/wiki/Bishop_Castle
+- id: devils-tower
+  name: Devils Tower
+  state: WY
+  lat: 44.5906
+  lon: -104.7153
+  radius_km: 40
+  kind: natural
+  highway: I-90
+  facts:
+  - It is a striking 867-foot igneous columnar rock monolith rising above the Belle Fourche River in Crook
+    County.
+  - In 1906, President Theodore Roosevelt proclaimed it the very first United States National Monument.
+  - The landmark is sacred to numerous Northern Plains Native American tribes and was featured in the
+    film Close Encounters of the Third Kind.
+  source: https://en.wikipedia.org/wiki/Devils_Tower
+- id: ames-monument
+  name: Ames Monument
+  state: WY
+  lat: 41.1311
+  lon: -105.3981
+  radius_km: 20
+  kind: historic
+  highway: I-80
+  facts:
+  - It is a 60-foot-tall granite pyramid designed by famed architect Henry Hobson Richardson in Albany
+    County, Wyoming.
+  - It honors brothers Oakes and Oliver Ames Jr., who were instrumental financiers and builders of the
+    Union Pacific Railroad.
+  - The monument was erected at Sherman Summit to mark the highest elevation on the original First Transcontinental
+    Railroad at 8,247 feet.
+  source: https://en.wikipedia.org/wiki/Ames_Monument
+- id: independence-rock
+  name: Independence Rock
+  state: WY
+  lat: 42.494
+  lon: -107.133
+  radius_km: 25
+  kind: historic
+  highway: WY-220
+  facts:
+  - It is a large granite monolith along the Sweetwater River that served as a major landmark on the Oregon,
+    California, and Mormon Trails.
+  - Emigrants hoped to reach the rock by July 4 in order to reach their destinations before the first
+    mountain snowfalls.
+  - The rock was described by early missionary and explorer Father Pierre-Jean De Smet in 1840 as the
+    Register of the Desert, where emigrants carved their names.
+  source: https://en.wikipedia.org/wiki/Independence_Rock
+- id: abraham-lincoln-memorial-monument
+  name: Abraham Lincoln Memorial Monument
+  state: WY
+  lat: 41.2369
+  lon: -105.4363
+  radius_km: 15
+  kind: roadside
+  highway: I-80
+  facts:
+  - It features a colossal 12.5-foot bronze bust of Abraham Lincoln mounted atop a 30-foot granite pedestal.
+  - Originally situated at Sherman Summit, the monument was moved to the Interstate 80 Summit Rest Area
+    in 1969.
+  source: https://en.wikipedia.org/wiki/Abraham_Lincoln_Memorial_Monument
+- id: hells-half-acre-wyoming
+  name: Hell's Half Acre
+  state: WY
+  lat: 43.0381
+  lon: -107.0931
+  radius_km: 20
+  kind: natural
+  highway: US-20
+  facts:
+  - It is a 320-acre geologic oddity composed of deep ravines, caves, rock formations and hard-packed
+    eroded earth located about 40 miles (64 km) west of Casper, Wyoming.
+  - Native American tribes used the ravines to drive bison to their death during their hunts.
+  - Hell's Half Acre was used as the location for the fictional planet of Klendathu in the movie Starship
+    Troopers.
+  source: https://en.wikipedia.org/wiki/Hell%27s_Half_Acre_(Wyoming)
+- id: old-faithful
+  name: Old Faithful
+  state: WY
+  lat: 44.4605
+  lon: -110.8281
+  radius_km: 30
+  kind: natural
+  highway: US-191
+  facts:
+  - It is a cone geyser in Yellowstone National Park renowned for its regular and predictable geothermal
+    eruptions.
+  - Eruptions shoot boiling water up to 180 feet into the air and occur roughly every 90 minutes.
+  - It was named during the Washburn-Langford-Doane Expedition of 1870 due to the consistency of its eruptions.
+  source: https://en.wikipedia.org/wiki/Old_Faithful
+- id: berkeley-pit
+  name: Berkeley Pit
+  state: MT
+  lat: 46.02
+  lon: -112.51
+  radius_km: 20
+  kind: engineering
+  highway: I-90
+  facts:
+  - It is a former open-pit copper mine in Butte, Montana, that operated from 1955 until 1982.
+  - The pit is one mile long by one-half mile wide and filled with water to a depth of about 900 feet.
+  - The pit is part of a Superfund site and can be visited by tourists with a viewing stand.
+  source: https://en.wikipedia.org/wiki/Berkeley_Pit
+- id: little-bighorn-battlefield
+  name: Little Bighorn Battlefield National Monument
+  state: MT
+  lat: 45.5703
+  lon: -107.4275
+  radius_km: 25
+  kind: historic
+  highway: I-90
+  facts:
+  - The monument preserves the site of the 1876 Battle of the Little Bighorn between the U.S. 7th Cavalry
+    and allied Lakota, Cheyenne, and Arapaho forces.
+  - 'The monument serves as a memorial to those who fought in the battle: George Armstrong Custer''s 7th
+    Cavalry and a combined Lakota-Northern Cheyenne and Arapaho force.'
+  - The monument includes the granite memorial built by Lieutenant Charles Francis Roe and an Indian Memorial.
+  source: https://en.wikipedia.org/wiki/Little_Bighorn_Battlefield_National_Monument
+- id: first-peoples-buffalo-jump
+  name: First Peoples Buffalo Jump State Park
+  state: MT
+  lat: 47.4897
+  lon: -111.5292
+  radius_km: 20
+  kind: historic
+  highway: I-15
+  facts:
+  - Indigenous hunters utilized the mile-long sandstone cliff for over a millennium to drive bison herds
+    over the precipice.
+  - Archaeological deposits at the base of the cliffs include compacted bone deposits up to 13 feet deep.
+  source: https://en.wikipedia.org/wiki/First_Peoples_Buffalo_Jump_State_Park
+- id: pompeys-pillar
+  name: Pompeys Pillar National Monument
+  state: MT
+  lat: 45.9953
+  lon: -108.0058
+  radius_km: 20
+  kind: historic
+  highway: I-94
+  facts:
+  - It is a 150-foot sandstone rock formation rising above the Yellowstone River east of Billings, Montana.
+  - It bears the only remaining physical evidence of the Lewis and Clark Expedition on their route, an
+    inscription by William Clark dated July 25, 1806.
+  - Clark named the pillar after Jean Baptiste Charbonneau, the infant son of Sacagawea, whom he nicknamed
+    Pomp.
+  source: https://en.wikipedia.org/wiki/Pompeys_Pillar_National_Monument
+- id: fort-peck-dam
+  name: Fort Peck Dam
+  state: MT
+  lat: 48.0028
+  lon: -106.4161
+  radius_km: 30
+  kind: engineering
+  highway: MT-24
+  facts:
+  - It is the largest hydraulically filled dam in the United States.
+  - Construction started in 1933 and was completed in 1940 as a major project of the Public Works Administration,
+    part of the New Deal.
+  - The dam impounds Fort Peck Lake, the fifth-largest man-made reservoir in the United States.
+  source: https://en.wikipedia.org/wiki/Fort_Peck_Dam
+- id: world-museum-of-mining
+  name: World Museum of Mining
+  state: MT
+  lat: 46.0097
+  lon: -112.5653
+  radius_km: 15
+  kind: historic
+  highway: I-90
+  facts:
+  - It is a 22-acre historic mining museum established on an inactive silver and zinc mine known as the
+    Orphan Girl Mine in Butte.
+  source: https://en.wikipedia.org/wiki/World_Museum_of_Mining
+- id: cadillac-ranch
+  name: Cadillac Ranch
+  state: TX
+  lat: 35.1872
+  lon: -101.987
+  radius_km: 15
+  kind: quirky
+  highway: I-40
+  facts:
+  - It is a public art installation in Amarillo, Texas, created in 1974 by the art group Ant Farm.
+  - The installation consists of ten vintage Cadillacs buried nose-first in the ground, showing the evolution
+    of tailfins from 1949 to 1963.
+  - Visitors are actively encouraged to bring spray paint and add their own graffiti and artwork to the
+    vehicles.
+  source: https://en.wikipedia.org/wiki/Cadillac_Ranch
+- id: big-texan-steak-ranch
+  name: Big Texan Steak Ranch
+  state: TX
+  lat: 35.1941
+  lon: -101.7544
+  radius_km: 15
+  kind: roadside
+  highway: I-40
+  facts:
+  - Beth Duke described the restaurant as an international icon, and it is located on an Interstate 40
+    frontage road in Amarillo, Texas.
+  - The Big Texan is best known for its 72-ounce steak, which is advertised as free if eaten in one hour
+    or less along with the rest of the meal.
+  - There is a large bull statue advertising the challenge, and an adjacent motel with 54 rooms and 28
+    stalls for horses.
+  source: https://en.wikipedia.org/wiki/Big_Texan_Steak_Ranch
+- id: prada-marfa
+  name: Prada Marfa
+  state: TX
+  lat: 30.6035
+  lon: -104.5185
+  radius_km: 20
+  kind: quirky
+  highway: US-90
+  facts:
+  - It is a permanent sculptural art installation resembling an authentic Prada storefront erected along
+    U.S. Route 90 near Valentine, Texas.
+  - Created by artists Elmgreen and Dragset in 2005, the structure is designed to naturally decay back
+    into the desert landscape.
+  - The display windows contain authentic fall 2005 Prada shoes and handbags selected and provided by
+    Miuccia Prada.
+  source: https://en.wikipedia.org/wiki/Prada_Marfa
+- id: the-alamo
+  name: The Alamo
+  state: TX
+  lat: 29.4258
+  lon: -98.4861
+  radius_km: 20
+  kind: historic
+  highway: I-37
+  facts:
+  - Originally named the Mísion San Antonio de Valero, it is a historic Spanish mission and fortress compound
+    founded in the 18th century.
+  - It was the site of the Battle of the Alamo in 1836, a pivotal event of the Texas Revolution in which
+    defenders were wiped out.
+  - The Alamo complex is part of a UNESCO World Heritage Site encompassing San Antonio's historic Spanish
+    missions.
+  source: https://en.wikipedia.org/wiki/Alamo_Mission
+- id: margaret-hunt-hill-bridge
+  name: Margaret Hunt Hill Bridge
+  state: TX
+  lat: 32.78
+  lon: -96.8221
+  radius_km: 20
+  kind: engineering
+  highway: Spur 366
+  facts:
+  - It is a cable-stayed bridge spanning the Trinity River in Dallas, Texas, designed by Santiago Calatrava.
+  - The bridge features a peak height of 400 feet (122 m) steel arch supporting its length and main span,
+    with 58 white strands descending from the arch.
+  - Opened in March 2012, the arch provides an additional feature to the Downtown Dallas skyline.
+  source: https://en.wikipedia.org/wiki/Margaret_Hunt_Hill_Bridge
+- id: hueco-tanks
+  name: Hueco Tanks State Park and Historic Site
+  state: TX
+  lat: 31.9203
+  lon: -106.0386
+  radius_km: 25
+  kind: natural
+  highway: US-62
+  facts:
+  - It is a historic park in El Paso County featuring three syenite rock mountains with natural rock basins
+    that hold rainwater.
+  - The park preserves pictographs (rock paintings).
+  - Hueco Tanks is widely regarded as one of the best areas in the world for bouldering.
+  source: https://en.wikipedia.org/wiki/Hueco_Tanks_State_Park_and_Historic_Site
+- id: blue-whale-of-catoosa
+  name: Blue Whale of Catoosa
+  state: OK
+  lat: 36.1937
+  lon: -95.7331
+  radius_km: 15
+  kind: quirky
+  highway: Historic Route 66
+  facts:
+  - It is a waterfront structure situated just east of Catoosa, Oklahoma, along Route 66.
+  - Hugh Davis and his friend, Harold Thomas, built the Blue Whale in the early 1970s out of iron and
+    concrete as a surprise gift for Davis' wife Zelta.
+  - The Blue Whale and its pond became a favored swimming hole for locals and travelers along Route 66.
+  source: https://en.wikipedia.org/wiki/Blue_Whale_of_Catoosa
+- id: pops-66
+  name: Pops 66
+  state: OK
+  lat: 35.6586
+  lon: -97.3351
+  radius_km: 15
+  kind: roadside
+  highway: Historic Route 66
+  facts:
+  - Pops 66 in Arcadia, Oklahoma is a modern roadside attraction, gas station, and restaurant on Route
+    66.
+  - It is marked by a 66-foot-tall neon sign in the shape of a soda pop bottle lit by LEDs.
+  - The glass walls are decorated with shelves of over 700 different types of soda pop bottles, many of
+    which are available for purchase.
+  source: https://en.wikipedia.org/wiki/Pops_66
+- id: stafford-air-and-space-museum
+  name: Stafford Air & Space Museum
+  state: OK
+  lat: 35.5444
+  lon: -98.67
+  radius_km: 15
+  kind: historic
+  highway: I-40
+  facts:
+  - Located in Weatherford, Oklahoma, the Smithsonian-affiliated museum honors legendary Gemini and Apollo
+    astronaut Thomas P. Stafford.
+  - It houses an extensive collection of aerospace artifacts, including a Titan II rocket, rocket engines,
+    and flight spacesuits.
+  - The museum displays the Gemini 6A spacecraft, a full-scale Apollo Command Module replica, a Gemini
+    spacecraft replica, and a Moon rock.
+  source: https://en.wikipedia.org/wiki/Stafford_Air_%26_Space_Museum
+- id: golden-driller
+  name: Golden Driller
+  state: OK
+  lat: 36.1336
+  lon: -95.9312
+  radius_km: 15
+  kind: roadside
+  highway: I-44
+  facts:
+  - It is a 76-foot-tall, 43,500-pound statue of an oil worker standing outside the Tulsa Expo Center
+    in Tulsa, Oklahoma.
+  - A version of the Golden Driller was originally built in 1952 by the Mid-Continent Supply Company...
+    and was permanently installed in 1966.
+  - In 1979, the Oklahoma state legislature officially adopted it as the state monument of Oklahoma.
+  source: https://en.wikipedia.org/wiki/Golden_Driller
+- id: gloss-mountain-state-park
+  name: Gloss Mountain State Park
+  state: OK
+  lat: 36.3667
+  lon: -98.5789
+  radius_km: 25
+  kind: natural
+  highway: US-412
+  facts:
+  - Glass Mountains State Park is located in Major County and features Selenite gypsum.
+  - The park includes a hiking trail from the base parking lot to the top of Cathedral Mountain and across
+    the mesa to view the valley floor and Lone Peak Mountain.
+  source: https://en.wikipedia.org/wiki/Gloss_Mountain_State_Park
+- id: oklahoma-city-national-memorial
+  name: Oklahoma City National Memorial
+  state: OK
+  lat: 35.4728
+  lon: -97.5172
+  radius_km: 20
+  kind: historic
+  highway: I-40
+  facts:
+  - The memorial honors the victims, survivors, and rescuers of the April 19, 1995 bombing of the Alfred
+    P. Murrah Federal Building.
+  - The Outdoor Symbolic Memorial features the Gates of Time, a reflecting pool, and 168 bronze and stone
+    chairs representing the victims.
+  - It preserves the Survivor Tree, an American elm that survived the force of the blast.
+  source: https://en.wikipedia.org/wiki/Oklahoma_City_National_Memorial
+- id: big-brutus
+  name: Big Brutus
+  state: KS
+  lat: 37.2739
+  lon: -94.9388
+  radius_km: 15
+  kind: engineering
+  highway: US-69
+  facts:
+  - Big Brutus is the nickname of the Bucyrus-Erie model 1850-B electric power shovel located in West
+    Mineral, Kansas.
+  source: https://en.wikipedia.org/wiki/Big_Brutus
+- id: monument-rocks-kansas
+  name: Monument Rocks
+  state: KS
+  lat: 38.7906
+  lon: -100.7625
+  radius_km: 25
+  kind: natural
+  highway: US-83
+  facts:
+  - Also known as the Chalk Pyramids, they are a series of large chalk formations reaching a height of
+    up to 70 ft (21 m) in Gove County, Kansas.
+  - The carbonate deposits were laid down during the Cretaceous Period in what was then the Western Interior
+    Seaway, and they are estimated to have been formed 80 million years ago.
+  - The formations were the first landmark in Kansas chosen by the U.S. Department of the Interior as
+    a National Natural Landmark.
+  source: https://en.wikipedia.org/wiki/Monument_Rocks_(Kansas)
+- id: big-well-kansas
+  name: Big Well
+  state: KS
+  lat: 37.6056
+  lon: -99.2936
+  radius_km: 15
+  kind: engineering
+  highway: US-54
+  facts:
+  - It is a large historic water well in Greensburg, Kansas, that finished construction in 1888.
+  - When the well reached roughly 109 feet in depth, perforated pipe was driven horizontally into gravel
+    containing water.
+  - The site includes a modern museum displaying a 1,000-pound pallasite meteorite found in the region.
+  source: https://en.wikipedia.org/wiki/Big_Well_(Kansas)
+- id: eisenhower-presidential-library
+  name: Dwight D. Eisenhower Presidential Library
+  state: KS
+  lat: 38.9122
+  lon: -97.2108
+  radius_km: 20
+  kind: historic
+  highway: I-70
+  facts:
+  - Located in Abilene, Kansas, it preserves the boyhood home and presidential archives of 34th U.S. President
+    Dwight D. Eisenhower.
+  - The campus has five buildings including a library, museum, visitors center, boyhood home, and the
+    Place of Meditation chapel.
+  source: https://en.wikipedia.org/wiki/Dwight_D._Eisenhower_Presidential_Library,_Museum_and_Boyhood_Home
+- id: castle-rock-kansas
+  name: Castle Rock
+  state: KS
+  lat: 38.8611
+  lon: -100.1699
+  radius_km: 25
+  kind: natural
+  highway: I-70
+  facts:
+  - Castle Rock is a 70-ft-tall (21 m) chalk pillar landmark in Gove County, Kansas.
+  - The chalk was deposited in the area by an ancient inland sea.
+  - In 2001, following a thunderstorm, the tallest spire fell.
+  source: https://en.wikipedia.org/wiki/Castle_Rock_(Kansas)
+- id: tallgrass-prairie-preserve
+  name: Tallgrass Prairie National Preserve
+  state: KS
+  lat: 38.4328
+  lon: -96.5589
+  radius_km: 30
+  kind: natural
+  highway: US-50
+  facts:
+  - The Spring Hill/Z-Bar Ranch was 10,882 acres and protects an example of the tallgrass prairie ecosystem.
+  - Less than 5% of tallgrass prairie remains, primarily in the Flint Hills.
+  - The preserve is home to a bison herd and the 1881 historic ranch house and limestone barn.
+  source: https://en.wikipedia.org/wiki/Tallgrass_Prairie_National_Preserve
+- id: carhenge
+  name: Carhenge
+  state: NE
+  lat: 42.1423
+  lon: -102.858
+  radius_km: 15
+  kind: quirky
+  highway: US-385
+  facts:
+  - It is a whimsical replica of England's Stonehenge constructed using 39 vintage American automobiles
+    near Alliance, Nebraska.
+  - Created in 1987 by artist Jim Reinders, the cars are buried trunk-first and welded together in a 96-foot
+    circle.
+  - All the vintage American automobiles in Carhenge are covered with gray spray paint.
+  source: https://en.wikipedia.org/wiki/Carhenge
+- id: chimney-rock-nebraska
+  name: Chimney Rock National Historic Site
+  state: NE
+  lat: 41.7036
+  lon: -103.3483
+  radius_km: 25
+  kind: natural
+  highway: US-26
+  facts:
+  - Chimney Rock is a prominent geological rock formation rising over 300 feet (or approximately 286 feet)
+    above its surroundings.
+  - The formation served as a landmark along the Oregon, California, and Mormon Trails during the mid-19th
+    century and was recorded in many journals.
+  - The formation is composed of layers of volcanic ash, Brule clay, and sandstone.
+  source: https://en.wikipedia.org/wiki/Chimney_Rock_National_Historic_Site
+- id: scotts-bluff-national-monument
+  name: Scotts Bluff National Monument
+  state: NE
+  lat: 41.8347
+  lon: -103.7072
+  radius_km: 25
+  kind: natural
+  highway: US-26
+  facts:
+  - Pioneer wagon trains on the Oregon Trail navigated directly through the bluff's narrow Mitchell Pass.
+  - A summit road constructed by the Civilian Conservation Corps in the 1930s includes three vehicular
+    tunnels carved through rock.
+  source: https://en.wikipedia.org/wiki/Scotts_Bluff_National_Monument
+- id: courthouse-and-jail-rocks
+  name: Courthouse and Jail Rocks
+  state: NE
+  lat: 41.5969
+  lon: -103.1158
+  radius_km: 20
+  kind: historic
+  highway: US-26
+  facts:
+  - They are two weathered sandstone and clay buttes rising over 400 feet above the North Platte River
+    valley near Bridgeport.
+  - The formations served as early guideposts for nineteenth-century emigrants traveling westward along
+    the emigrant trails.
+  - The name "Courthouse" was first used in 1837 and that one traveler in 1845 described it as looking
+    infinitely more like the Capitol.
+  source: https://en.wikipedia.org/wiki/Courthouse_and_Jail_Rocks
+- id: bailey-yard
+  name: Bailey Yard
+  state: NE
+  lat: 41.15
+  lon: -100.83
+  radius_km: 25
+  kind: engineering
+  highway: I-80
+  facts:
+  - Located in North Platte, Nebraska, it is the largest railroad classification yard in the world, operated
+    by Union Pacific.
+  - The yard covers 2,850 acres, stretches eight miles in length, and contains over 300 miles of track.
+  - Over 14,000 railroad cars pass through Bailey Yard every day, and the yard sorts approximately 3,000
+    cars daily.
+  source: https://en.wikipedia.org/wiki/Bailey_Yard
+- id: fort-robinson
+  name: Fort Robinson
+  state: NE
+  lat: 42.681
+  lon: -103.497
+  radius_km: 25
+  kind: historic
+  highway: US-20
+  facts:
+  - It is a former U.S. Army military post established in 1874 during the Sioux Wars in northwestern Nebraska.
+  - Famed Oglala Lakota war leader Crazy Horse was fatally wounded here while being taken into custody
+    in 1877.
+  - During World War II, the post operated as a major military dog training center and a prisoner-of-war
+    camp.
+  source: https://en.wikipedia.org/wiki/Fort_Robinson
+- id: wall-drug
+  name: Wall Drug
+  state: SD
+  lat: 43.9932
+  lon: -102.2418
+  radius_km: 15
+  kind: roadside
+  highway: I-90
+  facts:
+  - The New York Times has described Wall Drug as "a sprawling tourist attraction of international renown
+    [that] draws some two million annual visitors to a remote town".
+  - Wall Drug was purchased by Ted Hustead in 1931, and business was very slow until his wife, Dorothy,
+    thought of advertising free ice water.
+  - Wall Drug includes an art gallery and an 80-foot (24 m) brontosaurus sculpture.
+  source: https://en.wikipedia.org/wiki/Wall_Drug
+- id: corn-palace
+  name: Corn Palace
+  state: SD
+  lat: 43.7146
+  lon: -98.026
+  radius_km: 15
+  kind: quirky
+  highway: I-90
+  facts:
+  - Located in Mitchell, South Dakota, it is a multi-purpose arena/facility decorated with crop art made
+    from corn and other grains.
+  - The Moorish Revival building is decorated with crop art; the murals and designs covering the building
+    are made from corn and other grains, and a new design is constructed each year.
+  - The first Corn Palace was built in 1892 to showcase the fertility of South Dakota's soil to incoming
+    settlers.
+  source: https://en.wikipedia.org/wiki/Corn_Palace
+- id: mount-rushmore
+  name: Mount Rushmore
+  state: SD
+  lat: 43.8789
+  lon: -103.4592
+  radius_km: 30
+  kind: historic
+  highway: US-16
+  facts:
+  - It is a massive national memorial carved into the granite face of Mount Rushmore in the Black Hills
+    near Keystone.
+  - Sculptor Gutzon Borglum led the carving of the 60-foot heads of Presidents Washington, Jefferson,
+    Roosevelt, and Lincoln between 1927 and 1941.
+  source: https://en.wikipedia.org/wiki/Mount_Rushmore
+- id: crazy-horse-memorial
+  name: Crazy Horse Memorial
+  state: SD
+  lat: 43.8354
+  lon: -103.6213
+  radius_km: 25
+  kind: engineering
+  highway: US-16
+  facts:
+  - It is a monumental mountain sculpture being carved out of Thunderhead Mountain honoring the Oglala
+    Lakota warrior Crazy Horse.
+  - Begun in 1948 by sculptor Korczak Ziolkowski at the invitation of Lakota Chief Henry Standing Bear,
+    work continues under a private foundation.
+  - When completed, it will depict Crazy Horse on horseback pointing toward his tribal lands and stand
+    563 feet high.
+  source: https://en.wikipedia.org/wiki/Crazy_Horse_Memorial
+- id: dignity-of-earth-and-sky
+  name: Dignity of Earth and Sky
+  state: SD
+  lat: 43.7869
+  lon: -99.3383
+  radius_km: 15
+  kind: roadside
+  highway: I-90
+  facts:
+  - It is a 50-foot-tall stainless steel sculpture of an Indigenous woman standing on a bluff overlooking
+    the Missouri River near Chamberlain.
+  - Created by South Dakota artist laureate Dale Claude Lamphere, it honors the Lakota and Dakota nations.
+  - The star quilt held by the woman has more than 100 blue diamond shapes that move in the wind.
+  source: https://en.wikipedia.org/wiki/Dignity_of_Earth_and_Sky
+- id: badlands-national-park
+  name: Badlands National Park
+  state: SD
+  lat: 43.75
+  lon: -102.5
+  radius_km: 50
+  kind: natural
+  highway: I-90
+  facts:
+  - The park protects 242,756 acres of sharply eroded buttes, pinnacles, and the largest undisturbed mixed-grass
+    prairie in the United States.
+  - Its sedimentary rock layers contain one of the richest mammal fossil beds in the world, dating to
+    the Oligocene epoch.
+  - The Lakota people named the area mako sica due to its rugged terrain, extreme temperatures, and lack
+    of water.
+  source: https://en.wikipedia.org/wiki/Badlands_National_Park
+- id: crater-of-diamonds
+  name: Crater of Diamonds State Park
+  state: AR
+  lat: 34.0323
+  lon: -93.6702
+  radius_km: 20
+  kind: natural
+  highway: I-30
+  facts:
+  - Crater of Diamonds State Park is one of the few diamond-bearing sites accessible to the public.
+  - The park encompasses a 37.5-acre plowed field located on an eroded volcanic lamproite pipe.
+  - Over 75,000 diamonds had been found in the crater as of 2015.
+  source: https://en.wikipedia.org/wiki/Crater_of_Diamonds_State_Park
+- id: christ-of-the-ozarks
+  name: Christ of the Ozarks
+  state: AR
+  lat: 36.409
+  lon: -93.7253
+  radius_km: 15
+  kind: roadside
+  highway: US-62
+  facts:
+  - It is a monumental 65.5-foot-tall modernist statue of Jesus Christ situated atop Magnetic Mountain
+    in Eureka Springs, Arkansas.
+  - Erected in 1966 by Gerald L. K. Smith, the statue was sculpted by Emmet Sullivan, who had worked on
+    Mount Rushmore.
+  - The statue was built out of steel and mortar with an arm span of sixty five feet.
+  source: https://en.wikipedia.org/wiki/Christ_of_the_Ozarks
+- id: big-dam-bridge
+  name: Big Dam Bridge
+  state: AR
+  lat: 34.7939
+  lon: -92.3581
+  radius_km: 15
+  kind: engineering
+  highway: I-430
+  facts:
+  - It is a pedestrian and bicycle bridge spanning the Arkansas River atop Murray Lock and Dam between
+    Little Rock and North Little Rock.
+  - At 4,226 feet in length, it is the longest pedestrian/bicycle bridge in North America that has never
+    been used by trains or motor vehicles.
+  - It rises to 90 feet over the Arkansas River, and its LED lighting design received an Award of Merit
+    from the Illuminating Engineer Society.
+  source: https://en.wikipedia.org/wiki/Big_Dam_Bridge
+- id: thorncrown-chapel
+  name: Thorncrown Chapel
+  state: AR
+  lat: 36.4164
+  lon: -93.7728
+  radius_km: 15
+  kind: engineering
+  highway: US-62
+  facts:
+  - It is a wooden chapel located in Eureka Springs, designed by renowned architect E. Fay Jones, an apprentice
+    of Frank Lloyd Wright.
+  - Built in 1980, the structure contains 425 glass windows and over 6,000 square feet of glass, set into
+    an intricate pine lattice framework.
+  - The chapel has received numerous prestigious architectural awards and was placed on the National Register
+    of Historic Places in 2000.
+  source: https://en.wikipedia.org/wiki/Thorncrown_Chapel
+- id: mammoth-spring
+  name: Mammoth Spring State Park
+  state: AR
+  lat: 36.4958
+  lon: -91.535
+  radius_km: 20
+  kind: natural
+  highway: US-63
+  facts:
+  - The spring discharges approximately nine million gallons of water every hour at a constant temperature
+    of 58 degrees Fahrenheit.
+  source: https://en.wikipedia.org/wiki/Mammoth_Spring_State_Park
+- id: fort-smith-national-historic-site
+  name: Fort Smith National Historic Site
+  state: AR
+  lat: 35.3882
+  lon: -94.4298
+  radius_km: 20
+  kind: historic
+  highway: I-540
+  facts:
+  - The site features foundation remains of the first Fort Smith, the commissary building, and a reconstruction
+    of the gallows.
+  source: https://en.wikipedia.org/wiki/Fort_Smith_National_Historic_Site
+- id: atchafalaya-basin-bridge
+  name: Atchafalaya Basin Bridge
+  state: LA
+  lat: 30.3325
+  lon: -91.7592
+  radius_km: 30
+  kind: engineering
+  highway: I-10
+  facts:
+  - It is a pair of parallel bridges in the U.S. state of Louisiana between Baton Rouge and Lafayette
+    which carries Interstate 10 over the Atchafalaya Basin, and was renamed the Louisiana Airborne Memorial
+    Bridge.
+  - It has a total length of 96,095 feet (29,290 m; 18 mi; 29 km), and at the time of its completion,
+    it was the second longest bridge in the United States, behind the Lake Pontchartrain Causeway Bridge.
+  source: https://en.wikipedia.org/wiki/Atchafalaya_Basin_Bridge
+- id: poverty-point
+  name: Poverty Point
+  state: LA
+  lat: 32.6367
+  lon: -91.4114
+  radius_km: 25
+  kind: historic
+  highway: I-20
+  facts:
+  - It is a massive prehistoric earthwork complex built between 1700 and 1100 BC by indigenous hunter-gatherers
+    in northeastern Louisiana.
+  - The site features six concentric curved earthen ridges flanking a plaza and multiple massive earthen
+    mounds, including Mound A.
+  - Poverty Point was inscribed as a UNESCO World Heritage Site on June 22, 2014.
+  source: https://en.wikipedia.org/wiki/Poverty_Point
+- id: uss-kidd
+  name: USS Kidd (DD-661)
+  state: LA
+  lat: 30.4443
+  lon: -91.1915
+  radius_km: 15
+  kind: historic
+  highway: I-10
+  facts:
+  - It is a decorated Fletcher-class destroyer that served in the United States Navy during World War
+    II and the Korean War.
+  - Moored on the Mississippi River in downtown Baton Rouge, it is preserved in its authentic 1945 wartime
+    configuration.
+  - Kidd's special mooring in the Mississippi River is designed to cope with the annual change in river
+    depth, where half the year she floats as the river rises, and the other half she sits on keel blocks.
+  source: https://en.wikipedia.org/wiki/USS_Kidd_(DD-661)
+- id: jungle-gardens-avery-island
+  name: Jungle Gardens
+  state: LA
+  lat: 29.9111
+  lon: -91.9111
+  radius_km: 20
+  kind: quirky
+  highway: US-90
+  facts:
+  - It is a 170-acre botanical garden and bird sanctuary located on Avery Island, Louisiana.
+  - The gardens were created by Edward Avery McIlhenny, second son of Edmund McIlhenny, the inventor of
+    Tabasco sauce, and feature a bird sanctuary called Bird City.
+  - The gardens feature an ancient centuries-old Buddha statue gifted to McIlhenny in 1936.
+  source: https://en.wikipedia.org/wiki/Jungle_Gardens
+- id: bonnie-and-clyde-ambush-museum
+  name: Bonnie & Clyde Ambush Museum
+  state: LA
+  lat: 32.5448
+  lon: -93.0533
+  radius_km: 15
+  kind: historic
+  highway: I-20
+  facts:
+  - The museum is located at the former site of Ma Canfield's Cafe where Bonnie and Clyde stopped to purchase
+    sandwiches.
+  - It displays a replica of the bullet-riddled 1934 Ford V8 sedan in which Bonnie Parker and Clyde Barrow
+    were killed by lawmen.
+  source: https://en.wikipedia.org/wiki/Bonnie_%26_Clyde_Ambush_Museum
+- id: louisiana-state-capitol
+  name: Louisiana State Capitol
+  state: LA
+  lat: 30.457
+  lon: -91.1874
+  radius_km: 20
+  kind: historic
+  highway: I-10
+  facts:
+  - At 450 feet and 34 stories tall, it is the tallest state capitol building in the United States.
+  - Huey Long was assassinated in the State Capitol on September 8, 1935.
+  source: https://en.wikipedia.org/wiki/Louisiana_State_Capitol
+- id: gateway-arch
+  name: Gateway Arch
+  state: MO
+  lat: 38.6246
+  lon: -90.185
+  radius_km: 25
+  kind: engineering
+  highway: I-44
+  facts:
+  - It is a 630-foot-tall stainless steel catenary arch on the west bank of the Mississippi River in St.
+    Louis, Missouri.
+  - Designed by architect Eero Saarinen, it is the world's tallest arch and the tallest man-made monument
+    in the Western Hemisphere.
+  - It was constructed between 1963 and 1965 as a monument to the westward expansion of the United States.
+  source: https://en.wikipedia.org/wiki/Gateway_Arch
+- id: meramec-caverns
+  name: Meramec Caverns
+  state: MO
+  lat: 38.2413
+  lon: -91.0924
+  radius_km: 20
+  kind: roadside
+  highway: I-44
+  facts:
+  - It is a heavily advertised commercial limestone cave system located along historic Route 66 near Stanton,
+    Missouri.
+  - During the Civil War, the cave was used by the Union Army as a saltpeter manufacturing plant for gunpowder.
+  - Local folklore holds that outlaw Jesse James and his gang used the intricate subterranean caverns
+    as a hideout.
+  source: https://en.wikipedia.org/wiki/Meramec_Caverns
+- id: fantastic-caverns
+  name: Fantastic Caverns
+  state: MO
+  lat: 37.2874
+  lon: -93.3585
+  radius_km: 15
+  kind: roadside
+  highway: I-44
+  facts:
+  - Fantastic Caverns is located in Springfield, Missouri, and is the only cave in North America to offer
+    a completely ride-through tour in a Jeep-drawn tram.
+  - The cavern was discovered by John Knox and his hunting dog in 1862, and Knox kept the cave's existence
+    quiet until 1867 to avoid exploitation by the Union or Confederate governments.
+  - The caverns were used as a speakeasy during Prohibition.
+  source: https://en.wikipedia.org/wiki/Fantastic_Caverns
+- id: elephant-rocks-state-park
+  name: Elephant Rocks State Park
+  state: MO
+  lat: 37.6544
+  lon: -90.6881
+  radius_km: 20
+  kind: natural
+  highway: US-67
+  facts:
+  - The park features a string of large granite boulders resembling a train of pink circus elephants,
+    formed from Graniteville Granite 1.4 billion years ago.
+  - The park includes remnants of historic nineteenth-century quarry operations that produced red granite
+    paving stones for St. Louis streets.
+  source: https://en.wikipedia.org/wiki/Elephant_Rocks_State_Park
+- id: jesse-james-home
+  name: Jesse James Home Museum
+  state: MO
+  lat: 39.7555
+  lon: -94.8451
+  radius_km: 15
+  kind: historic
+  highway: I-29
+  facts:
+  - It is the house in St. Joseph, Missouri where outlaw Jesse James was living.
+  - Jesse James was gunned down on April 3, 1882, by Robert Ford.
+  - The house contains a large bullet hole on the north interior wall.
+  source: https://en.wikipedia.org/wiki/Jesse_James_Home_Museum
+- id: ha-ha-tonka-state-park
+  name: Ha Ha Tonka State Park
+  state: MO
+  lat: 37.9742
+  lon: -92.7631
+  radius_km: 25
+  kind: natural
+  highway: US-54
+  facts:
+  - Located on the Lake of the Ozarks, the park features the stone ruins of a European-style turn-of-the-century
+    castle.
+  - Businessman Robert Snyder began construction of the Ha Ha Tonka castle in 1905, and the building was
+    destroyed by fire in 1942.
+  - The park features caves, sinkholes, and bluffs, and is a prominent example of karst topography, with
+    a 70-acre portion designated as a natural area.
+  source: https://en.wikipedia.org/wiki/Ha_Ha_Tonka_State_Park
+- id: iowa-80
+  name: Iowa 80
+  state: IA
+  lat: 41.618
+  lon: -90.7813
+  radius_km: 15
+  kind: roadside
+  highway: I-80
+  facts:
+  - Located off Interstate 80 at exit 284 in Walcott, Iowa, it is the world's largest truck stop.
+  - It sits on a 220-acre plot of land (three times larger than an average 75-acre truck stop), features
+    parking for 900 trucks, and receives 5,000 visitors daily.
+  - It includes a 67,000 sq ft main building, a movie theater (without a 24-chair count specified), a
+    dentist, and a museum dedicated to trucking.
+  source: https://en.wikipedia.org/wiki/Iowa_80
+- id: field-of-dreams-movie-site
+  name: Field of Dreams
+  state: IA
+  lat: 42.4978
+  lon: -91.055
+  radius_km: 20
+  kind: quirky
+  highway: US-20
+  facts:
+  - It is a baseball field and pop-culture tourist attraction built for the 1989 movie of the same name
+    by Universal Pictures.
+  - It is located in Dyersville, Iowa, within Dubuque County, built on a farm whose owners' grandparents
+    purchased it in 1906.
+  - Major League Baseball planned for a regular-season game to be held at a temporary facility constructed
+    in the cornfields.
+  source: https://en.wikipedia.org/wiki/Field_of_Dreams_(Dubuque_County,_Iowa)
+- id: high-trestle-trail-bridge
+  name: High Trestle Trail
+  state: IA
+  lat: 41.8673
+  lon: -93.868
+  radius_km: 20
+  kind: engineering
+  highway: I-35
+  facts:
+  - The bridge is nearly half-mile-long (770-meter) and 13-story-high (40-meter).
+  - The bridge decking incorporates a decorative structure representing the view through a mine shaft
+    with decorative lighting.
+  - The bridge was originally built in the 1970s to carry rail traffic on a Milwaukee Road line, not by
+    the Union Pacific Railroad.
+  source: https://en.wikipedia.org/wiki/High_Trestle_Trail
+- id: surf-ballroom
+  name: Surf Ballroom
+  state: IA
+  lat: 43.14
+  lon: -93.3894
+  radius_km: 15
+  kind: historic
+  highway: I-35
+  facts:
+  - The Surf Ballroom is located in Clear Lake, Iowa, and is associated with the final performances of
+    Buddy Holly, Ritchie Valens, and J. P. Richardson.
+  - The musicians performed here on February 2, 1959, before perishing in a plane crash that became known
+    as The Day the Music Died.
+  - The Surf Ballroom features murals, bamboo and rattan furniture, fake palm trees, and a cloud-painted
+    ceiling.
+  source: https://en.wikipedia.org/wiki/Surf_Ballroom
+- id: snake-alley-burlington
+  name: Snake Alley
+  state: IA
+  lat: 40.812
+  lon: -91.1057
+  radius_km: 15
+  kind: historic
+  highway: US-34
+  facts:
+  - It is a steep brick-paved alley in Burlington, Iowa, consisting of five half-curves and two quarter-curves
+    spanning 275 feet.
+  - Snake Alley was built in 1894 to link the downtown business district and the neighborhood shopping
+    area, and writer Robert L. Ripley later called it 'The Crookedest Street in the World' in his column.
+  - The alley is composed of limestone and blueclay bricks laid at an angle to allow horses better footing
+    as they descended.
+  source: https://en.wikipedia.org/wiki/Snake_Alley_(Burlington,_Iowa)
+- id: matchstick-marvels-museum
+  name: Matchstick Marvels Museum
+  state: IA
+  lat: 42.1881
+  lon: -92.7156
+  radius_km: 15
+  kind: quirky
+  highway: US-30
+  facts:
+  - The Matchstick Marvels Museum is a museum in Gladbrook, Iowa, that features models created entirely
+    of wooden matchsticks by Pat Acton.
+  - Exhibits include models of the United States Capitol and Hogwarts.
+  - Acton buys the matchsticks without the tips from a supplier.
+  source: https://en.wikipedia.org/wiki/Matchstick_Marvels_Museum
+- id: morton-pumpkin-capital
+  name: Morton, Illinois
+  state: IL
+  lat: 40.6389
+  lon: -89.4892
+  radius_km: 20
+  kind: quirky
+  highway: I-74
+  facts:
+  - The village is officially designated as the Pumpkin Capital of the World.
+  - Morton claims that '99 percent of the world's canned pumpkin is produced in Morton,' and the village
+    is home to a Libby's pumpkin cannery.
+  - The community holds a yearly Morton Pumpkin Festival for four days every September.
+  source: https://en.wikipedia.org/wiki/Morton,_Illinois
+- id: gemini-giant
+  name: Gemini Giant
+  state: IL
+  lat: 41.3061
+  lon: -88.1497
+  radius_km: 15
+  kind: roadside
+  highway: I-55
+  facts:
+  - The Gemini Giant is a fiberglass roadside statue located in Wilmington, IL along historic U.S. Route
+    66.
+  source: https://en.wikipedia.org/wiki/Gemini_Giant
+- id: casey-illinois-sculptures
+  name: Casey, Illinois
+  state: IL
+  lat: 39.3022
+  lon: -87.9967
+  radius_km: 20
+  kind: quirky
+  highway: I-70
+  facts:
+  - Casey is noted for its outdoor sculptures listed as Guinness World Records for their size.
+  - Attractions in the town include the World's Largest Wind Chime, World's Largest Rocking Chair, World's
+    Largest Golf Tee, and World's Largest Mailbox.
+  - Jim Bolin constructed these items to bring in more tourism and revitalize Casey during a time of economic
+    distress.
+  source: https://en.wikipedia.org/wiki/Casey,_Illinois
+- id: cahokia-mounds
+  name: Cahokia
+  state: IL
+  lat: 38.6539
+  lon: -90.0644
+  radius_km: 25
+  kind: historic
+  highway: I-55
+  facts:
+  - Cahokia existed from c. 1050 to c. 1350 AD and was the largest and most influential urban settlement
+    of the Mississippian culture, as well as the largest urban center north of the great Mesoamerican
+    cities in Mexico and Central America.
+  - The site contains Monks Mound, the largest prehistoric earthen construction in the Americas, covering
+    14 acres and rising 100 feet tall.
+  - The site was designated a UNESCO World Heritage Site in 1982 and lies in south-western Illinois between
+    East St. Louis and Collinsville.
+  source: https://en.wikipedia.org/wiki/Cahokia
+- id: brooks-catsup-bottle
+  name: Brooks Catsup Bottle water tower
+  state: IL
+  lat: 38.6629
+  lon: -89.9823
+  radius_km: 15
+  kind: roadside
+  highway: I-55
+  facts:
+  - It is a water tower on the south side of Collinsville, Illinois, that is 70 feet tall on a 100 foot
+    stand and claimed to be the largest catsup bottle in the world.
+  - Constructed in 1949 for the G.S. Suppiger Company catsup plant, the tank itself is 70 feet tall and
+    holds 100,000 gallons.
+  - It is trademarked "The World's Largest Catsup Bottle", is claimed to be the largest catsup bottle
+    in the world, and is listed on the National Register of Historic Places.
+  source: https://en.wikipedia.org/wiki/Brooks_Catsup_Bottle_water_tower
+- id: leaning-tower-of-niles
+  name: Leaning Tower of Niles
+  state: IL
+  lat: 42.0124
+  lon: -87.784
+  radius_km: 15
+  kind: engineering
+  highway: I-94
+  facts:
+  - It is a half-size replica of the Leaning Tower of Pisa located in Niles, Illinois.
+  - Designed by architect Albert L. Farr and completed in 1934, it was commissioned by industrialist Robert
+    Ilg to house a large water tank and pumping equipment for pools and an artificial lake in a recreation
+    park for employees.
+  source: https://en.wikipedia.org/wiki/Leaning_Tower_of_Niles
