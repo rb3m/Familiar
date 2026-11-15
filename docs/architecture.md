@@ -63,7 +63,8 @@ gives the model only the matched facts and tells it to say nothing rather than i
   keyboard). It is a `PushToTalk` source interface with platform backends:
   - Linux joystick: evdev. Joystick event nodes are already readable through systemd-logind
     `uaccess`, no extra groups.
-  - Linux keyboard: the xdg-desktop-portal **GlobalShortcuts** portal (KDE supports it; it signals
+  - Linux keyboard (**deferred**: the user moves the HOTAS beside the keyboard for KSP, so M1 ships
+    joystick + terminal only): the xdg-desktop-portal **GlobalShortcuts** portal (KDE supports it; it signals
     press *and* release). This avoids the `input` group, which would let any process keylog.
     Fallback: a udev rule granting `uaccess` to one dedicated device (e.g. a gaming keypad).
   - macOS: a CGEventTap/pynput hotkey (Accessibility permission).

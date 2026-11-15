@@ -70,7 +70,7 @@ def test_construct_without_secret(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     llm = GeminiLLM({})
     assert llm._client is None
-    assert llm.model == "gemini-3.8-flash"
+    assert llm.model == "gemini-3.5-flash-lite"
     assert isinstance(llm, LLMProvider)
 
 
@@ -115,7 +115,7 @@ async def test_stream_sdk_contract():
 )
 async def test_api_error(code, retryable):
     generate = AsyncMock(side_effect=errors.APIError(code, {"message": "offline failure"}))
-    llm = GeminiLLM({})
+    llm = GeminiLLM({"max_retries": 0, "fallback_models": []})
     llm._client = SimpleNamespace(
         aio=SimpleNamespace(
             models=SimpleNamespace(generate_content_stream=generate),

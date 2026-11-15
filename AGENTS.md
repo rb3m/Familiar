@@ -9,9 +9,9 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Milestone: **M0 Foundation** done offline (48 tests); live Gemini chat not yet verified.
-- Next task: verify `uv run familiar chat` with a free-tier key, then **M1 Voice loop**: PushToTalk sources (evdev joystick, GlobalShortcuts portal key, terminal fallback), Gemini STT/TTS, ElevenLabs TTS, barge-in.
-- Blockers: needs a free-tier `GEMINI_API_KEY` (AI Studio project without billing).
+- Milestone: **M1 Voice loop** (M0 done; live chat verified 2026-11-15 on the free tier).
+- Next task: PushToTalk sources (evdev HOTAS button + terminal fallback; keyboard deferred), Gemini STT/TTS, ElevenLabs TTS, barge-in.
+- Known: free-tier `gemini-3.8-flash` often stalls or returns 503/504, so the default is `gemini-3.5-flash-lite` (~1 s) with retries, an 8 s first-chunk timeout and fallback. The user's local config reads `GEMINI_FREE_KEY`.
 
 ## Rules
 - Python 3.12 via uv: `uv sync`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
