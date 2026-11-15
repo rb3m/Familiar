@@ -57,15 +57,21 @@ def _path(value: object, base: Path) -> Path:
     return (base / path).resolve()
 
 
+USER_CONFIG = Path("~/.config/familiar/config.toml")
+
+
+def find_config_path(path: str | Path | None = None) -> Path | None:
+    """Explicit path, then $FAMILIAR_CONFIG, ./config.toml, the user config; None if absent."""
+    selected = path or os.environ.get("FAMILIAR_CONFIG")
+    if selected:
+        return Path(selected).expanduser()
+    candidates = [Path("config.toml"), USER_CONFIG.expanduser()]
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
 def load_config(path: str | Path | None = None) -> AppConfig:
     """Use an explicit path, environment override, local file, or user file."""
-    selected = path or os.environ.get("FAMILIAR_CONFIG")
-    candidates = [Path("config.toml"), Path("~/.config/familiar/config.toml").expanduser()]
-    source = (
-        Path(selected).expanduser()
-        if selected
-        else next((candidate for candidate in candidates if candidate.is_file()), None)
-    )
+    source = find_config_path(path)
     data: dict = {}
     base = Path.cwd()
     if source is not None:

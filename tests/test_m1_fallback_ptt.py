@@ -80,10 +80,14 @@ def test_fallback_does_not_restart_after_output():
 class Device:
     name = "Fake HOTAS"
 
-    def __init__(self, events=(), keys=(288,)):
+    def __init__(self, events=(), keys=(288,), held=()):
         self.events = events
         self.keys = keys
+        self.held = list(held)
         self.closed = False
+
+    def active_keys(self):
+        return self.held
 
     def capabilities(self):
         return {1: self.keys}
@@ -144,6 +148,35 @@ def test_setup_skips_unreadable_and_keyboard(monkeypatch):
         monkeypatch.setattr("familiar.ptt.setup.evdev_module", lambda: module)
         assert await detect_button() == ("Fake HOTAS", "BTN_TRIGGER")
         assert keyboard.closed and joystick.closed
+
+    run(scenario())
+
+
+def test_setup_ignores_buttons_held_at_start(monkeypatch):
+    """A quadrant lever resting in its detent keeps a button down; it must not win setup."""
+
+    async def scenario():
+        quadrant = Device([(1, 294, 1), (1, 294, 1)], held=[294])
+        hotas = Device([(1, 288, 1)])
+        hotas.name = "Real HOTAS"
+        devices = {"quadrant": quadrant, "hotas": hotas}
+        module = SimpleNamespace(
+            ecodes=CODES, list_devices=lambda: list(devices), InputDevice=devices.__getitem__
+        )
+        monkeypatch.setattr("familiar.ptt.setup.evdev_module", lambda: module)
+        assert await detect_button() == ("Real HOTAS", "BTN_TRIGGER")
+
+    run(scenario())
+
+
+def test_setup_accepts_held_button_after_release(monkeypatch):
+    async def scenario():
+        device = Device([(1, 288, 0), (1, 288, 1)], held=[288])
+        module = SimpleNamespace(
+            ecodes=CODES, list_devices=lambda: ["j"], InputDevice=lambda _: device
+        )
+        monkeypatch.setattr("familiar.ptt.setup.evdev_module", lambda: module)
+        assert await detect_button() == ("Fake HOTAS", "BTN_TRIGGER")
 
     run(scenario())
 

@@ -32,17 +32,49 @@ def _devices(module: Any) -> list[Any]:
     return devices
 
 
+def _held(device: Any) -> set[int]:
+    """Buttons already down when setup starts (e.g. a quadrant lever resting in its detent)."""
+    try:
+        return set(device.active_keys())
+    except OSError:
+        return set()
+
+
 async def _press(device: Any, codes: Any) -> tuple[str, str]:
+    held = _held(device)
     async for event in device.async_read_loop():
-        if event.type != codes.EV_KEY or event.value != 1:
+        if event.type != codes.EV_KEY or not _joystick(event.code, codes):
             continue
-        if not _joystick(event.code, codes):
+        if event.value == 0:
+            held.discard(event.code)
+            continue
+        if event.value != 1 or event.code in held:
             continue
         name = codes.BTN.get(event.code, str(event.code))
         if isinstance(name, (tuple, list)):
             name = name[0]
         return device.name, name
     raise PluginError("Joystick disconnected during PTT setup")
+
+
+async def _first_success(tasks: list[asyncio.Task], timeout: float) -> tuple[str, str]:
+    """First device to report a press wins; a device that drops out doesn't end setup."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    pending = set(tasks)
+    while pending:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        done, pending = await asyncio.wait(
+            pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+        )
+        winners = [task for task in done if task.exception() is None]
+        if winners:
+            return winners[0].result()
+    if not pending:
+        raise PluginError("All joysticks disconnected during PTT setup")
+    raise PluginError(f"No joystick button pressed within {timeout:g} seconds")
 
 
 async def detect_button(timeout: float = 30) -> tuple[str, str]:
@@ -52,10 +84,7 @@ async def detect_button(timeout: float = 30) -> tuple[str, str]:
         raise PluginError("No readable joysticks found; check /dev/input permissions")
     tasks = [asyncio.create_task(_press(device, module.ecodes)) for device in devices]
     try:
-        done, _ = await asyncio.wait(tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-        if not done:
-            raise PluginError(f"No joystick button pressed within {timeout:g} seconds")
-        return next(iter(done)).result()
+        return await _first_success(tasks, timeout)
     finally:
         for task in tasks:
             task.cancel()
