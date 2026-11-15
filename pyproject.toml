@@ -57,3 +57,7 @@ elevenlabs = "familiar.backends.elevenlabs.tts:ElevenLabsTTS"
 [project.entry-points."familiar.ptt"]
 terminal = "familiar.ptt.terminal:TerminalPTT"
 evdev = "familiar.ptt.evdev:EvdevPTT"
+
+[project.entry-points."familiar.games"]
+ats = "familiar.games.scs.adapter:AtsAdapter"
+ets2 = "familiar.games.scs.adapter:Ets2Adapter"

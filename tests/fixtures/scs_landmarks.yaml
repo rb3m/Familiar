@@ -1,0 +1,28 @@
+- id: kaycee
+  name: Kaycee historic district
+  state: WY
+  lat: 43.7339
+  lon: -106.3402
+  radius_km: 5
+  kind: town
+  highway: I-25
+  facts: [Kaycee is in Johnson County.]
+  source: https://example.org/kaycee
+- id: south
+  name: Southern landmark
+  state: WY
+  lat: 43.6
+  lon: -106.34
+  radius_km: 2
+  kind: landscape
+  facts: [A southern fixture landmark.]
+  source: https://example.org/south
+- id: north
+  name: Northern landmark
+  state: WY
+  lat: 44
+  lon: -106.34
+  radius_km: 3
+  kind: landscape
+  facts: [A northern fixture landmark.]
+  source: https://example.org/north
