@@ -54,7 +54,10 @@ Every plugin class exposes `name`, `api_version` and `capabilities` (a set of st
 ## Grounding
 
 POIs and lore come from curated knowledge packs (with source, map/DLC and coordinates). The prompt
-gives the model only the matched facts and tells it to say nothing rather than invent details.
+gives the model the matched facts. How freely it may embellish them is the persona's
+`truthfulness` (`persona.py`): `strict` (Mira) never invents, while `playful` (Ember) may
+exaggerate places and lore as obvious hyperbole but answers straight when sincerely asked. In every
+mode, practical information the player acts on (fuel, damage, distances, deadlines) stays exact.
 
 ## Platforms
 

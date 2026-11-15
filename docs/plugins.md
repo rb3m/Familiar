@@ -46,5 +46,6 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
 
 ## Personas
 
-Personas are YAML, not plugins: copy `personas/mira.yaml`, change the prompt and voices. Voice
+Personas are YAML, not plugins: copy `personas/mira.yaml`, change the prompt and voices, and pick
+`truthfulness: strict` or `playful`. Voice
 ids are scoped by TTS backend and language, so one persona can sound right in English and Japanese.

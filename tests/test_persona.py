@@ -45,3 +45,40 @@ def test_invalid_schema(tmp_path, persona, change):
 def test_missing_persona(tmp_path):
     with pytest.raises(ConfigError):
         load_persona(tmp_path, "missing")
+
+
+def _write(tmp_path, extra=""):
+    (tmp_path / "p.yaml").write_text(
+        "id: p\ndisplay_name: P\nsource: S\nchattiness: 0.5\nprompt: Hi\n"
+        "languages: {en: {voices: {}}}\n" + extra
+    )
+
+
+def test_truthfulness_defaults_to_strict_and_keeps_practical_facts(tmp_path):
+    from familiar.persona import PRACTICAL_FACTS_RULE, TRUTHFULNESS_RULES, load_persona
+
+    _write(tmp_path)
+    prompt = load_persona(tmp_path, "p").system_prompt("en")
+    assert TRUTHFULNESS_RULES["strict"] in prompt
+    assert PRACTICAL_FACTS_RULE in prompt
+
+
+def test_playful_persona_may_exaggerate_but_practical_facts_stay(tmp_path):
+    from familiar.persona import PRACTICAL_FACTS_RULE, TRUTHFULNESS_RULES, load_persona
+
+    _write(tmp_path, "truthfulness: playful\n")
+    prompt = load_persona(tmp_path, "p").system_prompt("en")
+    assert TRUTHFULNESS_RULES["playful"] in prompt
+    assert TRUTHFULNESS_RULES["strict"] not in prompt
+    assert PRACTICAL_FACTS_RULE in prompt
+
+
+def test_unknown_truthfulness_rejected(tmp_path):
+    import pytest
+
+    from familiar.interfaces import ConfigError
+    from familiar.persona import load_persona
+
+    _write(tmp_path, "truthfulness: chaotic\n")
+    with pytest.raises(ConfigError, match="truthfulness"):
+        load_persona(tmp_path, "p")

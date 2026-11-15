@@ -10,6 +10,28 @@ from familiar.interfaces import ConfigError
 
 LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "ja": "Japanese"}
 
+# How loosely a persona may treat facts. Practical information is always exact: a companion
+# who exaggerates the fuel level or a deadline stops being fun and starts being a hazard.
+PRACTICAL_FACTS_RULE = (
+    "Practical information is always exact and never embellished: fuel, damage, speed, "
+    "distances, directions, deadlines, time and anything else the player may act on. Only "
+    "state such numbers when you were given them; never estimate, calculate or guess one "
+    "(no range from a fuel percentage, no arrival time from a distance). If it wasn't given, "
+    "say you don't know."
+)
+TRUTHFULNESS_RULES = {
+    "strict": (
+        "Never invent facts about places, history or the game. Use only facts you are given or "
+        "are sure of; if you don't know, say so plainly."
+    ),
+    "playful": (
+        "When talking about places, landmarks and lore you may exaggerate wildly, boast and spin "
+        "grand legends, as long as it is obviously hyperbole in your own voice. If the player "
+        "sincerely asks whether something is true, answer straight with only facts you are given "
+        "or are sure of."
+    ),
+}
+
 
 @dataclass(frozen=True)
 class Persona:
@@ -21,6 +43,7 @@ class Persona:
     style_rules: list[str]
     languages: dict
     game_hooks: dict[str, str]
+    truthfulness: str = "strict"
 
     def system_prompt(self, language: str, game: str | None = None) -> str:
         """Combine character, style, game context, and response language."""
@@ -28,6 +51,8 @@ class Persona:
             raise ConfigError(f"Persona {self.id!r} does not support language {language!r}")
         parts = [self.prompt.strip()]
         parts.extend(f"- {rule}" for rule in self.style_rules)
+        parts.append(f"- {TRUTHFULNESS_RULES[self.truthfulness]}")
+        parts.append(f"- {PRACTICAL_FACTS_RULE}")
         if game in self.game_hooks:
             parts.append(self.game_hooks[game])
         parts.append(f"Always reply in {LANGUAGE_NAMES.get(language, language)}.")
@@ -72,7 +97,11 @@ def _validate(data: object) -> dict:
         not isinstance(key, str) or not isinstance(value, str) for key, value in hooks.items()
     ):
         raise ConfigError("Persona game_hooks must map game names to strings")
-    return {**data, "style_rules": rules, "game_hooks": hooks}
+    truthfulness = data.get("truthfulness", "strict")
+    if truthfulness not in TRUTHFULNESS_RULES:
+        allowed = ", ".join(TRUTHFULNESS_RULES)
+        raise ConfigError(f"Persona truthfulness must be one of: {allowed}")
+    return {**data, "style_rules": rules, "game_hooks": hooks, "truthfulness": truthfulness}
 
 
 def load_persona(personas_dir: str | Path, persona_id: str) -> Persona:
