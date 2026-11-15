@@ -30,5 +30,6 @@ API tier) is the first backend; others plug in via entry points.
 - `config.example.toml`: every config key with defaults.
 - `personas/`: persona YAML files.
 - `src/familiar/`: package; `backends/` holds built-in plugins, `games/scs/` the ATS/ETS2 adapter (`knowledge/<game>/` landmark packs).
-- `scripts/`: data builders and landmark checkers (`verify_landmarks.py`, `factcheck_landmarks.py`). Run both before adding landmarks.
+- `docs/knowledge-packs.md`: landmark pack format and the `familiar landmarks status|add|check` workflow. Read before adding or editing landmarks.
+- `scripts/`: data builders; landmark scripts are thin wrappers around `games/scs/curation.py`.
 - `tests/`: pytest suite.
