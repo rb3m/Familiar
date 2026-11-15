@@ -305,6 +305,133 @@ async def _telemetry_record(args: argparse.Namespace) -> None:
     await record(config.games.get(game, {}), args.file)
 
 
+def _landmark_arguments(commands: Any) -> None:
+    from pathlib import Path
+
+    landmarks = commands.add_parser("landmarks", help="Curate landmark knowledge packs")
+    actions = landmarks.add_subparsers(dest="landmark_action", required=True)
+    status = actions.add_parser("status", help="Show installed and covered ATS states")
+    status.add_argument("--game", choices=["ats"], default="ats")
+    status.add_argument("--game-dir", type=Path)
+    add = actions.add_parser("add", help="Research, check and merge new states")
+    add.add_argument("states", nargs="+", type=str.upper, metavar="XX")
+    add.add_argument("--per-state", type=int, default=6)
+    add.add_argument("--pack", type=Path)
+    add.add_argument("--dry-run", action="store_true")
+    add.add_argument("--workdir", type=Path)
+    check = actions.add_parser("check", help="Check a pack without modifying it")
+    check.add_argument("pack", nargs="?", type=Path)
+    for command in (status, add, check):
+        command.add_argument("--config")
+
+
+def _landmark_status(args: argparse.Namespace) -> None:
+    from pathlib import Path
+
+    from familiar.games.scs.curation import owned_states, pack_states
+    from familiar.games.scs.knowledge import KnowledgePack
+    from familiar.games.scs.places import STATE_NAMES
+
+    config = load_config(args.config)
+    directory = args.game_dir or Path(
+        config.games.get(args.game, {}).get(
+            "game_dir", "~/.local/share/Steam/steamapps/common/American Truck Simulator"
+        )
+    )
+    owned = owned_states(directory.expanduser())
+    covered = pack_states(KnowledgePack.for_game(args.game).landmarks)
+    missing = owned - covered
+    for label, states in (("Owned", owned), ("Covered", covered), ("Missing", missing)):
+        names = ", ".join(f"{code} ({STATE_NAMES.get(code, code)})" for code in sorted(states))
+        print(f"{label}: {names or '-'}")
+    if missing:
+        print(f"Next: familiar landmarks add {' '.join(sorted(missing))}")
+
+
+def _landmark_summary(original: list[dict], kept: list[dict]) -> None:
+    from collections import Counter
+
+    from familiar.games.scs.curation import pack_states
+
+    originals = {entry["id"]: entry for entry in original}
+    totals = Counter(entry["state"] for entry in original)
+    counts: Counter[str] = Counter()
+    corrected: Counter[str] = Counter()
+    removed: Counter[str] = Counter()
+    for entry in kept:
+        state = entry["state"]
+        before = set(originals[entry["id"]]["facts"])
+        after = set(entry["facts"])
+        counts[state] += 1
+        corrected[state] += len(after - before)
+        removed[state] += len(before - after)
+    for state in sorted(pack_states(original)):
+        print(
+            f"{state}: kept {counts[state]}, dropped {totals[state] - counts[state]}, "
+            f"facts corrected {corrected[state]}, facts removed {removed[state]}"
+        )
+
+
+async def _landmarks(args: argparse.Namespace) -> None:
+    import httpx
+
+    if args.landmark_action == "status":
+        _landmark_status(args)
+        return
+    try:
+        await _curate_landmarks(args)
+    except (OSError, ValueError, httpx.HTTPError, TimeoutError) as exc:
+        raise ConfigError(f"Landmark curation failed: {exc}") from exc
+
+
+async def _curate_landmarks(args: argparse.Namespace) -> None:
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    import httpx
+
+    from familiar.games.scs import curation
+
+    adding = args.landmark_action == "add"
+    pack = args.pack or curation.DEFAULT_PACK
+    workdir = Path("data/landmarks") / datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    if adding:
+        workdir = args.workdir or workdir
+        entries = await curation.research(args.states, args.per_state, workdir)
+    if not adding:
+        entries = curation.read_pack(pack)
+    workdir.mkdir(parents=True, exist_ok=True)
+    report_path = workdir / "factcheck.json"
+    with httpx.Client(headers=curation.HEADERS, timeout=30) as client:
+        statuses = curation.verify_coordinates(entries, client)
+        rejected = [entry for entry in entries if statuses[entry["id"]] != "OK"]
+        for entry in rejected:
+            print(f"{entry['id']}: {statuses[entry['id']]}")
+        print(f"Coordinates: {len(entries) - len(rejected)}/{len(entries)} OK")
+        candidates = [entry for entry in entries if statuses[entry["id"]] == "OK"]
+        if not adding:
+            candidates = entries
+        config = load_config(args.config)
+        llm = load("llm", config.llm.backend, {**config.llm.settings, "temperature": 0})
+        try:
+            report = await curation.factcheck(candidates, llm, client, 4.0, report_path)
+        finally:
+            await close_backend(llm)
+    kept, left_out = curation.apply_report(candidates, report)
+    _landmark_summary(entries, kept)
+    print(f"Fact-check left out: {', '.join(left_out) or '-'}")
+    print(f"Report: {report_path}")
+    if not adding:
+        return
+    staged = workdir / "landmarks.checked.yaml"
+    curation.write_pack(staged, kept)
+    print(f"Staged: {staged}")
+    if args.dry_run:
+        return
+    added, skipped = curation.merge(pack, kept)
+    print(f"Merged into {pack}: added {added}, skipped {skipped}")
+
+
 def main() -> None:
     """Dispatch the text REPL or list installed backend entry points."""
     parser = argparse.ArgumentParser(prog="familiar")
@@ -335,6 +462,7 @@ def main() -> None:
     record.add_argument("file", metavar="FILE")
     record.add_argument("--config")
     record.add_argument("--game", metavar="NAME")
+    _landmark_arguments(commands)
     args = parser.parse_args()
     try:
         if args.command == "plugins":
@@ -342,6 +470,7 @@ def main() -> None:
                 print(f"{kind}: {', '.join(available(kind)) or '(none)'}")
             return
         handlers = {
+            "landmarks": _landmarks,
             "watch": _watch,
             "telemetry-record": _telemetry_record,
             "chat": _chat,
