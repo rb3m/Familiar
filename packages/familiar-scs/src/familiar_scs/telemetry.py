@@ -58,6 +58,14 @@ def _game_clock(value: object) -> datetime | None:
         return None
 
 
+def game_hour(game_time: object) -> float | None:
+    """Hour of the game day, including fractional minutes and seconds."""
+    parsed = _game_clock(game_time)
+    if parsed is None:
+        return None
+    return parsed.hour + parsed.minute / 60 + parsed.second / 3600 + parsed.microsecond / 3.6e9
+
+
 def time_until(target: object, now: object) -> timedelta | None:
     """Game time left until an absolute game-clock ``target``; zero once it has passed."""
     target_time, now_time = _game_clock(target), _game_clock(now)
@@ -123,6 +131,7 @@ class Snapshot:
     engine_on: bool = False
     park_brake_on: bool = False
     cruise_control_on: bool = False
+    wipers_on: bool = False
     fuel_warning: bool = False
     air_pressure_warning: bool = False
     air_pressure_emergency: bool = False
@@ -237,6 +246,7 @@ for _section, _parser, _fields in (
             "engine_on": "engineOn",
             "park_brake_on": "parkBrakeOn",
             "cruise_control_on": "cruiseControlOn",
+            "wipers_on": "wipersOn",
             "fuel_warning": "fuelWarningOn",
             "air_pressure_warning": "airPressureWarningOn",
             "air_pressure_emergency": "airPressureEmergencyOn",

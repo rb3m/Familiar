@@ -118,3 +118,26 @@ def test_ets2_packaged_places_and_country_crossing():
     assert snapshot["state"] == "FR"
     assert snapshot["nearest_place"]["name"] == "Château-Thierry"
     asyncio.run(adapter.aclose())
+
+
+@pytest.mark.parametrize("cls", [AtsAdapter, Ets2Adapter])
+@pytest.mark.parametrize(
+    "game_time,expected",
+    [
+        ("0001-01-26T21:15:00Z", "Time: 21:15 in-game, dusk"),
+        ("0001-01-26T05:01:00Z", "Time: 05:01 in-game, dawn"),
+        ("junk", None),
+        ("", None),
+    ],
+)
+def test_describe_game_time(places, cls, game_time, expected):
+    adapter = cls({})
+    adapter.projection = lambda x, z: (49, 3)
+    adapter.latest = Snapshot(connected=True, game_time=game_time)
+    description = adapter.describe()
+    if expected is None:
+        assert "Time:" not in description
+        asyncio.run(adapter.aclose())
+        return
+    assert expected in description
+    asyncio.run(adapter.aclose())

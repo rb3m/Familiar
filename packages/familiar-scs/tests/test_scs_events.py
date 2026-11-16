@@ -651,3 +651,145 @@ def test_collision_threshold_with_existing_wear(timed_detector):
     events = detector.feed(damaged_snapshot(slots=(0,), body=0.105))
     assert kinds(events) == ["collision"]
     assert events[0].data["damage_increase_percent"] == pytest.approx(0.5)
+
+
+def solar_snapshot(clock, **changes):
+    return Snapshot(connected=True, x=49, game_time=f"0001-01-26T{clock}:00Z", **changes)
+
+
+@pytest.mark.parametrize(
+    "before,after,period,summary",
+    [
+        ("04:00", "05:00", "dawn", "Dawn is breaking."),
+        ("05:00", "06:00", "day", "It's full daylight now."),
+        ("20:00", "21:00", "dusk", "Dusk is falling."),
+        ("21:30", "22:30", "night", "Night has fallen."),
+    ],
+)
+def test_day_period_stable_change(detector, before, after, period, summary):
+    from familiar_scs.geo import sun_elevation
+    from familiar_scs.telemetry import game_hour
+
+    s = solar_snapshot(before)
+    assert "day_period" not in kinds(detector.feed(s))
+    changed = solar_snapshot(after)
+    assert "day_period" not in kinds(detector.feed(changed))
+    assert "day_period" not in kinds(detector.feed(changed))
+    event = next(e for e in detector.feed(changed) if e.kind == "day_period")
+    assert event.priority == "ambient"
+    assert event.data == {
+        "period": period,
+        "game_time": after,
+        "sun_elevation": pytest.approx(sun_elevation(49, game_hour(changed.game_time))),
+        "summary": summary,
+    }
+    assert "day_period" not in kinds(detector.feed(changed))
+
+
+def test_day_period_candidate_must_be_consecutive(detector):
+    day, dusk = solar_snapshot("20:00"), solar_snapshot("21:00")
+    detector.feed(day)
+    detector.feed(dusk)
+    detector.feed(dusk)
+    detector.feed(day)
+    detector.feed(dusk)
+    detector.feed(dusk)
+    assert "day_period" in kinds(detector.feed(dusk))
+
+
+@pytest.mark.parametrize("target", ["05:00", "23:00"])
+def test_day_period_clock_jump_is_silent(detector, target):
+    detector.feed(solar_snapshot("13:00", rest_remaining=timedelta(minutes=10)))
+    jumped = solar_snapshot(target, rest_remaining=timedelta(hours=11))
+    events = detector.feed(jumped)
+    assert "rested" in kinds(events)
+    assert "day_period" not in kinds(events)
+    for _ in range(4):
+        assert "day_period" not in kinds(detector.feed(jumped))
+
+
+def test_day_period_midnight_rollover(detector):
+    detector.feed(solar_snapshot("23:59"))
+    s = replace(solar_snapshot("00:01"), game_time="0001-01-27T00:01:00Z")
+    for _ in range(3):
+        assert "day_period" not in kinds(detector.feed(s))
+
+
+@pytest.mark.parametrize("changes", [{"paused": True}, {"connected": False}])
+def test_day_period_inactive_and_resume(detector, changes):
+    detector.feed(solar_snapshot("20:00"))
+    detector.feed(solar_snapshot("21:00"))
+    inactive = replace(solar_snapshot("23:00"), **changes)
+    assert "day_period" not in kinds(detector.feed(inactive))
+    for _ in range(4):
+        assert "day_period" not in kinds(detector.feed(solar_snapshot("23:00")))
+
+
+def test_day_period_invalid_time_resets_confirmation(detector):
+    detector.feed(solar_snapshot("20:00"))
+    dusk = solar_snapshot("21:00")
+    detector.feed(dusk)
+    detector.feed(dusk)
+    assert "day_period" not in kinds(detector.feed(replace(dusk, game_time="invalid")))
+    detector.feed(dusk)
+    detector.feed(dusk)
+    assert "day_period" in kinds(detector.feed(dusk))
+
+
+@pytest.mark.parametrize("duration,stopped", [(59.99, False), (60, True)])
+def test_rain_edges_and_minimum_duration(timed_detector, duration, stopped):
+    detector, now = timed_detector
+    dry = Snapshot(connected=True)
+    detector.feed(dry)
+    now[0] = 1
+    wet = replace(dry, wipers_on=True)
+    event = next(e for e in detector.feed(wet) if e.kind == "rain_started")
+    assert event.priority == "ambient"
+    assert event.data["summary"] == "Wipers switched on; it has probably started raining."
+    assert "rain_started" not in kinds(detector.feed(wet))
+    now[0] = 1 + duration
+    events = detector.feed(dry)
+    assert ("rain_stopped" in kinds(events)) is stopped
+    assert all(e.priority == "ambient" for e in events)
+
+
+def test_rain_independent_cooldowns(timed_detector):
+    detector, now = timed_detector
+    dry = Snapshot(connected=True)
+    wet = replace(dry, wipers_on=True)
+    detector.feed(dry)
+    for timestamp, s, expected in [
+        (1, wet, "rain_started"),
+        (61, dry, "rain_stopped"),
+        (62, wet, None),
+        (122, dry, None),
+        (301, wet, "rain_started"),
+        (361, dry, "rain_stopped"),
+    ]:
+        now[0] = timestamp
+        rain = [e.kind for e in detector.feed(s) if e.kind.startswith("rain_")]
+        assert rain == ([expected] if expected else [])
+
+
+@pytest.mark.parametrize("changes", [{"paused": True}, {"connected": False}])
+def test_rain_inactive_snapshots(timed_detector, changes):
+    detector, now = timed_detector
+    dry = Snapshot(connected=True)
+    wet = replace(dry, wipers_on=True)
+    detector.feed(dry)
+    now[0] = 1
+    assert not {"rain_started", "rain_stopped"}.intersection(
+        kinds(detector.feed(replace(wet, **changes)))
+    )
+    now[0] = 100
+    assert "rain_started" not in kinds(detector.feed(wet))
+    now[0] = 159
+    assert "rain_stopped" not in kinds(detector.feed(dry))
+
+
+def test_rain_first_connected_snapshot(timed_detector):
+    detector, now = timed_detector
+    wet = Snapshot(connected=True, wipers_on=True)
+    assert "rain_started" not in kinds(detector.feed(wet))
+    now[0] = 60
+    assert "rain_stopped" in kinds(detector.feed(replace(wet, wipers_on=False)))

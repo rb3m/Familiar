@@ -225,3 +225,39 @@ def test_true_heading_corrects_map_rotation_far_from_central_meridian():
     # Meridians converge toward the cone's apex, so map "up" there is ~15 degrees west of true
     # north (convergence = n * (lon - lon_0) with n ~ 0.63).
     assert 330 < true_heading(projection, -95000.0, -45000.0, 0.0) < 352
+
+
+@pytest.mark.parametrize(
+    "latitude,hour,period",
+    [(49, 5, "dawn"), (49, 13, "day"), (49, 23, "night"), (37, 22.5, "night")],
+)
+def test_solstice_day_period(latitude, hour, period):
+    from familiar_scs.geo import day_period, sun_elevation
+
+    assert day_period(sun_elevation(latitude, hour), hour) == period
+
+
+def test_midnight_sun_and_solar_noon():
+    from familiar_scs.geo import day_period, sun_elevation
+
+    assert day_period(sun_elevation(70, 1), 1) != "night"
+    assert sun_elevation(49, 13) == pytest.approx(90 - 49 + 23.44)
+    assert sun_elevation(49, 5) == pytest.approx(sun_elevation(49, 21))
+    assert day_period(sun_elevation(49, 21), 21) == "dusk"
+
+
+@pytest.mark.parametrize(
+    "elevation,hour,period",
+    [
+        (-6.001, 5, "night"),
+        (-6, 5, "dawn"),
+        (-6, 21, "dusk"),
+        (5.999, 21, "dusk"),
+        (6, 5, "day"),
+        (6, 21, "day"),
+    ],
+)
+def test_day_period_thresholds(elevation, hour, period):
+    from familiar_scs.geo import day_period
+
+    assert day_period(elevation, hour) == period

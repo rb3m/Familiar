@@ -228,3 +228,32 @@ def test_missing_or_malformed_trailers(trailers):
     s = Snapshot.from_json({"game": {"connected": True}, "trailers": trailers})
     assert s.trailer_damage.slots == ()
     assert s.trailer_damage.cargo == 0
+
+
+@pytest.mark.parametrize(
+    "value,expected", [(True, True), (False, False), (None, False), ("true", False), (1, False)]
+)
+def test_wipers(value, expected):
+    s = Snapshot.from_json({"game": {"connected": True}, "truck": {"wipersOn": value}})
+    assert s.wipers_on is expected
+    assert not Snapshot().wipers_on
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("0001-01-26T21:15:00Z", 21.25),
+        ("0001-01-26T00:00:00", 0),
+        ("0001-01-26T01:30:30.500+02:00", 1.5 + 30.5 / 3600),
+        ("junk", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_game_hour(value, expected):
+    from familiar_scs.telemetry import game_hour
+
+    if expected is None:
+        assert game_hour(value) is None
+        return
+    assert game_hour(value) == pytest.approx(expected)

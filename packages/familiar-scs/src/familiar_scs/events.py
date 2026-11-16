@@ -10,10 +10,10 @@ from itertools import pairwise
 
 from familiar.interfaces import GameEvent
 
-from .geo import haversine
+from .geo import day_period, haversine, sun_elevation
 from .knowledge import KnowledgePack
 from .places import STATE_NAMES, Place, PlaceIndex
-from .telemetry import CARGO_DAMAGE_TO_PERCENT, Snapshot, _game_clock, number
+from .telemetry import CARGO_DAMAGE_TO_PERCENT, Snapshot, _game_clock, game_hour, number
 from .units import Units, duration_text, rest_text
 
 # (snapshot flag, event kind, priority, details field)
@@ -59,6 +59,16 @@ BRAKING_COOLDOWN_S = 60.0
 BRAKING_COLLISION_WINDOW_S = 5.0
 COLLISION_DAMAGE_THRESHOLD = 0.005
 COLLISION_COOLDOWN_S = 30.0
+DAY_PERIOD_SNAPSHOTS = 3
+DAY_PERIOD_MAX_JUMP = timedelta(hours=1)
+RAIN_STOP_MIN_ON_S = 60.0
+RAIN_COOLDOWN_S = 300.0
+DAY_PERIOD_SUMMARIES = {
+    "dawn": "Dawn is breaking.",
+    "day": "It's full daylight now.",
+    "dusk": "Dusk is falling.",
+    "night": "Night has fallen.",
+}
 
 
 def _fuel_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
@@ -234,6 +244,11 @@ class EventDetector:
         self._jam_recovery: float | None = None
         self._jam_reported = False
         self._last_jam = float("-inf")
+        self._period: str | None = None
+        self._period_candidate: str | None = None
+        self._period_count = 0
+        self._wipers_since: float | None = None
+        self._last_rain = {kind: float("-inf") for kind in ("rain_started", "rain_stopped")}
 
     def _event(self, kind: str, priority: str, summary: str, **data) -> GameEvent:
         return GameEvent(kind, priority, {**data, "summary": summary}, datetime.now(UTC))
@@ -243,6 +258,9 @@ class EventDetector:
         events.extend(self._close_calls(snapshot))
         events.extend(self._traffic_jam(snapshot))
         if not snapshot.connected:
+            self._period = None
+            self._period_candidate, self._period_count = None, 0
+            self._wipers_since = None
             self._speed_since = None
             self._candidate = None
             self._state_count = 0
@@ -251,16 +269,80 @@ class EventDetector:
         for rule in (self._edges, self._warnings, self._rest, self._deadline, self._speeding):
             events.extend(rule(snapshot))
         if snapshot.paused:
+            self._period_candidate, self._period_count = None, 0
+            self._wipers_since = None
             self._candidate, self._state_count = None, 0
             self.previous = snapshot
             return events
         lat, lon = self.projection(snapshot.x, snapshot.z)
+        events.extend(self._day_period(snapshot, lat))
+        events.extend(self._rain(snapshot))
         place = self.places.nearest(lat, lon)
         events.extend(self._state(place))
         events.extend(self._landmark_events(lat, lon))
         events.extend(self._town(place))
         self.previous = snapshot
         return events
+
+    def _day_period(self, s: Snapshot, lat: float) -> list[GameEvent]:
+        hour = game_hour(s.game_time)
+        current = _game_clock(s.game_time)
+        previous = _game_clock(self.previous.game_time)
+        if hour is None:
+            self._period_candidate, self._period_count = None, 0
+            return []
+        elevation = sun_elevation(lat, hour)
+        period = day_period(elevation, hour)
+        jumped = previous is not None and abs(current - previous) > DAY_PERIOD_MAX_JUMP
+        if self._period is None or not self.previous.connected or self.previous.paused or jumped:
+            self._period = period
+            self._period_candidate, self._period_count = None, 0
+            return []
+        if period == self._period:
+            self._period_candidate, self._period_count = None, 0
+            return []
+        if period != self._period_candidate:
+            self._period_candidate, self._period_count = period, 0
+        self._period_count += 1
+        if self._period_count < DAY_PERIOD_SNAPSHOTS:
+            return []
+        self._period = period
+        self._period_candidate, self._period_count = None, 0
+        return [
+            self._event(
+                "day_period",
+                "ambient",
+                DAY_PERIOD_SUMMARIES[period],
+                period=period,
+                game_time=current.strftime("%H:%M"),
+                sun_elevation=elevation,
+            )
+        ]
+
+    def _rain(self, s: Snapshot) -> list[GameEvent]:
+        now = self.clock()
+        if not self.previous.connected or self.previous.paused:
+            self._wipers_since = now if s.wipers_on else None
+            return []
+        if s.wipers_on == self.previous.wipers_on:
+            return []
+        if s.wipers_on:
+            self._wipers_since = now
+            return self._rain_event("rain_started", now)
+        since, self._wipers_since = self._wipers_since, None
+        if since is None or now - since < RAIN_STOP_MIN_ON_S:
+            return []
+        return self._rain_event("rain_stopped", now)
+
+    def _rain_event(self, kind: str, now: float) -> list[GameEvent]:
+        if now - self._last_rain[kind] < RAIN_COOLDOWN_S:
+            return []
+        self._last_rain[kind] = now
+        summary = {
+            "rain_started": "Wipers switched on; it has probably started raining.",
+            "rain_stopped": "Wipers switched off; the rain has probably stopped.",
+        }[kind]
+        return [self._event(kind, "ambient", summary)]
 
     def _transitions(self, s: Snapshot) -> list[GameEvent]:
         events = []

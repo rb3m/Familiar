@@ -6,11 +6,19 @@ from dataclasses import asdict
 from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ToolSpec
 
 from .events import EventDetector
-from .geo import compass_name, true_heading
+from .geo import compass_name, day_period, sun_elevation, true_heading
 from .knowledge import KnowledgePack
 from .places import REGION_NAMES, Place, PlaceIndex, _packaged_places
 from .projection import PROJECTIONS
-from .telemetry import DEFAULT_URL, HttpTelemetry, ReplayTelemetry, Snapshot, TelemetrySource
+from .telemetry import (
+    DEFAULT_URL,
+    HttpTelemetry,
+    ReplayTelemetry,
+    Snapshot,
+    TelemetrySource,
+    _game_clock,
+    game_hour,
+)
 from .units import Units, duration_text, rest_text
 
 
@@ -92,6 +100,11 @@ class ScsAdapter:
             f"Fuel: {s.fuel_fraction:.0%} ({self.units.volume(s.fuel)}), range "
             f"{self.units.distance(s.fuel_range)}",
         ]
+        hour = game_hour(s.game_time)
+        if hour is not None:
+            period = day_period(sun_elevation(lat, hour), hour)
+            clock_text = _game_clock(s.game_time).strftime("%H:%M")
+            lines.append(f"Time: {clock_text} in-game, {period}")
         if s.on_job:
             lines.append(
                 f"Job: {self.units.mass(s.cargo_mass)} of {s.cargo} from "
