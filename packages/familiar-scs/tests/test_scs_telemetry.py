@@ -197,3 +197,34 @@ def test_durations_are_spoken_words():
     assert duration_text(timedelta(hours=1, minutes=1)) == "1 hour 1 minute"
     assert duration_text(timedelta(hours=2)) == "2 hours"
     assert duration_text(timedelta(minutes=47)) == "47 minutes"
+
+
+def test_attached_trailer_damage():
+    s = Snapshot.from_json(
+        {
+            "game": {"connected": True},
+            "trailers": [
+                {
+                    "attached": True,
+                    "wearChassis": 0.01,
+                    "wearBody": 0.02,
+                    "wearWheels": 0.03,
+                    "cargoDamage": 0.04,
+                },
+                {"attached": False, "wearBody": 0.9, "cargoDamage": 0.9},
+                {"attached": True, "wearChassis": 0.02, "cargoDamage": 0.01},
+            ],
+        }
+    )
+    assert s.trailer_damage.slots == (0, 2)
+    assert s.trailer_damage.chassis == pytest.approx(0.03)
+    assert s.trailer_damage.body == 0.02
+    assert s.trailer_damage.wheels == 0.03
+    assert s.trailer_damage.cargo == pytest.approx(0.05)
+
+
+@pytest.mark.parametrize("trailers", [None, {}, [None, {}, {"attached": "true"}]])
+def test_missing_or_malformed_trailers(trailers):
+    s = Snapshot.from_json({"game": {"connected": True}, "trailers": trailers})
+    assert s.trailer_damage.slots == ()
+    assert s.trailer_damage.cargo == 0

@@ -80,6 +80,33 @@ def parse_duration(value: object) -> timedelta | None:
 
 
 @dataclass(frozen=True)
+class TrailerDamage:
+    # The supplied trailer schema has no ID; list slots identify the attached set.
+    slots: tuple[int, ...] = ()
+    chassis: float = 0.0
+    body: float = 0.0
+    wheels: float = 0.0
+    cargo: float = 0.0
+
+
+def _trailer_damage(value: object) -> TrailerDamage:
+    if not isinstance(value, list):
+        return TrailerDamage()
+    attached = [(i, _mapping(item)) for i, item in enumerate(value)]
+    attached = [(i, item) for i, item in attached if _boolean(item.get("attached"))]
+    totals = {
+        name: sum(max(0.0, min(1.0, number(item.get(key)))) for _, item in attached)
+        for name, key in {
+            "chassis": "wearChassis",
+            "body": "wearBody",
+            "wheels": "wearWheels",
+            "cargo": "cargoDamage",
+        }.items()
+    }
+    return TrailerDamage(slots=tuple(i for i, _ in attached), **totals)
+
+
+@dataclass(frozen=True)
 class Snapshot:
     connected: bool = False
     paused: bool = False
@@ -141,6 +168,7 @@ class Snapshot:
     tollgate_details: dict = field(default_factory=dict)
     ferry_details: dict = field(default_factory=dict)
     train_details: dict = field(default_factory=dict)
+    trailer_damage: TrailerDamage = field(default_factory=TrailerDamage)
 
     @property
     def fuel_fraction(self) -> float:
@@ -168,6 +196,7 @@ class Snapshot:
             for name, (section, key, parser) in FIELD_PARSERS.items()
         }
         values["rest_remaining"] = time_until(game.get("nextRestStopTime"), game.get("time"))
+        values["trailer_damage"] = _trailer_damage(root.get("trailers"))
         return cls(**values)
 
 

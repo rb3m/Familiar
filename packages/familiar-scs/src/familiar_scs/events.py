@@ -1,9 +1,12 @@
 """Stateful edge detection composed from small rule functions."""
 
+import math
 import time
+from collections import deque
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from itertools import pairwise
 
 from familiar.interfaces import GameEvent
 
@@ -22,6 +25,7 @@ EDGE_RULES = (
     ("job_delivered", "job_delivered", "notable", "delivered_details"),
     ("ferry", "ferry", "notable", "ferry_details"),
     ("train", "train", "notable", "train_details"),
+    ("tollgate", "tollgate", "ambient", "tollgate_details"),
     ("refuel_paid", "refuel_paid", "notable", None),
 )
 WARNING_RULES = {
@@ -34,6 +38,25 @@ WARNING_RULES = {
 }
 ENGINE_RUNNING_RULES = {"engine_warning"}
 TOWN_MIN_POPULATION = 20_000
+JAM_WINDOW_S = 120.0
+JAM_LOW_SPEED_RATIO = 0.35
+JAM_LOW_TIME_RATIO = 0.8
+JAM_STOP_KMH = 10.0
+JAM_MIN_STOPS = 2
+JAM_AVERAGE_KMH = 25.0
+JAM_MIN_LIMIT_KMH = 60.0
+JAM_MIN_DISTANCE_KM = 1.0
+JAM_RECOVERY_RATIO = 0.6
+JAM_RECOVERY_S = 30.0
+JAM_COOLDOWN_S = 900.0
+JAM_CITY_RADIUS_KM = 25.0
+JAM_CITY_POPULATION = 100_000
+BRAKING_DECELERATION_MPS2 = 6.0
+BRAKING_MIN_SPEED_KMH = 40.0
+BRAKING_COOLDOWN_S = 60.0
+BRAKING_COLLISION_WINDOW_S = 5.0
+COLLISION_DAMAGE_THRESHOLD = 0.005
+COLLISION_COOLDOWN_S = 30.0
 
 
 def _fuel_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
@@ -101,6 +124,11 @@ def _transport_summary(kind: str, s: Snapshot, d: dict, u: Units) -> tuple[str, 
     return summary, data
 
 
+def _toll_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
+    price = number(d.get("payAmount"))
+    return f"Paid a toll of {u.money(price)}.", {"price": price}
+
+
 def _refuel_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
     return f"Refuelling paid; fuel now {u.volume(s.fuel)} ({s.fuel_fraction:.0%}).", {
         "fuel_litres": s.fuel,
@@ -108,6 +136,7 @@ def _refuel_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
 
 
 SUMMARY_BUILDERS = {
+    "tollgate": _toll_summary,
     "fuel_low": _fuel_summary,
     "fined": _fine_summary,
     "job_cancelled": _cancel_summary,
@@ -146,12 +175,22 @@ class EventDetector:
         self._deadline_warned = False
         self._speed_since: float | None = None
         self._last_speed_event = float("-inf")
+        self._previous_feed: float | None = None
+        self._pending_braking: tuple[float, float] | None = None
+        self._last_braking = float("-inf")
+        self._last_collision = float("-inf")
+        self._jam_samples: deque[tuple[float, Snapshot]] = deque()
+        self._jam_recovery: float | None = None
+        self._jam_reported = False
+        self._last_jam = float("-inf")
 
     def _event(self, kind: str, priority: str, summary: str, **data) -> GameEvent:
         return GameEvent(kind, priority, {**data, "summary": summary}, datetime.now(UTC))
 
     def feed(self, snapshot: Snapshot) -> list[GameEvent]:
         events = self._transitions(snapshot)
+        events.extend(self._close_calls(snapshot))
+        events.extend(self._traffic_jam(snapshot))
         if not snapshot.connected:
             self._speed_since = None
             self._candidate = None
@@ -339,6 +378,155 @@ class EventDetector:
                 estimated_s=s.nav_estimated.total_seconds(),
             )
         ]
+
+    def _close_calls(self, s: Snapshot) -> list[GameEvent]:
+        now = self.clock()
+        previous_time, self._previous_feed = self._previous_feed, now
+        if not s.connected or s.paused or not self.previous.connected or self.previous.paused:
+            self._pending_braking = None
+            return []
+        if previous_time is not None and now > previous_time:
+            self._braking(s, now, now - previous_time)
+        collision = self._collision(s, now)
+        if collision:
+            return collision
+        pending = self._pending_braking
+        if pending is None or now - pending[0] <= BRAKING_COLLISION_WINDOW_S:
+            return []
+        self._pending_braking = None
+        self._last_braking = now
+        return [
+            self._event(
+                "hard_braking",
+                "notable",
+                "Hard braking detected.",
+                deceleration_mps2=pending[1],
+            )
+        ]
+
+    def _braking(self, s: Snapshot, now: float, delta: float) -> None:
+        if self._pending_braking is not None or now - self._last_braking < BRAKING_COOLDOWN_S:
+            return
+        if self.previous.speed < BRAKING_MIN_SPEED_KMH:
+            return
+        deceleration = (self.previous.speed - s.speed) / 3.6 / delta
+        if deceleration < BRAKING_DECELERATION_MPS2:
+            return
+        self._pending_braking = (now, deceleration)
+
+    def _collision(self, s: Snapshot, now: float) -> list[GameEvent]:
+        before, after = self.previous.trailer_damage, s.trailer_damage
+        if not after.slots or before.slots != after.slots:
+            return []
+        increase = max(
+            after.cargo - before.cargo, after.body - before.body, after.chassis - before.chassis
+        )
+        # Subtracting existing wear can round an exact half-percent jump down.
+        if increase < COLLISION_DAMAGE_THRESHOLD and not math.isclose(
+            increase, COLLISION_DAMAGE_THRESHOLD, abs_tol=1e-12
+        ):
+            return []
+        pending = self._pending_braking
+        hard_braking = pending is not None and now - pending[0] <= BRAKING_COLLISION_WINDOW_S
+        if hard_braking:
+            self._pending_braking = None
+        if now - self._last_collision < COLLISION_COOLDOWN_S:
+            return []
+        self._last_collision = now
+        percent = increase * CARGO_DAMAGE_TO_PERCENT
+        cargo_damaged = after.cargo > before.cargo
+        return [
+            self._event(
+                "collision",
+                "critical",
+                f"Collision: trailer damage increased by {percent:g}%.",
+                damage_increase_percent=percent,
+                cargo_damaged=cargo_damaged,
+                hard_braking=hard_braking,
+            )
+        ]
+
+    def _reset_jam(self) -> None:
+        self._jam_samples.clear()
+        self._jam_recovery = None
+        self._jam_reported = False
+
+    def _traffic_jam(self, s: Snapshot) -> list[GameEvent]:
+        now = self.clock()
+        if (
+            not s.connected
+            or s.paused
+            or not s.engine_on
+            or s.park_brake_on
+            or s.speed_limit < JAM_MIN_LIMIT_KMH
+            or s.nav_distance_km <= JAM_MIN_DISTANCE_KM
+        ):
+            self._reset_jam()
+            return []
+        if s.speed <= s.speed_limit * JAM_RECOVERY_RATIO:
+            self._jam_recovery = None
+        if s.speed > s.speed_limit * JAM_RECOVERY_RATIO and self._jam_recovery is None:
+            self._jam_recovery = now
+        if self._jam_recovery is not None and now - self._jam_recovery >= JAM_RECOVERY_S:
+            self._reset_jam()
+        samples = self._jam_samples
+        if samples and now <= samples[-1][0]:
+            return []
+        samples.append((now, s))
+        cutoff = now - JAM_WINDOW_S
+        while len(samples) > 1 and samples[1][0] <= cutoff:
+            samples.popleft()
+        if now - samples[0][0] < JAM_WINDOW_S or self._jam_reported:
+            return []
+        average, low_time, stops = self._jam_statistics(cutoff)
+        if low_time < JAM_WINDOW_S * JAM_LOW_TIME_RATIO:
+            return []
+        if stops < JAM_MIN_STOPS and average >= JAM_AVERAGE_KMH:
+            return []
+        if now - self._last_jam < JAM_COOLDOWN_S:
+            return []
+        self._last_jam, self._jam_reported = now, True
+        return [self._jam_event(s, average)]
+
+    def _jam_statistics(self, cutoff: float) -> tuple[float, float, int]:
+        samples = list(self._jam_samples)
+        distance, low_time, stops = 0.0, 0.0, 0
+        for (start, sample), (end, following) in pairwise(samples):
+            duration = end - max(start, cutoff)
+            distance += sample.speed * duration
+            low_time += duration * (sample.speed < sample.speed_limit * JAM_LOW_SPEED_RATIO)
+            stops += sample.speed >= JAM_STOP_KMH and following.speed < JAM_STOP_KMH
+        return distance / JAM_WINDOW_S, low_time, stops
+
+    def _jam_event(self, s: Snapshot, average: float) -> GameEvent:
+        lat, lon = self.projection(s.x, s.z)
+        place = self.places.nearest(lat, lon)
+        data = {
+            "average_speed": self.units.speed(average),
+            "average_speed_kmh": average,
+            "speed_limit": self.units.speed(s.speed_limit),
+            "minutes_stuck": JAM_WINDOW_S / 60,
+        }
+        if place is not None:
+            data.update(name=place.name, region=self.region_names.get(place.state, place.state))
+        if (
+            place is not None
+            and place.distance_km <= JAM_CITY_RADIUS_KM
+            and place.population >= JAM_CITY_POPULATION
+        ):
+            data["population"] = place.population
+        initial_eta = self._jam_samples[0][1].nav_estimated
+        if initial_eta is not None and s.nav_estimated is not None:
+            data["nav_estimated_growth_s"] = max(
+                0.0, (s.nav_estimated - initial_eta).total_seconds()
+            )
+        return self._event(
+            "traffic_jam",
+            "notable",
+            f"Traffic jam: averaging {data['average_speed']} in a {data['speed_limit']} zone "
+            f"for {data['minutes_stuck']:g} minutes.",
+            **data,
+        )
 
     def _speeding(self, s: Snapshot) -> list[GameEvent]:
         now = self.clock()

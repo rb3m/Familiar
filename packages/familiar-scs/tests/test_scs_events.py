@@ -257,3 +257,271 @@ def test_speeding_interrupted(detector, changes):
     assert "speeding" not in kinds(detector.feed(s))
     now[0] = 41
     assert "speeding" in kinds(detector.feed(s))
+
+
+@pytest.mark.parametrize("game,currency", [("ats", "$"), ("ets2", "€")])
+def test_toll_summary(detector, game, currency):
+    detector.units = Units(game=game)
+    baseline = Snapshot(connected=True)
+    detector.feed(baseline)
+    s = replace(baseline, tollgate=True, tollgate_details={"payAmount": 12})
+    event = detector.feed(s)[0]
+    assert event.kind == "tollgate" and event.priority == "ambient"
+    assert event.data["summary"] == f"Paid a toll of {currency}12."
+    assert event.data["price"] == 12
+    assert detector.feed(s) == []
+
+
+@pytest.fixture
+def timed_detector(detector):
+    now = [0.0]
+    detector.clock = lambda: now[0]
+    return detector, now
+
+
+def jam_snapshot(**changes):
+    return replace(
+        Snapshot(connected=True, engine_on=True, speed=20, speed_limit=90, nav_distance_km=100),
+        **changes,
+    )
+
+
+def jam_events(detector, now, snapshot, start, end):
+    events = []
+    for second in range(start, end + 1):
+        now[0] = float(second)
+        events.extend(e for e in detector.feed(snapshot) if e.kind == "traffic_jam")
+    return events
+
+
+def test_jam_window_city_and_cooldown(timed_detector):
+    detector, now = timed_detector
+    detector.units = Units("metric", "ets2")
+    detector.region_names = COUNTRY_NAMES
+    detector.places = PlaceIndex(places=(Place("Paris", "FR", 0, 0, population=2_000_000),))
+    s = jam_snapshot(nav_estimated=timedelta(minutes=30))
+    assert jam_events(detector, now, s, 0, 119) == []
+    now[0] = 120
+    event = next(
+        e
+        for e in detector.feed(replace(s, nav_estimated=timedelta(minutes=33)))
+        if e.kind == "traffic_jam"
+    )
+    assert event.priority == "notable"
+    assert event.data["average_speed"] == "20 kilometers per hour"
+    assert event.data["speed_limit"] == "90 kilometers per hour"
+    assert event.data["minutes_stuck"] == 2
+    assert event.data["name"] == "Paris" and event.data["region"] == "France"
+    assert event.data["population"] == 2_000_000
+    assert event.data["nav_estimated_growth_s"] == 180
+    assert jam_events(detector, now, s, 121, 200) == []
+    # A recovered road rearms the detector, but does not bypass the cooldown.
+    assert jam_events(detector, now, replace(s, speed=70), 201, 231) == []
+    assert jam_events(detector, now, s, 232, 1019) == []
+    assert len(jam_events(detector, now, s, 1020, 1020)) == 1
+    # Even after cooldown, the same unbroken jam is announced only once.
+    assert jam_events(detector, now, s, 1021, 2000) == []
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"speed_limit": 50},
+        {"park_brake_on": True},
+        {"engine_on": False},
+        {"paused": True},
+        {"connected": False},
+        {"nav_distance_km": 1},
+    ],
+)
+def test_no_jam_when_ineligible(timed_detector, changes):
+    detector, now = timed_detector
+    assert jam_events(detector, now, jam_snapshot(**changes), 0, 240) == []
+
+
+@pytest.mark.parametrize("population,latitude", [(99_999, 0), (2_000_000, 1)])
+def test_jam_population_requires_nearby_big_city(timed_detector, population, latitude):
+    detector, now = timed_detector
+    detector.places = PlaceIndex(places=(Place("Town", "WY", latitude, 0, population=population),))
+    event = jam_events(detector, now, jam_snapshot(), 0, 120)[0]
+    assert event.data["name"] == "Town"
+    assert "population" not in event.data
+    assert "nav_estimated_growth_s" not in event.data
+    assert "miles per hour" in event.data["average_speed"]
+
+
+def test_jam_requires_most_of_window_slow(timed_detector):
+    detector, now = timed_detector
+    s = jam_snapshot()
+    assert jam_events(detector, now, replace(s, speed=40), 0, 40) == []
+    assert jam_events(detector, now, s, 41, 120) == []
+    assert len(jam_events(detector, now, s, 121, 140)) == 1
+
+
+def test_jam_stop_and_go_alternative(timed_detector):
+    detector, now = timed_detector
+    s = jam_snapshot(speed=35, speed_limit=120)
+    assert jam_events(detector, now, s, 0, 120) == []  # average above 25, no stops
+    now[0] = 121
+    detector.feed(replace(s, speed=5))
+    now[0] = 122
+    detector.feed(s)
+    now[0] = 123
+    assert "traffic_jam" in kinds(detector.feed(replace(s, speed=5)))
+
+
+@pytest.mark.parametrize(
+    "start,end,delta,expected",
+    [
+        (60, 38.4, 1, True),
+        (60, 38.5, 1, False),
+        (39, 0, 1, False),
+        (80, 40, 2, False),
+        (80, 40, 0, False),
+    ],
+)
+def test_hard_braking_threshold(timed_detector, start, end, delta, expected):
+    detector, now = timed_detector
+    s = Snapshot(connected=True, speed=start)
+    detector.feed(s)
+    now[0] = delta
+    assert "hard_braking" not in kinds(detector.feed(replace(s, speed=end)))
+    now[0] += 5.01
+    events = detector.feed(replace(s, speed=end))
+    assert ("hard_braking" in kinds(events)) is expected
+    if expected:
+        event = next(e for e in events if e.kind == "hard_braking")
+        assert event.priority == "notable"
+        assert event.data["deceleration_mps2"] >= 6
+
+
+def damaged_snapshot(**changes):
+    from familiar_scs.telemetry import TrailerDamage
+
+    return Snapshot(connected=True, trailer_damage=TrailerDamage(**changes))
+
+
+@pytest.mark.parametrize("field", ["cargo", "body", "chassis"])
+def test_collision_damage_and_cooldown(timed_detector, field):
+    detector, now = timed_detector
+    s = damaged_snapshot(slots=(0,))
+    assert "collision" not in kinds(detector.feed(s))
+    now[0] = 1
+    damaged = damaged_snapshot(slots=(0,), **{field: 0.005})
+    event = detector.feed(damaged)[0]
+    assert event.kind == "collision" and event.priority == "critical"
+    assert event.data["damage_increase_percent"] == 0.5
+    assert event.data["cargo_damaged"] is (field == "cargo")
+    now[0] = 2
+    assert detector.feed(damaged_snapshot(slots=(0,), **{field: 0.02})) == []
+    now[0] = 31
+    assert kinds(detector.feed(damaged_snapshot(slots=(0,), **{field: 0.03}))) == ["collision"]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"slots": (1,), "body": 0.5},
+        {"slots": (), "cargo": 0.5},
+        {"slots": (0,), "wheels": 0.5},
+        {"slots": (0,), "body": 0.0049},
+    ],
+)
+def test_no_collision_for_attach_detach_wheels_or_small_damage(timed_detector, changes):
+    detector, now = timed_detector
+    detector.feed(damaged_snapshot(slots=(0,)))
+    now[0] = 1
+    assert "collision" not in kinds(detector.feed(damaged_snapshot(**changes)))
+
+
+@pytest.mark.parametrize("delay", [0, 1, 5])
+def test_braking_collision_deduplication(timed_detector, delay):
+    detector, now = timed_detector
+    s = replace(damaged_snapshot(slots=(0,)), speed=80)
+    detector.feed(s)
+    now[0] = 1
+    slowed = replace(s, speed=40)
+    assert "hard_braking" not in kinds(detector.feed(slowed))
+    now[0] += delay
+    collision = replace(slowed, trailer_damage=replace(s.trailer_damage, cargo=0.01))
+    events = detector.feed(collision)
+    assert kinds(events) == ["collision"]
+    assert events[0].data["hard_braking"]
+    now[0] += 6
+    assert detector.feed(collision) == []
+
+
+def test_braking_cooldown(timed_detector):
+    detector, now = timed_detector
+    s = Snapshot(connected=True, speed=80)
+    detector.feed(s)
+    now[0] = 1
+    detector.feed(replace(s, speed=40))
+    now[0] = 7
+    assert kinds(detector.feed(replace(s, speed=40))) == ["hard_braking"]
+    now[0] = 8
+    detector.feed(s)
+    now[0] = 9
+    detector.feed(replace(s, speed=40))
+    now[0] = 15
+    assert detector.feed(replace(s, speed=40)) == []
+    now[0] = 67
+    detector.feed(s)
+    now[0] = 68
+    detector.feed(replace(s, speed=40))
+    now[0] = 74
+    assert kinds(detector.feed(replace(s, speed=40))) == ["hard_braking"]
+
+
+@pytest.mark.parametrize("changes", [{"paused": True}, {"connected": False}])
+def test_close_calls_ignore_inactive_snapshots(timed_detector, changes):
+    detector, now = timed_detector
+    s = replace(damaged_snapshot(slots=(0,)), speed=80)
+    detector.feed(s)
+    now[0] = 1
+    inactive = replace(s, speed=0, trailer_damage=replace(s.trailer_damage, body=0.1), **changes)
+    assert not {"hard_braking", "collision"}.intersection(kinds(detector.feed(inactive)))
+    now[0] = 2
+    resumed = replace(inactive, connected=True, paused=False)
+    assert not {"hard_braking", "collision"}.intersection(kinds(detector.feed(resumed)))
+    now[0] = 8
+    assert detector.feed(resumed) == []
+
+
+def test_collision_first_snapshot_and_simultaneous_braking(timed_detector):
+    detector, now = timed_detector
+    s = replace(damaged_snapshot(slots=(0,), body=0.1), speed=80)
+    assert "collision" not in kinds(detector.feed(s))
+    now[0] = 1
+    collided = replace(s, speed=0, trailer_damage=replace(s.trailer_damage, body=0.2))
+    assert kinds(detector.feed(collided)) == ["collision"]
+    now[0] = 7
+    assert detector.feed(collided) == []
+
+
+def test_jam_recovery_requires_thirty_seconds(timed_detector):
+    detector, now = timed_detector
+    s = jam_snapshot()
+    assert jam_events(detector, now, s, 0, 90) == []
+    assert jam_events(detector, now, replace(s, speed=70), 91, 121) == []
+    assert jam_events(detector, now, s, 122, 240) == []
+    assert len(jam_events(detector, now, s, 241, 242)) == 1
+
+
+def test_jam_pause_resets_window(timed_detector):
+    detector, now = timed_detector
+    s = jam_snapshot()
+    assert jam_events(detector, now, s, 0, 119) == []
+    now[0] = 120
+    detector.feed(replace(s, paused=True))
+    assert jam_events(detector, now, s, 121, 240) == []
+    assert len(jam_events(detector, now, s, 241, 241)) == 1
+
+
+def test_collision_threshold_with_existing_wear(timed_detector):
+    detector, now = timed_detector
+    detector.feed(damaged_snapshot(slots=(0,), body=0.1))
+    now[0] = 1
+    events = detector.feed(damaged_snapshot(slots=(0,), body=0.105))
+    assert kinds(events) == ["collision"]
+    assert events[0].data["damage_increase_percent"] == pytest.approx(0.5)
