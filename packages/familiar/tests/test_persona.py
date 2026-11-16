@@ -54,12 +54,18 @@ def _write(tmp_path, extra=""):
 
 
 def test_truthfulness_defaults_to_strict_and_keeps_practical_facts(tmp_path):
-    from familiar.persona import PRACTICAL_FACTS_RULE, TRUTHFULNESS_RULES, load_persona
+    from familiar.persona import (
+        PRACTICAL_FACTS_RULE,
+        SPOKEN_RULE,
+        TRUTHFULNESS_RULES,
+        load_persona,
+    )
 
     _write(tmp_path)
     prompt = load_persona(tmp_path, "p").system_prompt("en")
     assert TRUTHFULNESS_RULES["strict"] in prompt
     assert PRACTICAL_FACTS_RULE in prompt
+    assert SPOKEN_RULE in prompt
 
 
 def test_playful_persona_may_exaggerate_but_practical_facts_stay(tmp_path):

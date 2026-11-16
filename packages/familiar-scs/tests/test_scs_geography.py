@@ -115,16 +115,18 @@ def test_duplicate_knowledge():
 
 def test_units():
     imperial, metric = Units(), Units("metric", "ets2")
-    assert imperial.speed(100) == "62 mph"
-    assert imperial.distance(72.42) == "45 mi"
-    assert imperial.volume(144) == "38 gal"
+    assert imperial.speed(100) == "62 miles per hour"
+    assert imperial.distance(72.42) == "45 miles"
+    assert imperial.volume(144) == "38 gallons"
     assert imperial.money(1234) == "$1,234"
-    assert imperial.mass(9071.8474) == "20,000 lb"
-    assert metric.speed(100) == "100 km/h"
-    assert metric.distance(72.42) == "72 km"
-    assert metric.volume(144) == "144 L"
+    assert imperial.mass(9071.8474) == "20,000 pounds"
+    assert metric.speed(100) == "100 kilometers per hour"
+    assert metric.distance(72.42) == "72 kilometers"
+    assert metric.volume(144) == "144 liters"
     assert metric.money(1234) == "€1,234"
-    assert metric.mass(18000) == "18 t"
+    assert metric.mass(18000) == "18 tonnes"
+    assert metric.mass(22500) == "22.5 tonnes" and metric.mass(1000) == "1 tonne"
+    assert imperial.distance(1.609344) == "1 mile"
     with pytest.raises(ConfigError):
         Units("unknown")
 

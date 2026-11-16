@@ -17,7 +17,11 @@ def places(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "cls,speed,volume", [(AtsAdapter, "62 mph", "38 gal"), (Ets2Adapter, "100 km/h", "144 L")]
+    "cls,speed,volume",
+    [
+        (AtsAdapter, "62 miles per hour", "38 gallons"),
+        (Ets2Adapter, "100 kilometers per hour", "144 liters"),
+    ],
 )
 def test_describe(places, cls, speed, volume):
     adapter = cls({})
@@ -49,8 +53,8 @@ def test_describe(places, cls, speed, volume):
     assert speed in description and volume in description
     assert "Fuel: 36%" in description
     assert "potatoes from Boise (Potato Co) to Reno (Market)" in description
-    assert "ETA 4 h 10 min, deadline in 9 h 30 min (game time)" in description
-    assert "Rest needed in 3 h 20 min (game time)" in description
+    assert "ETA 4 hours 10 minutes, deadline in 9 hours 30 minutes (game time)" in description
+    assert "Rest needed in 3 hours 20 minutes (game time)" in description
     assert "Game paused" in description
     if cls is AtsAdapter:
         assert "near Kaycee, Wyoming" in description

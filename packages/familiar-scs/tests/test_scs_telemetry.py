@@ -187,3 +187,13 @@ def test_invalid_replay(tmp_path, content):
 def test_rest_remaining_is_relative_to_game_clock(game, expected):
     s = Snapshot.from_json({"game": {"connected": True, **game}})
     assert s.rest_remaining == expected
+
+
+def test_durations_are_spoken_words():
+    # "6 h 35 min" was read aloud letter by letter.
+    from familiar_scs.units import duration_text
+
+    assert duration_text(timedelta(hours=6, minutes=35)) == "6 hours 35 minutes"
+    assert duration_text(timedelta(hours=1, minutes=1)) == "1 hour 1 minute"
+    assert duration_text(timedelta(hours=2)) == "2 hours"
+    assert duration_text(timedelta(minutes=47)) == "47 minutes"

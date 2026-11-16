@@ -104,7 +104,7 @@ def test_job_and_transport_details(detector):
     started = events["job_started"].data
     assert started["cargo"] == "potatoes"
     assert started["deadline_remaining_s"] == 32400
-    assert "100 mi" in started["summary"]
+    assert "100 miles" in started["summary"]
     delivered = events["job_delivered"].data
     assert delivered["damage_percent"] == 12
     assert delivered["xp"] == 500

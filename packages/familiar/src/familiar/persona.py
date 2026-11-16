@@ -22,6 +22,11 @@ PRACTICAL_FACTS_RULE = (
     "(no range from a fuel percentage, no arrival time from a distance). If it wasn't given, "
     "say you don't know."
 )
+SPOKEN_RULE = (
+    "Your replies are spoken aloud by a text-to-speech voice. Write units and abbreviations as "
+    "full words (hours, minutes, miles per hour, gallons, pounds), even when the game data you "
+    "were given abbreviates them, and avoid symbols that read badly aloud."
+)
 TRUTHFULNESS_RULES = {
     "strict": (
         "Never invent facts about places, history or the game. Use only facts you are given or "
@@ -56,6 +61,7 @@ class Persona:
         parts.extend(f"- {rule}" for rule in self.style_rules)
         parts.append(f"- {TRUTHFULNESS_RULES[self.truthfulness]}")
         parts.append(f"- {PRACTICAL_FACTS_RULE}")
+        parts.append(f"- {SPOKEN_RULE}")
         if game in self.game_hooks:
             parts.append(self.game_hooks[game])
         parts.append(f"Always reply in {LANGUAGE_NAMES.get(language, language)}.")
