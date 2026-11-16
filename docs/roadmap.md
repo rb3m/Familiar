@@ -9,6 +9,12 @@
 | **M4 More games** | ETS2 (shares ATS adapter), KSP (Telemachus/kRPC), then MSFS, Elite (journal + EDSM) | Each has an adapter + knowledge pack |
 | **M5 Hands & languages** | uinput actions as LLM tools, Touch Portal sync, Japanese practice mode | Voice command toggles something in-game |
 
+Planned: **how the companion addresses the user.** A name or nickname the user picks (e.g.
+"Skipper"), plus a formality level (casual, polite, formal) set globally in `config.toml` /
+the GUI and overridable per persona. Each language maps the level to its own register:
+Japanese plain form vs です/ます vs 敬語 and honorifics (さん, 様), Spanish tú vs usted, German
+du vs Sie. English mostly changes tone. Lands with or before the Japanese practice mode (M5).
+
 Later options: Gemini Live speech-to-speech `Conversation` backend, local backends (whisper.cpp
 Vulkan, Kokoro, Ollama), Mac desk assistant / note taker to an Obsidian vault, standard SCS telemetry
 plugin for users without the TruckSim GPS port.
