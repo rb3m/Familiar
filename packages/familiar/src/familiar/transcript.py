@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from familiar.interfaces import Message
+
 
 class TranscriptLog:
     def __init__(self, directory: Path, session_id: str | None = None) -> None:
@@ -25,3 +27,16 @@ class TranscriptLog:
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event, ensure_ascii=False) + "\n")
             handle.flush()
+
+    def dialogue(self) -> list[Message]:
+        """Read actual user/assistant lines, excluding event prompts and diagnostics."""
+        if not self.path.exists():
+            return []
+        messages = []
+        with self.path.open(encoding="utf-8") as handle:
+            for line in handle:
+                event = json.loads(line)
+                if event["kind"] not in {"user", "assistant"} or not event.get("text"):
+                    continue
+                messages.append(Message(event["kind"], event["text"]))
+        return messages

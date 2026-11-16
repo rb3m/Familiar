@@ -161,6 +161,8 @@ class VoiceSession:
                         timings["first_sentence_ms"] = (monotonic() - released) * 1000
                     print(f"{label}: {sentence}", flush=True)
                     await self.player.play(self._audio(sentence, released, timings))
+                    if event is not None and "memory_episode_id" in event.data:
+                        await self.player.wait_idle()
             await self.player.wait_idle()
         finally:
             if timings["first_audio_ms"] is not None and self.director is not None:
@@ -173,7 +175,10 @@ class VoiceSession:
             ("stt_ms", "first_sentence_ms", "first_audio_ms")
         )
         try:
-            await self._speak(self.conversation.interject(event), monotonic(), timings, event)
+            sentences = self.conversation.interject(
+                event, spoken=lambda: timings["first_audio_ms"] is not None
+            )
+            await self._speak(sentences, monotonic(), timings, event)
         except BackendError as exc:
             print(f"Voice error: {exc}. Try speaking again.", file=sys.stderr)
         finally:
@@ -202,7 +207,9 @@ class VoiceSession:
         try:
             if self.adapter is not None and self.director is not None:
                 tasks = [
-                    asyncio.create_task(feed_events(self.adapter, self.director)),
+                    asyncio.create_task(
+                        feed_events(self.adapter, self.director, self.conversation.memory)
+                    ),
                     asyncio.create_task(self._game_replies()),
                 ]
             async for pressed in self.ptt.events():
@@ -216,6 +223,7 @@ class VoiceSession:
             await self._cancel_reply()
             self._busy("user", False)
             await asyncio.to_thread(self.recorder.stop)
+            await self.conversation.aclose()
             await asyncio.gather(
                 *(
                     close_backend(backend)

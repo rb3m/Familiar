@@ -6,6 +6,7 @@ from contextlib import aclosing
 from dataclasses import asdict
 
 from familiar.interfaces import GameEvent, LLMProvider, Message, TextToSpeech
+from familiar.memory import MemoryKeeper
 from familiar.persona import Persona
 from familiar.pipeline.sentences import SentenceSplitter
 from familiar.transcript import TranscriptLog
@@ -22,6 +23,7 @@ class Conversation:
         history_limit: int = 40,
         context: Callable[[], str] | None = None,
         game: str | None = None,
+        memory: MemoryKeeper | None = None,
     ) -> None:
         if history_limit < 1:
             raise ValueError("history_limit must be positive")
@@ -32,6 +34,7 @@ class Conversation:
         self.tts = tts
         self.context = context
         self.game = game
+        self.memory = memory
         self.history_limit = history_limit
         self.history: list[Message] = []
 
@@ -42,12 +45,20 @@ class Conversation:
     async def ask(self, user_text: str) -> AsyncIterator[str]:
         """Yield reply sentences and retain partial replies on cancellation."""
         self.transcript.record("user", text=user_text)
-        async with aclosing(self._turn(user_text)) as sentences:
+        async with aclosing(self._turn(user_text, player_turn=True)) as sentences:
             async for sentence in sentences:
                 yield sentence
 
-    async def interject(self, event: GameEvent) -> AsyncIterator[str]:
+    async def interject(
+        self, event: GameEvent, spoken: Callable[[], bool] | None = None
+    ) -> AsyncIterator[str]:
         """React to a grounded game event using the ordinary reply pipeline."""
+        if (
+            self.memory is not None
+            and "memory_episode_id" in event.data
+            and not self.memory.recall_ready(event.data["memory_episode_id"])
+        ):
+            return
         summary = event.data["summary"]
         self.transcript.record(
             "event", event_kind=event.kind, priority=event.priority, summary=summary
@@ -59,15 +70,31 @@ class Conversation:
         facts = event.data.get("facts")
         if facts:
             text += "\nFacts you may use: - " + "\n- ".join(facts)
+        recalled = False
         async with aclosing(self._turn(text)) as sentences:
             async for sentence in sentences:
                 yield sentence
+                if self.memory is None or recalled or "memory_episode_id" not in event.data:
+                    continue
+                if spoken is not None and not spoken():
+                    continue
+                self.memory.recalled(event)
+                recalled = True
 
-    async def _turn(self, text: str) -> AsyncIterator[str]:
+    async def aclose(self) -> None:
+        if self.memory is not None:
+            await self.memory.finish(self.llm, self.transcript)
+
+    async def _turn(self, text: str, player_turn: bool = False) -> AsyncIterator[str]:
         system = self.persona.system_prompt(self.language, self.game)
         context = self.context() if self.context is not None else ""
         if context:
             system += "\n\nCurrent situation (exact, from live telemetry):\n" + context
+        memories = ""
+        if player_turn and self.memory is not None:
+            memories = self.memory.context(text)
+        if memories:
+            system += "\n\n" + memories
         self._remember(Message("user", text))
         splitter = SentenceSplitter()
         fragments: list[str] = []

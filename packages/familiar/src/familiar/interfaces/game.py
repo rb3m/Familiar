@@ -8,6 +8,14 @@ Events
     - ``ttl_s`` (float, optional): seconds after which the event is stale and must not be
       spoken; the Director applies a per-priority default when absent.
     - any other kind-specific fields (amounts, names) for logging.
+    - ``memory_salience`` (float, optional): positive values store trip episodes; zero
+      (default) skips storage. Distinctive episodes at 0.5 or above may be recalled.
+    - ``memory_arrival`` (bool, optional): an arrival suitable for gated spontaneous recall.
+
+Memory (optional, duck-typed; not required by GameAdapter)
+    ``whereabouts()`` returns None when unavailable, otherwise a dict with ``place_key``
+    (stable within the game), ``place`` (name), ``region`` (name) and ``activity`` (short
+    description, e.g. "hauling 18 tons of cattle to Bayonne"). Core memory has no game imports.
 
 Snapshot
     ``snapshot()`` returns a dict that always has ``connected``, ``paused`` and ``driving``

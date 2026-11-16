@@ -73,3 +73,9 @@ idle_minutes = 12
 notable_cooldown_s = 40
 ambient_cooldown_s = 300
 # Cooldowns and idle interval scale by (1.5 - persona.chattiness).
+
+[memory]
+enabled = true
+path = ""                 # default: $XDG_DATA_HOME/familiar/memory.db or ~/.local/share/familiar/memory.db
+recall_probability = 0.25  # chance on revisiting a place with a distinctive earlier episode
+recall_cooldown_min = 45   # real minutes between spoken memories; same episode/persona: 7 days

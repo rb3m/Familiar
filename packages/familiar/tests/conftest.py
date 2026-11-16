@@ -16,3 +16,12 @@ def persona():
         languages={"en": {"voices": {"gemini": "Kore", "other": None}}},
         game_hooks={"ats": "Notice the road."},
     )
+
+
+@pytest.fixture
+def store(tmp_path):
+    from familiar.memory import MemoryStore
+
+    value = MemoryStore(tmp_path / "memory.db")
+    yield value
+    value.close()

@@ -12,6 +12,9 @@ from typing import Any
 from familiar.config import AppConfig
 from familiar.interfaces import ConfigError
 
+# Allow the time-limited trip summary plus audio/backend cleanup before escalation.
+SESSION_STOP_TIMEOUT_S = 20
+
 
 def timestamp() -> str:
     return datetime.now(UTC).isoformat()
@@ -126,7 +129,7 @@ class SessionManager:
                     await self._monitor
                 return self.state
             for action, timeout in (
-                (lambda: process.send_signal(signal.SIGINT), 5),
+                (lambda: process.send_signal(signal.SIGINT), SESSION_STOP_TIMEOUT_S),
                 (process.terminate, 2),
                 (process.kill, None),
             ):

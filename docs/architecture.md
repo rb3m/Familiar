@@ -33,6 +33,7 @@ the core works without any game pack. The commands are in `README.md`.
 | Sentences | `packages/familiar/src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
 | Transcript | `packages/familiar/src/familiar/transcript.py` | Append-only JSONL log, the raw material for future memory. |
 | Director | `packages/familiar/src/familiar/director.py` | Decides when the companion speaks (priorities, TTL, cooldowns, idle chatter). |
+| Memory | `packages/familiar/src/familiar/memory/` | SQLite trip facts, local retrieval, gated recall and shutdown summaries (ADR 0005). |
 | GUI | `packages/familiar/src/familiar/gui/` | Local web launcher: aiohttp server owning one voice subprocess, vanilla frontend in `static/` (ADR 0003, `docs/gui-api.md`). |
 | SCS games | `packages/familiar-scs/src/familiar_scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
 | Backends | `packages/familiar/src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |
@@ -58,6 +59,18 @@ Backend plugin classes expose `name`, `api_version` and `capabilities` (a set of
 - Pressing push-to-talk interrupts playback and cancels generation.
 - Queued interjections carry a deadline; stale ones are dropped, not spoken late.
 - Per-persona `chattiness` scales cooldowns for `ambient` and `notable`.
+
+## Memory
+
+Core memory stores sessions, salient episodes and per-persona recall history in one local SQLite
+database (WAL), scoped by game. Adapters optionally supply `whereabouts()`, `memory_salience` and
+`memory_arrival`; these hooks do not change the required plugin interface. Player turns receive
+up to three dated earlier-session episodes using place/region and accent-insensitive entity
+matching, plus up to two summaries on recall cues. Retrieval never calls a backend. Spontaneous
+recall requires an arrival, salience ≥ 0.5, a 45-minute global cooldown, a seven-day episode/persona
+cooldown and a 25% probability gate; history updates when the reply is consumed (after audio in
+voice mode). Clean shutdown summarizes transcript utterances with the configured LLM, bounded
+to 15 seconds, before closing it. Desk sessions retain summaries without game episodes.
 
 ## Grounding
 

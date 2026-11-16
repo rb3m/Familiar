@@ -232,6 +232,7 @@ def test_rested_with_route(detector, paused, system, travel, deadline_hours, on_
     event = next(e for e in detector.feed(after) if e.kind == "rested")
     assert event.priority == "notable"
     assert event.data == {
+        "memory_salience": 0.3,
         "slept_s": 9 * 3600,
         "rest_remaining_s": 11 * 3600,
         "destination_city": "Bayonne",
@@ -297,6 +298,7 @@ def test_rested_without_job_or_route(detector, on_job, route):
     )
     assert event.data == {
         "slept_s": 9 * 3600,
+        "memory_salience": 0.3,
         "rest_remaining_s": 11 * 3600,
         "summary": "Rested 9 hours. Next rest needed in 11 hours (game time).",
     }
@@ -327,6 +329,7 @@ def test_rested_omits_unavailable_sleep_and_route_fields(detector, before, after
     )
     assert event.data == {
         "nav_distance_km": 160.9344,
+        "memory_salience": 0.3,
         "rest_remaining_s": 11 * 3600,
         "summary": "Rested. 100 miles. Next rest needed in 11 hours (game time).",
     }
