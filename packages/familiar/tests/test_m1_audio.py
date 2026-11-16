@@ -5,10 +5,11 @@ import io
 import threading
 import wave
 
+import pytest
 from familiar.audio.player import Player
 from familiar.audio.recorder import Recorder
 from familiar.audio.wav import pcm_to_wav
-from familiar.interfaces import AudioChunk, AudioClip
+from familiar.interfaces import AudioChunk, AudioClip, BackendError
 from m1_support import run
 
 
@@ -155,26 +156,72 @@ def test_player_wait_idle_drains_buffered_output():
     run(scenario())
 
 
-def test_player_stop_aborts_blocked_output():
+def test_player_never_aborts_during_a_write():
+    """Aborting PortAudio while another thread writes can hang that write forever."""
+
     async def scenario():
         entered = threading.Event()
+        release = threading.Event()
         aborted = threading.Event()
+        state = {"writing": False, "abort_during_write": False}
 
-        class BufferedOutput(OutputStream):
+        class TrackingOutput(OutputStream):
             def write(self, data):
+                state["writing"] = True
                 self.writes.append(data)
                 entered.set()
-                assert aborted.wait(2)
+                assert release.wait(2)
+                state["writing"] = False
 
             def abort(self):
+                state["abort_during_write"] |= state["writing"]
                 aborted.set()
 
-        player = Player(output_factory=BufferedOutput)
+        player = Player(output_factory=TrackingOutput)
         await player.play(chunks(AudioChunk(b"\1\0" * 24000, 24000)))
         assert await asyncio.to_thread(entered.wait, 2)
         player.stop()
+        await asyncio.sleep(0.05)
+        assert not aborted.is_set()
+        release.set()
         assert await asyncio.to_thread(aborted.wait, 2)
         await player.wait_idle()
+        assert not state["abort_during_write"]
+        await player.aclose()
+
+    run(scenario())
+
+
+def test_player_recovers_from_a_stuck_write():
+    async def scenario():
+        streams = []
+        stuck = threading.Event()
+
+        class Output(OutputStream):
+            def write(self, data):
+                super().write(data)
+                if len(streams) == 1:
+                    stuck.wait(5)  # first device never returns from write
+
+        def factory(**kwargs):
+            stream = Output(**kwargs)
+            streams.append(stream)
+            return stream
+
+        player = Player(output_factory=factory, write_timeout_s=0.2)
+        await player.play(chunks(AudioChunk(b"\1\0", 24000)))
+        with pytest.raises(BackendError, match="stopped responding"):
+            await player.wait_idle()
+        await player.play(chunks(AudioChunk(b"\2\0", 24000)))
+        await player.wait_idle()
+        assert streams[-1].writes == [b"\2\0"]
+        assert len(streams) == 2
+        stuck.set()  # the abandoned write finally returns: its stream gets closed
+        for _ in range(100):
+            if streams[0].closed:
+                break
+            await asyncio.sleep(0.01)
+        assert streams[0].closed
         await player.aclose()
 
     run(scenario())

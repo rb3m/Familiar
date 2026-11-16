@@ -1,12 +1,60 @@
-"""Ordered PCM playback with bounded writes and interruptible output."""
+"""Ordered PCM playback with bounded writes and interruptible output.
+
+Only the worker task touches the PortAudio stream. Aborting a stream from one thread while
+another thread is inside ``write`` can block that write forever (and crash PortAudio on exit),
+which once left the companion silent after a barge-in. ``stop()`` therefore only bumps the
+generation; the worker notices between 50 ms slices and aborts the stream itself.
+"""
 
 import asyncio
+import threading
 from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
 from familiar.interfaces import AudioChunk, BackendError
+
+SLICE_SECONDS = 0.05
+
+
+def _in_daemon_thread(
+    function: Callable, *args: Any, finally_: Callable[[], None] | None = None
+) -> asyncio.Future:
+    """Run a blocking call on its own daemon thread, then ``finally_`` on that same thread.
+
+    Unlike ``asyncio.to_thread`` a call that never returns cannot exhaust the shared executor or
+    keep the process from exiting, and ``finally_`` runs even if the event loop is gone by then.
+    """
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+
+    def settle(result: Any, error: BaseException | None) -> None:
+        if future.done():
+            return
+        if error is not None:
+            future.set_exception(error)
+            return
+        future.set_result(result)
+
+    def target() -> None:
+        try:
+            outcome = (function(*args), None)
+        except BaseException as exc:
+            outcome = (None, exc)
+        if finally_ is not None:
+            finally_()
+        with suppress(RuntimeError):  # the loop may be closed by the time a stuck call returns
+            loop.call_soon_threadsafe(settle, *outcome)
+
+    threading.Thread(target=target, daemon=True, name="familiar-audio").start()
+    return future
+
+
+def _dispose(stream: Any) -> None:
+    for operation in (stream.abort, stream.close):
+        with suppress(Exception):
+            operation()
 
 
 @dataclass
@@ -15,11 +63,13 @@ class _Drain:
 
 
 class Player:
-    def __init__(self, output_factory: Callable | None = None) -> None:
+    def __init__(
+        self, output_factory: Callable | None = None, write_timeout_s: float = 2.0
+    ) -> None:
         self._factory = output_factory
+        self._write_timeout = write_timeout_s
         self._queue: asyncio.Queue[tuple[int, AudioChunk | _Drain | None]] = asyncio.Queue()
         self._worker: asyncio.Task | None = None
-        self._interrupt: asyncio.Task | None = None
         self._stream: Any = None
         self._rate: int | None = None
         self._generation = 0
@@ -54,36 +104,20 @@ class Player:
         if isinstance(item, _Drain) and not item.done.done():
             item.done.set_result(None)
 
-    async def _abort(self, stream: Any, previous: asyncio.Task | None) -> None:
-        if previous is not None:
-            await previous
-        try:
-            await asyncio.to_thread(stream.abort)
-        except Exception as exc:
-            self._error = BackendError(f"Cannot stop audio output: {exc}")
-
     def stop(self) -> None:
-        """Drop queued audio and abort buffered output without blocking the event loop."""
+        """Drop queued audio; the worker aborts buffered output after its current slice."""
         self._generation += 1
         self._drop_queue()
-        if self._stream is not None:
-            self._interrupt = asyncio.create_task(self._abort(self._stream, self._interrupt))
         if self._worker is not None:
             self._queue.put_nowait((self._generation, None))
-
-    async def _settle_interrupt(self) -> None:
-        if self._interrupt is not None:
-            await self._interrupt
 
     async def _close_stream(self, abort: bool = True) -> None:
         stream = self._stream
         if stream is None:
             return
-        await self._settle_interrupt()
         try:
             operation = stream.abort if abort else stream.stop
             await asyncio.to_thread(operation)
-            await self._settle_interrupt()
         finally:
             self._stream = None
             self._rate = None
@@ -114,11 +148,42 @@ class Player:
         if generation != self._generation:
             return
         await self._open(chunk.sample_rate)
-        size = max(2, int(chunk.sample_rate * 0.05) * 2)
+        size = max(2, int(chunk.sample_rate * SLICE_SECONDS) * 2)
         for offset in range(0, len(chunk.pcm), size):
             if generation != self._generation:
+                await self._close_stream(abort=True)  # barge-in: silence now, from this task
                 return
-            await asyncio.to_thread(self._stream.write, chunk.pcm[offset : offset + size])
+            await self._write_slice(chunk.pcm[offset : offset + size])
+
+    async def _write_slice(self, data: bytes) -> None:
+        """Write one slice; a write that never returns abandons the stream instead of hanging."""
+        stream = self._stream
+        lock = threading.Lock()
+        state = {"finished": False, "abandoned": False}
+
+        def finished() -> None:
+            with lock:
+                state["finished"] = True
+                abandoned = state["abandoned"]
+            if abandoned:
+                _dispose(stream)
+
+        write = _in_daemon_thread(stream.write, data, finally_=finished)
+        done, _ = await asyncio.wait({write}, timeout=self._write_timeout)
+        if done:
+            write.result()
+            return
+        # The stuck thread still holds the stream, so closing it now could hang too. Whichever
+        # side sees both flags closes it: the thread if the write ever returns, else us.
+        self._stream = None
+        self._rate = None
+        with lock:
+            state["abandoned"] = True
+            returned = state["finished"]
+        if returned:
+            threading.Thread(target=_dispose, args=(stream,), daemon=True).start()
+        write.add_done_callback(lambda f: f.cancelled() or f.exception())  # mark retrieved
+        raise BackendError("Audio output stopped responding; reopening it")
 
     async def _run(self) -> None:
         while True:
@@ -157,5 +222,4 @@ class Player:
         if self._worker is not None:
             self._worker.cancel()
             await asyncio.gather(self._worker, return_exceptions=True)
-        await self._settle_interrupt()
         await self._close_stream()

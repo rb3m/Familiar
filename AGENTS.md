@@ -10,7 +10,7 @@ API tier) is the first backend; others plug in via entry points.
 
 ## Current step
 - Milestone: **M2 ATS**: first live drive from the GUI 2026-11-15; speech used miles correctly. Core and game packs split into two packages (ADR 0004).
-- Next task: fix barge-in bug: after the user talks over a reply, audio stays silent while text replies continue (transcript of 2026-11-16 00:47 UTC). Then confirm heading, tune Director cooldowns, check ETS2 km.
+- Next task: confirm heading and the rest-time reading (a drive reported 618 h until rest; fatigue may be off), tune Director cooldowns, check ETS2 km. Barge-in silence bug fixed 2026-11-15 (player owns the stream; see `audio/player.py` docstring).
 - Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk.
 
 ## Rules
