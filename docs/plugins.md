@@ -1,7 +1,7 @@
 # Writing a plugin
 
 Familiar finds backends through Python entry points, so a plugin can live in this repo
-(`src/familiar/backends/`) or in a separate pip-installable package.
+(`packages/familiar/src/familiar/backends/`) or in a separate pip-installable package.
 
 ## Entry point groups
 
@@ -10,11 +10,12 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
 | `familiar.llm` | `familiar.interfaces.llm.LLMProvider` | `gemini = "familiar.backends.gemini.llm:GeminiLLM"` |
 | `familiar.stt` | `familiar.interfaces.stt.SpeechToText` | `gemini = "familiar.backends.gemini.stt:GeminiSTT"` |
 | `familiar.tts` | `familiar.interfaces.tts.TextToSpeech` | `elevenlabs = "…"` |
-| `familiar.games` | `familiar.interfaces.game.GameAdapter` | `ats = "…"` (M2) |
+| `familiar.commands` | `familiar.interfaces.command.Command` | `watch = "familiar_scs.commands:Watch"` |
+| `familiar.games` | `familiar.interfaces.game.GameAdapter` | `ats = "familiar_scs.adapter:AtsAdapter"` |
 
 ## Steps (adding an LLM provider, e.g. Anthropic or Ollama)
 
-1. Create `src/familiar/backends/<vendor>/llm.py` (or your own package).
+1. Create `packages/familiar/src/familiar/backends/<vendor>/llm.py` (or your own package).
 2. Implement the class with the attributes and methods in `interfaces/llm.py`:
    `name`, `api_version = PLUGIN_API_VERSION`, `capabilities`, `__init__(self, settings: dict)`,
    `async stream(...)` and optional `async aclose()`.
@@ -24,7 +25,7 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
    [project.entry-points."familiar.llm"]
    myvendor = "familiar.backends.myvendor.llm:MyVendorLLM"
    ```
-   then `uv sync` so the entry point is installed.
+   then `uv sync --all-packages` so the entry point is installed.
 5. Select it in `config.toml`:
    ```toml
    [llm]
@@ -46,6 +47,53 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
 
 ## Personas
 
-Personas are YAML, not plugins: copy `personas/mira.yaml`, change the prompt and voices, and pick
+Personas are YAML, not plugins: copy `packages/familiar/src/familiar/personas/mira.yaml`, change the prompt and voices, and pick
 `truthfulness: strict` or `playful`. Voice
 ids are scoped by TTS backend and language, so one persona can sound right in English and Japanese.
+
+## Adding a command
+
+Implement `familiar.interfaces.command.Command` in your package. The loader constructs the class
+without arguments; it must expose `name`, `help`, and `api_version = PLUGIN_API_VERSION`.
+`add_arguments(parser)` registers arguments on an argparse subparser; core supplies `--config`.
+`run(args, config)` receives the parsed namespace and loaded application config, and returns an
+integer exit status, either directly or from an async method. Register the class:
+
+```toml
+[project.entry-points."familiar.commands"]
+watch = "familiar_scs.commands:Watch"
+```
+
+The entry-point name must match the class's `name`. Commands use the same API major-version
+check as other plugins. Import, construction, and argument-registration failures produce a
+warning on stderr and skip that command, leaving the other CLI commands available.
+
+## Writing a game pack
+
+Use `packages/familiar-scs/` as an example: it is a separate distribution with its own top-level
+`familiar_scs` package, tests, telemetry data and knowledge packs. Core never imports a game pack;
+it discovers installed adapters through `familiar.games` and optional CLI tools through
+`familiar.commands`. Users without game packs can still run `familiar plugins`, `familiar gui`
+and desk conversations.
+
+Implement `GameAdapter` from `familiar.interfaces`, including `events`, `snapshot`, `describe`,
+`tools`, and cleanup. Set `api_version = PLUGIN_API_VERSION` and expose `display_name` and `icon`
+as class attributes so the GUI can read them without constructing or connecting an adapter.
+Missing metadata falls back to the title-cased game ID and 🎮. Register each supported game:
+
+```toml
+[project.entry-points."familiar.games"]
+ats = "familiar_scs.adapter:AtsAdapter"
+ets2 = "familiar_scs.adapter:Ets2Adapter"
+```
+
+Keep all game-specific defaults, dependencies and resources inside the pack. Ship data as package
+data and read it with `importlib.resources`. Familiar SCS pins `familiar>=0.1.0,<1.0.0` to keep
+core within the same distribution major version; the runtime plugin API check is separate.
+For another pack in this workspace, add a directory under `packages/` and declare
+`familiar = { workspace = true }` in `[tool.uv.sources]`. Run `uv sync --all-packages` to install
+its entry points for development. External packs can be published and installed independently.
+
+Personas are searched in the user directory first, then an optional configured `personas_dir`,
+then the packaged built-ins. A missing configured directory is skipped. Save edits in the user
+directory; using a built-in ID creates an override that the GUI can reset by deleting that copy.

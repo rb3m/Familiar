@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start Familiar. `familiar-launcher.sh gui` opens the GUI launcher (no terminal window);
 # anything else opens a terminal running `familiar <args>`, e.g.:
-#   familiar-launcher.sh voice --game ats --persona ember
+#   familiar-launcher.sh voice --game ats --persona mira
 # The command runs in an interactive zsh/bash so API keys exported in ~/.zshrc or ~/.bashrc
 # are available, from the repo directory so ./config.toml is used.
 set -euo pipefail

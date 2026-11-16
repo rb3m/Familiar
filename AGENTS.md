@@ -1,7 +1,7 @@
 # Familiar
 
 ## What and why
-Familiar is a voice companion with a personality (Mira, Ember, …) that chats with the player
+Familiar is a voice companion with an original persona, Mira, that chats with the player
 and interjects about what is happening in sim games: landmarks near the truck in ATS, a pirate-
 infested system in Elite, a burn in KSP. It also works away from games as a desk assistant on the
 Mac. Everything is modular: LLM, speech-to-text, text-to-speech and game adapters are plugins
@@ -10,11 +10,11 @@ API tier) is the first backend; others plug in via entry points.
 
 ## Current step
 - Milestone: **M2 ATS** built and replay-tested; **GUI launcher** (`familiar gui`, menu icon) built and live-tested 2026-11-15. Neither driven in-game yet.
-- Next task: live ATS drive from the GUI; confirm telemetry unit/heading assumptions (`games/scs/telemetry.py`) and HUD units; tune Director cooldowns from transcripts.
+- Next task: live ATS drive from the GUI; confirm telemetry unit/heading assumptions (`packages/familiar-scs/src/familiar_scs/telemetry.py`) and HUD units; tune Director cooldowns from transcripts.
 - Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. Local config reads `GEMINI_FREE_KEY`. GUI sessions need the evdev (HOTAS) push-to-talk.
 
 ## Rules
-- Python 3.12 via uv: `uv sync`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
+- Python 3.12 via uv: `uv sync --all-packages`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
 - Tests: `uv run pytest` (no network; live API tests marked `live`, run with `-m live`).
 - Prefer early returns and mappings over nested ifs and `else`.
 - Plugins depend only on `familiar.interfaces`; bump `PLUGIN_API_VERSION` only for breaking changes.
@@ -24,14 +24,15 @@ API tier) is the first backend; others plug in via entry points.
 
 ## Index
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
-- `docs/plugins.md`: how to add an LLM/STT/TTS/game backend. Read before writing a plugin.
+- `docs/plugins.md`: how to add a backend, command, or game pack. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.
-- `docs/decisions/`: ADRs. Read 0001 before changing the overall structure, 0002 before changing location/landmarks, 0003 before changing the GUI approach.
-- `docs/gui-api.md`: GUI server/frontend contract (endpoints, auth, SSE). Read before changing `src/familiar/gui/`.
+- `docs/decisions/`: ADRs. Read 0001 before changing the overall structure, 0002 before changing location/landmarks, 0003 before changing the GUI approach, 0004 before changing package boundaries.
+- `docs/gui-api.md`: GUI server/frontend contract (endpoints, auth, SSE). Read before changing `packages/familiar/src/familiar/gui/`.
 - `config.example.toml`: every config key with defaults.
-- `personas/`: built-in persona YAML; user personas live in `~/.config/familiar/personas/` and shadow them.
+- `packages/familiar/src/familiar/personas/`: packaged built-in persona YAML; user personas live in `~/.config/familiar/personas/` and shadow them.
 - `packaging/linux/`: menu launcher + icon installer (`install.sh`).
-- `src/familiar/`: package; `backends/` holds built-in plugins, `games/scs/` the ATS/ETS2 adapter (`knowledge/<game>/` landmark packs).
+- `packages/familiar/src/familiar/`: core voice loop, backends, Director and GUI; no imports from game packs.
+- `packages/familiar-scs/src/familiar_scs/`: ATS/ETS2 adapters, commands, data and `knowledge/<game>/` packs.
 - `docs/knowledge-packs.md`: landmark pack format and the `familiar landmarks status|add|check` workflow. Read before adding or editing landmarks.
-- `scripts/`: data builders; landmark scripts are thin wrappers around `games/scs/curation.py`.
-- `tests/`: pytest suite.
+- `scripts/`: data builders; landmark scripts are thin wrappers around `packages/familiar-scs/src/familiar_scs/curation.py`.
+- `packages/*/tests/`: core and SCS pytest suites.

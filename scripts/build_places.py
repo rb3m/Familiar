@@ -1,4 +1,4 @@
-"""Regenerate src/familiar/games/scs/data/us_places.csv from the US Census Gazetteer.
+"""Regenerate the SCS pack gazetteer from the US Census Gazetteer.
 
 Usage: download https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/
 2025_Gaz_place_national.zip, unzip it, then run:
@@ -11,7 +11,7 @@ import re
 import sys
 from pathlib import Path
 
-OUT = Path(__file__).parent.parent / "src/familiar/games/scs/data/us_places.csv"
+OUT = Path(__file__).parent.parent / "packages/familiar-scs/src/familiar_scs/data/us_places.csv"
 SKIP_STATES = {"AK", "HI", "PR"}
 CDP = "57"
 SUFFIX = re.compile(

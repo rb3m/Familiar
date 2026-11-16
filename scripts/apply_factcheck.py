@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from familiar.games.scs.curation import apply_report, read_pack, write_pack
+from familiar_scs.curation import apply_report, read_pack, write_pack
 
 
 def main(pack: str, report: str, out: str) -> int:

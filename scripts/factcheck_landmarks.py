@@ -5,10 +5,9 @@ import asyncio
 from pathlib import Path
 
 import httpx
-
 from familiar import plugins
 from familiar.config import load_config
-from familiar.games.scs.curation import HEADERS, factcheck, read_pack
+from familiar_scs.curation import HEADERS, factcheck, read_pack
 
 
 def main() -> int:

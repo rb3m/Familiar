@@ -8,20 +8,16 @@ Icon=familiar
 Terminal=false
 Categories=Utility;
 Keywords=voice;companion;assistant;ats;
-Actions=ats-ember;ats-mira;ets2-ember;desk-mira;
+Actions=ats;ets2;desk;
 
-[Desktop Action ats-ember]
-Name=Terminal: American Truck Simulator – Ember
-Exec=@LAUNCHER@ voice --game ats --persona ember
+[Desktop Action ats]
+Name=Terminal: ATS
+Exec=@LAUNCHER@ voice --game ats
 
-[Desktop Action ats-mira]
-Name=Terminal: American Truck Simulator – Mira
-Exec=@LAUNCHER@ voice --game ats --persona mira
+[Desktop Action ets2]
+Name=Terminal: ETS2
+Exec=@LAUNCHER@ voice --game ets2
 
-[Desktop Action ets2-ember]
-Name=Terminal: Euro Truck Simulator 2 – Ember
-Exec=@LAUNCHER@ voice --game ets2 --persona ember
-
-[Desktop Action desk-mira]
-Name=Terminal: Desk chat – Mira
-Exec=@LAUNCHER@ voice --persona mira
+[Desktop Action desk]
+Name=Terminal: Desk chat
+Exec=@LAUNCHER@ voice

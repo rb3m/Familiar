@@ -1,4 +1,4 @@
-# GUI launcher API (contract between `src/familiar/gui/server.py` and `static/`)
+# GUI launcher API (contract between `packages/familiar/src/familiar/gui/server.py` and `static/`)
 
 `familiar gui [--port 8765] [--no-browser] [--config PATH]` starts an aiohttp server bound to
 127.0.0.1 only, generates a random per-launch token, and opens `http://127.0.0.1:PORT/?token=T`
@@ -15,13 +15,13 @@ get `403`. The frontend reads the token from `location.search` once and keeps it
 Non-2xx responses have JSON `{"error": "human readable message"}`.
 
 ## Endpoints
-- `GET /api/state` → `{"games": [{"id": "ats", "name": "American Truck Simulator"}, ...],
+- `GET /api/state` → `{"games": [{"id": "ats", "name": "American Truck Simulator", "icon": "🚛"}, ...],
   "personas": [PersonaSummary], "languages": [{"id": "en", "name": "English"}, ...],
   "defaults": {"game": "ats" | null, "persona": "mira", "language": "en"},
   "session": Session, "quota": {"used": 120, "limit": 10000} | null}`
   - `PersonaSummary` = `{"id", "display_name", "source", "truthfulness", "chattiness",
     "languages": ["en", "ja"], "builtin": bool, "overrides_builtin": bool}`; `builtin` = shipped
-    in the repo `personas/` (read-only; editing saves a user copy with the same id, which then
+    in `packages/familiar/src/familiar/personas/` (read-only; editing saves a user copy with the same id, which then
     takes precedence); `overrides_builtin` = a user copy shadowing a shipped persona (DELETE
     restores the original, so the UI labels it "Reset to built-in").
   - `Session` = `{"running": bool, "game": str | null, "persona": str | null, "language": str | null,
@@ -35,7 +35,7 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   The id in the URL wins over any id in the body. Ids: `^[a-z0-9][a-z0-9_-]{0,39}$`.
 - `DELETE /api/personas/{id}` → user personas only (`400` for a builtin without a user copy);
   deleting a user copy of a builtin restores the builtin.
-- `POST /api/personas/draft` body `{"character": "Mira", "source": "an original story"
+- `POST /api/personas/draft` body `{"character": "Sherlock Holmes", "source": "Arthur Conan Doyle"
   (optional), "notes": "..." (optional)}` → the LLM drafts a persona (JSON in the same shape,
   validated, NOT saved) → `200` persona JSON; `502` with error if the LLM output is unusable.
   Draft voices: Gemini names outside the known list become "Kore"; ElevenLabs is always null
@@ -45,13 +45,13 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
 - `POST /api/voices/test` body `{"backend": "elevenlabs" | "gemini", "voice": "id-or-name",
   "language": "en", "text": "optional sample"}` → speaks the sample on this machine;
   `200 {"ok": true}`.
-- `POST /api/session/start` body `{"game": "ats" | null, "persona": "ember", "language": "en"}`
+- `POST /api/session/start` body `{"game": "ats" | null, "persona": "mira", "language": "en"}`
   → `200` Session; `409` if one is already running.
 - `POST /api/session/stop` → `200` Session (graceful SIGINT, then terminate/kill after 5 s).
 - `POST /api/shutdown` → stops any session and exits the server (`200` then exit).
 - `GET /api/events?token=T` (Server-Sent Events). Event types:
   - `line`: `{"stream": "stdout" | "stderr", "text": "...", "ts": ISO-8601}`, one per output line
-    of the session. Lines look like `You: ...`, `Ember: ...`, `Ember (event: fuel_low): ...`,
+    of the session. Lines look like `You: ...`, `Mira: ...`, `Mira (event: fuel_low): ...`,
     `listening…`, `Voice error: ...`, or other diagnostics.
   - `session`: Session (sent on connect and whenever it changes).
   - `ping`: `{}` every 15 s.

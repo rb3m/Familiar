@@ -4,8 +4,7 @@ import argparse
 from pathlib import Path
 
 import httpx
-
-from familiar.games.scs.curation import HEADERS, read_pack, verify_coordinates
+from familiar_scs.curation import HEADERS, read_pack, verify_coordinates
 
 
 def main() -> int:

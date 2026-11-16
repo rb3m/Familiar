@@ -3,6 +3,12 @@
 Familiar is an asyncio Python 3.12 application built from small modules behind interfaces.
 Read the section you need; ADR 0001 records why it is shaped this way.
 
+## Installation
+
+For development, run `uv sync --all-packages` from the workspace root, then `uv run familiar gui`.
+Users can install the voice companion with `pip install familiar`; add ATS/ETS2 support with
+`pip install familiar familiar-scs`. Core works without any installed game pack.
+
 ## Overview
 
 ```
@@ -19,17 +25,17 @@ Read the section you need; ADR 0001 records why it is shaped this way.
 
 | Module | Path | Role |
 |---|---|---|
-| Interfaces | `src/familiar/interfaces/` | `typing.Protocol`s and shared dataclasses. The only contract plugins depend on. |
-| Plugins | `src/familiar/plugins.py` | Discovers backends via entry points, checks `PLUGIN_API_VERSION`. |
-| Config | `src/familiar/config.py` | Loads `config.toml` (see `config.example.toml`). Secrets come from env vars. |
-| Persona | `src/familiar/persona.py` | Loads `personas/*.yaml`; builds the system prompt for the active language. |
-| Conversation | `src/familiar/conversation.py` | Owns history; streams LLM output, splits sentences, hands them to TTS. |
-| Sentences | `src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
-| Transcript | `src/familiar/transcript.py` | Append-only JSONL log, the raw material for future memory. |
-| Director | `src/familiar/director.py` | Decides when the companion speaks (priorities, TTL, cooldowns, idle chatter). |
-| GUI | `src/familiar/gui/` | Local web launcher: aiohttp server owning one voice subprocess, vanilla frontend in `static/` (ADR 0003, `docs/gui-api.md`). |
-| SCS games | `src/familiar/games/scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
-| Backends | `src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |
+| Interfaces | `packages/familiar/src/familiar/interfaces/` | `typing.Protocol`s and shared dataclasses. The only contract plugins depend on. |
+| Plugins | `packages/familiar/src/familiar/plugins.py` | Discovers backends via entry points, checks `PLUGIN_API_VERSION`. |
+| Config | `packages/familiar/src/familiar/config.py` | Loads `config.toml` (see `config.example.toml`). Secrets come from env vars. |
+| Persona | `packages/familiar/src/familiar/persona.py` | Loads user, configured and packaged persona YAML; builds the system prompt for the active language. |
+| Conversation | `packages/familiar/src/familiar/conversation.py` | Owns history; streams LLM output, splits sentences, hands them to TTS. |
+| Sentences | `packages/familiar/src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
+| Transcript | `packages/familiar/src/familiar/transcript.py` | Append-only JSONL log, the raw material for future memory. |
+| Director | `packages/familiar/src/familiar/director.py` | Decides when the companion speaks (priorities, TTL, cooldowns, idle chatter). |
+| GUI | `packages/familiar/src/familiar/gui/` | Local web launcher: aiohttp server owning one voice subprocess, vanilla frontend in `static/` (ADR 0003, `docs/gui-api.md`). |
+| SCS games | `packages/familiar-scs/src/familiar_scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
+| Backends | `packages/familiar/src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |
 
 ## Interfaces (summary)
 
@@ -39,11 +45,11 @@ Read the section you need; ADR 0001 records why it is shaped this way.
   continuous streams, until a streaming backend needs it.
 - **TextToSpeech**: `synthesize(text, voice, language) -> AsyncIterator[AudioChunk]` (PCM16 mono).
 - **GameAdapter** (M2): `events() -> AsyncIterator[GameEvent]`, `snapshot() -> dict`, optional
-  `tools()`. Each game ships a knowledge pack under `games/<game>/`.
+  `tools()`. Each game pack ships its own knowledge data.
 - **Conversation** (later): a higher-level interface so a speech-to-speech backend (Gemini Live) can
   replace the whole STT→LLM→TTS chain. The Director talks to Conversation, never to raw backends.
 
-Every plugin class exposes `name`, `api_version` and `capabilities` (a set of strings such as
+Backend plugin classes expose `name`, `api_version` and `capabilities` (a set of strings such as
 `"tools"`, `"streaming"`), and an optional async `aclose()`.
 
 ## Speech arbitration rules (Director, M2)
@@ -57,8 +63,9 @@ Every plugin class exposes `name`, `api_version` and `capabilities` (a set of st
 
 POIs and lore come from curated knowledge packs (with source, map/DLC and coordinates). The prompt
 gives the model the matched facts. How freely it may embellish them is the persona's
-`truthfulness` (`persona.py`): `strict` (Mira) never invents, while `playful` (Ember) may
-exaggerate places and lore as obvious hyperbole but answers straight when sincerely asked. In every
+`truthfulness` (`persona.py`): strict personas never invent; playful personas may exaggerate
+places and lore as obvious hyperbole but answer straight when sincerely asked. Mira uses strict
+truthfulness. In every
 mode, practical information the player acts on (fuel, damage, distances, deadlines) stays exact.
 
 ## Platforms
