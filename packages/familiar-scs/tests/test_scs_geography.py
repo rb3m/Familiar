@@ -3,7 +3,14 @@ from pathlib import Path
 
 import pytest
 from familiar.interfaces import ConfigError
-from familiar_scs.geo import bearing, bearing_difference, compass_point, haversine
+from familiar_scs.geo import (
+    bearing,
+    bearing_difference,
+    compass_name,
+    compass_point,
+    haversine,
+    true_heading,
+)
 from familiar_scs.knowledge import KnowledgePack
 from familiar_scs.places import STATE_NAMES, PlaceIndex
 from familiar_scs.projection import LENGTH_OF_DEGREE, RADIUS_M, ats_to_wgs84, ets2_to_wgs84
@@ -37,7 +44,9 @@ def test_geo_and_places(tmp_path):
     assert haversine(0, 0, 0, 1) == pytest.approx(111.1949, rel=1e-5)
     assert haversine(0, 0, 0, 0) == 0
     assert compass_point(0) == "north"
-    assert compass_point(0.25) == "east"
+    assert compass_point(0.25) == "west"  # SDK: counterclockwise from north
+    assert compass_point(0.5) == "south"
+    assert compass_point(0.75) == "east"
     assert compass_point(1) == "north"
     assert bearing(0, 0, 1, 0) == 0
     assert bearing_difference(350, 10) == 20
@@ -149,3 +158,26 @@ def test_missing_packaged_places(tmp_path, monkeypatch):
     places._packaged_places.cache_clear()
     with pytest.raises(ConfigError, match="Missing SCS gazetteer"):
         PlaceIndex()
+
+
+@pytest.mark.parametrize(
+    ("heading", "expected"), [(0, "north"), (0.25, "west"), (0.5, "south"), (0.75, "east")]
+)
+def test_true_heading_in_game(heading, expected):
+    from familiar_scs.adapter import AtsAdapter
+
+    projection = AtsAdapter({}).projection
+    # Iowa, close to the projection's central meridian (-96).
+    x, z = 8000.0, -15000.0
+    assert compass_name(true_heading(projection, x, z, heading)) == expected
+
+
+def test_true_heading_corrects_map_rotation_far_from_central_meridian():
+    from familiar_scs.adapter import AtsAdapter
+
+    projection = AtsAdapter({}).projection
+    lat, lon = projection(-95000.0, -45000.0)
+    assert lon < -115  # Pacific Northwest, far west of the -96 meridian
+    # Meridians converge toward the cone's apex, so map "up" there is ~15 degrees west of true
+    # north (convergence = n * (lon - lon_0) with n ~ 0.63).
+    assert 330 < true_heading(projection, -95000.0, -45000.0, 0.0) < 352

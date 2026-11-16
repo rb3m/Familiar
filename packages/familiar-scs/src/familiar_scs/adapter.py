@@ -6,12 +6,12 @@ from dataclasses import asdict
 from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ToolSpec
 
 from .events import EventDetector
-from .geo import compass_point
+from .geo import compass_name, true_heading
 from .knowledge import KnowledgePack
 from .places import STATE_NAMES, Place, PlaceIndex
 from .projection import PROJECTIONS
 from .telemetry import DEFAULT_URL, HttpTelemetry, ReplayTelemetry, Snapshot, TelemetrySource
-from .units import Units, duration_text
+from .units import Units, duration_text, rest_text
 
 
 class ScsAdapter:
@@ -70,6 +70,11 @@ class ScsAdapter:
             result.update(state=place.state, nearest_place=asdict(place))
         return result
 
+    def _limit_text(self, limit_kmh: float) -> str:
+        if limit_kmh <= 0:
+            return "no posted speed limit known"  # telemetry reports 0 when there is none
+        return f"limit {self.units.speed(limit_kmh)}"
+
     def describe(self) -> str:
         s = self.latest
         if not s.connected:
@@ -80,8 +85,9 @@ class ScsAdapter:
             state = STATE_NAMES.get(place.state, place.state)
             location = f"near {place.name}, {state}"  # no distance: compressed game map
         lines = [
-            f"Location: {location}, heading {compass_point(s.heading)}",
-            f"Speed: {self.units.speed(s.speed)} (limit {self.units.speed(s.speed_limit)})",
+            f"Location: {location}, heading "
+            f"{compass_name(true_heading(self.projection, s.x, s.z, s.heading))}",
+            f"Speed: {self.units.speed(s.speed)} ({self._limit_text(s.speed_limit)})",
             f"Fuel: {s.fuel_fraction:.0%} ({self.units.volume(s.fuel)}), range "
             f"{self.units.distance(s.fuel_range)}",
         ]
@@ -95,7 +101,7 @@ class ScsAdapter:
                 f"{duration_text(s.job_remaining)} (game time)"
             )
         if s.rest_remaining is not None:
-            lines.append(f"Rest needed in: {duration_text(s.rest_remaining)} (game time)")
+            lines.append(rest_text(s.rest_remaining))
         if s.paused:
             lines.append("Game paused")
         return "\n".join(lines)

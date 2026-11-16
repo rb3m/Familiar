@@ -50,7 +50,7 @@ def test_describe(places, cls, speed, volume):
     assert "Fuel: 36%" in description
     assert "potatoes from Boise (Potato Co) to Reno (Market)" in description
     assert "ETA 4 h 10 min, deadline in 9 h 30 min (game time)" in description
-    assert "Rest needed in: 3 h 20 min (game time)" in description
+    assert "Rest needed in 3 h 20 min (game time)" in description
     assert "Game paused" in description
     if cls is AtsAdapter:
         assert "near Kaycee, Wyoming" in description

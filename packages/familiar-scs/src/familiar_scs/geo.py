@@ -1,11 +1,14 @@
 """Distances and directions, with the telemetry heading convention isolated."""
 
-from math import asin, atan2, cos, degrees, radians, sin, sqrt
+from collections.abc import Callable
+from math import asin, atan2, cos, degrees, radians, sin, sqrt, tau
 
 EARTH_RADIUS_KM = 6370.997
-# Assumption pending live verification: zero north, increasing clockwise.
+# SCS SDK (scssdk_value.h): heading in <0,1), measured counterclockwise seen from above;
+# 0 = north, 0.25 = west, 0.5 = south, 0.75 = east. Game north is -z, west is -x.
 HEADING_ZERO_DEGREES = 0.0
-HEADING_DIRECTION = 1.0
+HEADING_DIRECTION = -1.0
+LOOK_AHEAD_UNITS = 100.0
 COMPASS_POINTS = (
     "north",
     "northeast",
@@ -28,8 +31,27 @@ def heading_degrees(heading: float) -> float:
     return (HEADING_ZERO_DEGREES + HEADING_DIRECTION * heading * 360) % 360
 
 
+def compass_name(degrees_from_north: float) -> str:
+    return COMPASS_POINTS[int((degrees_from_north % 360 + 22.5) / 45) % 8]
+
+
 def compass_point(heading: float) -> str:
-    return COMPASS_POINTS[int((heading_degrees(heading) + 22.5) / 45) % 8]
+    """Compass point on the game map (map north, not true north)."""
+    return compass_name(heading_degrees(heading))
+
+
+def true_heading(
+    projection: Callable[[float, float], tuple[float, float]], x: float, z: float, heading: float
+) -> float:
+    """Bearing from true north: project a point just ahead of the truck to lat/lon.
+
+    The map is a conic projection, so map north drifts from true north away from its central
+    meridian (about 15 degrees in eastern Oregon).
+    """
+    angle = heading * tau
+    ahead_x = x - sin(angle) * LOOK_AHEAD_UNITS
+    ahead_z = z - cos(angle) * LOOK_AHEAD_UNITS
+    return bearing(*projection(x, z), *projection(ahead_x, ahead_z))
 
 
 def bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

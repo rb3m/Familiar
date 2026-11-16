@@ -11,7 +11,7 @@ from .geo import haversine
 from .knowledge import KnowledgePack
 from .places import STATE_NAMES, Place, PlaceIndex
 from .telemetry import CARGO_DAMAGE_TO_PERCENT, Snapshot, number
-from .units import Units, duration_text
+from .units import Units, duration_text, rest_text
 
 # (snapshot flag, event kind, priority, details field)
 EDGE_RULES = (
@@ -32,6 +32,7 @@ WARNING_RULES = {
         "battery_voltage_warning",
     ),
 }
+ENGINE_RUNNING_RULES = {"engine_warning"}
 
 
 def _fuel_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
@@ -195,8 +196,14 @@ class EventDetector:
         return events
 
     def _warnings(self, s: Snapshot) -> list[GameEvent]:
+        # The first snapshot is the truck's starting state, not news; engine lights (oil, coolant,
+        # battery) are normal while the engine is off.
+        if not self.previous.connected:
+            return []
         events = []
         for kind, flags in WARNING_RULES.items():
+            if kind in ENGINE_RUNNING_RULES and not s.engine_on:
+                continue
             rising = [
                 flag for flag in flags if getattr(s, flag) and not getattr(self.previous, flag)
             ]
@@ -298,7 +305,7 @@ class EventDetector:
             self._event(
                 "rest_soon",
                 "notable",
-                f"Rest needed in {duration_text(remaining)} (game time).",
+                rest_text(remaining) + ".",
                 remaining_s=remaining.total_seconds(),
             )
         ]

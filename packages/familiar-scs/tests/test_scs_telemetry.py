@@ -11,7 +11,12 @@ from familiar_scs.telemetry import HttpTelemetry, ReplayTelemetry, Snapshot, par
 def test_snapshot():
     s = Snapshot.from_json(
         {
-            "game": {"connected": True, "paused": False, "nextRestStopTime": "0001-01-01T03:20:00"},
+            "game": {
+                "connected": True,
+                "paused": False,
+                "time": "0001-01-26T12:00:00Z",
+                "nextRestStopTime": "0001-01-26T18:35:00Z",
+            },
             "truck": {
                 "speed": 100,
                 "fuel": 144,
@@ -33,7 +38,7 @@ def test_snapshot():
     assert s.nav_distance_km == 240
     assert s.job_remaining == timedelta(hours=25)
     assert s.nav_estimated == timedelta(hours=4, minutes=10)
-    assert s.rest_remaining == timedelta(hours=3, minutes=20)
+    assert s.rest_remaining == timedelta(hours=6, minutes=35)  # absolute time minus now
     assert s.x == -42104.4
     assert not Snapshot(connected=True, paused=True, speed=100).driving
     assert not Snapshot(connected=True, speed=3).driving
@@ -161,3 +166,24 @@ def test_invalid_replay(tmp_path, content):
 
     with pytest.raises(ConfigError, match="bad.jsonl"):
         asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("game", "expected"),
+    [
+        # A real drive: day 26 of the game calendar, rest due 6 h 35 min later (once read as 618 h).
+        (
+            {"time": "0001-01-26T12:00:00Z", "nextRestStopTime": "0001-01-26T18:35:00Z"},
+            timedelta(hours=6, minutes=35),
+        ),
+        (
+            {"time": "0001-01-26T12:00:00Z", "nextRestStopTime": "0001-01-25T22:00:00Z"},
+            timedelta(0),
+        ),  # overdue
+        ({"time": "0001-01-26T12:00:00Z", "nextRestStopTime": "0001-01-01T00:00:00Z"}, None),
+        ({"nextRestStopTime": "0001-01-26T18:35:00Z"}, None),  # no game clock
+    ],
+)
+def test_rest_remaining_is_relative_to_game_clock(game, expected):
+    s = Snapshot.from_json({"game": {"connected": True, **game}})
+    assert s.rest_remaining == expected

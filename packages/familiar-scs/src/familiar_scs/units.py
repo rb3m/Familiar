@@ -48,3 +48,9 @@ def duration_text(value: timedelta | None) -> str:
     if hours:
         return f"{hours} h {minutes} min"
     return f"{minutes} min"
+
+
+def rest_text(remaining: timedelta) -> str:
+    if remaining <= timedelta(0):
+        return "Rest is overdue: the driver needs to sleep now"
+    return f"Rest needed in {duration_text(remaining)} (game time)"

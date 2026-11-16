@@ -41,7 +41,7 @@ def kinds(events):
     ],
 )
 def test_rising_edges(detector, flag, kind, priority):
-    baseline = Snapshot(connected=True)
+    baseline = Snapshot(connected=True, engine_on=True)
     detector.feed(baseline)
     active = replace(baseline, **{flag: True})
     events = detector.feed(active)
@@ -50,6 +50,17 @@ def test_rising_edges(detector, flag, kind, priority):
     assert detector.feed(active) == []
     assert detector.feed(baseline) == []
     assert kinds(detector.feed(active)) == [kind]
+
+
+def test_no_warnings_from_the_starting_state_or_a_parked_engine(detector):
+    # Live drive: oil and battery lights were announced as the game connected, engine off.
+    parked = Snapshot(connected=True, oil_pressure_warning=True, battery_voltage_warning=True)
+    assert "engine_warning" not in kinds(detector.feed(parked))
+    detector.feed(Snapshot(connected=True))
+    assert "engine_warning" not in kinds(detector.feed(replace(parked, engine_on=False)))
+    running = Snapshot(connected=True, engine_on=True)
+    detector.feed(running)
+    assert kinds(detector.feed(replace(running, oil_pressure_warning=True))) == ["engine_warning"]
 
 
 def test_critical_details(detector):

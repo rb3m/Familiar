@@ -22,6 +22,8 @@ FUEL_RANGE_TO_KM = 1.0
 # Funbit cargo damage is assumed to be a fraction (0..1).
 CARGO_DAMAGE_TO_PERCENT = 100.0
 # Durations use an ISO datetime offset from year 0001, not wall/game clock time.
+# Exception: game.nextRestStopTime is an absolute game-clock time (server: GameTime + NextRestStop),
+# so the time left is nextRestStopTime - game.time (see time_until).
 DURATION_EPOCH = datetime(1, 1, 1)
 
 
@@ -45,6 +47,23 @@ def _text(value: object) -> str:
 
 def _mapping(value: object) -> dict:
     return value if isinstance(value, dict) else {}
+
+
+def _game_clock(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def time_until(target: object, now: object) -> timedelta | None:
+    """Game time left until an absolute game-clock ``target``; zero once it has passed."""
+    target_time, now_time = _game_clock(target), _game_clock(now)
+    if target_time is None or now_time is None or target_time <= DURATION_EPOCH:
+        return None
+    return max(target_time - now_time, timedelta(0))
 
 
 def parse_duration(value: object) -> timedelta | None:
@@ -148,6 +167,7 @@ class Snapshot:
             name: parser(sections[section].get(key))
             for name, (section, key, parser) in FIELD_PARSERS.items()
         }
+        values["rest_remaining"] = time_until(game.get("nextRestStopTime"), game.get("time"))
         return cls(**values)
 
 
@@ -169,7 +189,6 @@ FIELD_PARSERS = {
     ),
     "job_remaining": ("job", "remainingTime", parse_duration),
     "nav_estimated": ("navigation", "estimatedTime", parse_duration),
-    "rest_remaining": ("game", "nextRestStopTime", parse_duration),
 }
 for _section, _parser, _fields in (
     (
