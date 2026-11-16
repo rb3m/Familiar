@@ -41,6 +41,7 @@ def keep(row: dict) -> bool:
         row["country_code"] in COUNTRIES
         and 34 <= float(row["lat"]) <= 72
         and -11 <= float(row["lon"]) <= 45
+        and (row["country_code"] != "RU" or float(row["lon"]) <= 35)
     )
 
 

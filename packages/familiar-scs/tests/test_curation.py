@@ -297,8 +297,12 @@ def test_status_config_directory(monkeypatch, tmp_path: Path, capsys) -> None:
     assert "familiar landmarks add CA" in output
 
 
+@pytest.mark.parametrize("game,state", [("ats", "TX"), ("ets2", "RU")])
 @pytest.mark.parametrize("dry_run", [True, False])
-def test_add_pipeline(monkeypatch, tmp_path: Path, entry: dict, capsys, dry_run: bool) -> None:
+def test_add_pipeline(
+    monkeypatch, tmp_path: Path, entry: dict, capsys, dry_run: bool, game, state
+) -> None:
+    entry = {**entry, "state": state}
     pack = tmp_path / "pack.yaml"
     pack.write_text("# Keep me\n[]\n")
     before = pack.read_text()
@@ -312,8 +316,9 @@ def test_add_pipeline(monkeypatch, tmp_path: Path, entry: dict, capsys, dry_run:
         assert settings["temperature"] == 0
         return llm
 
-    async def research(states, per_state, workdir):
-        assert states == ["TX"]
+    async def research(states, per_state, workdir, *, game):
+        assert game in {"ats", "ets2"}
+        assert states == [state]
         workdir.mkdir()
         return [entry, rejected]
 
@@ -332,8 +337,9 @@ def test_add_pipeline(monkeypatch, tmp_path: Path, entry: dict, capsys, dry_run:
     monkeypatch.setattr(curation, "factcheck", factcheck)
     args = SimpleNamespace(
         landmark_action="add",
+        game=game,
         config=None,
-        states=["TX"],
+        states=[state],
         per_state=6,
         pack=pack,
         workdir=workdir,
@@ -351,15 +357,18 @@ def test_add_pipeline(monkeypatch, tmp_path: Path, entry: dict, capsys, dry_run:
         assert curation.read_pack(pack) == staged
     output = capsys.readouterr().out
     assert "wrong-location: OFF 100 km" in output
-    assert "TX: kept 1, dropped 1" in output
+    assert f"{state}: kept 1, dropped 1" in output
     assert "landmarks.checked.yaml" in output
 
 
-def test_check_report_only(monkeypatch, tmp_path: Path, entry: dict, capsys) -> None:
+@pytest.mark.parametrize("game,state", [("ats", "TX"), ("ets2", "RU")])
+def test_check_report_only(monkeypatch, tmp_path: Path, entry: dict, capsys, game, state) -> None:
+    entry = {**entry, "state": state}
     monkeypatch.chdir(tmp_path)
     pack = tmp_path / "pack.yaml"
     curation.write_pack(pack, [entry])
     before = pack.read_bytes()
+    monkeypatch.setattr(curation, "pack_path", lambda selected: {game: pack}[selected])
     monkeypatch.setattr(cli, "load_config", lambda _: AppConfig())
     llm = FakeLLM()
     monkeypatch.setattr(cli, "load", lambda *args: llm)
@@ -373,9 +382,157 @@ def test_check_report_only(monkeypatch, tmp_path: Path, entry: dict, capsys) -> 
         return []
 
     monkeypatch.setattr(curation, "factcheck", factcheck)
-    asyncio.run(cli._landmarks(SimpleNamespace(landmark_action="check", pack=pack, config=None)))
+    asyncio.run(
+        cli._landmarks(SimpleNamespace(landmark_action="check", pack=None, config=None, game=game))
+    )
     assert pack.read_bytes() == before
     assert list(tmp_path.glob("data/landmarks/*/factcheck.json"))
     assert not list(tmp_path.glob("data/landmarks/*/landmarks.checked.yaml"))
     assert "NO-COORDS" in capsys.readouterr().out
     assert llm.closed
+
+
+@pytest.mark.parametrize(
+    "game,codes,expected",
+    [
+        ("ats", ["TX", "CA"], {"TX": 6, "CA": 6}),
+        ("ets2", ["DE", "FI", "RU", "LU", "IE"], {"DE": 20, "FI": 12, "RU": 6, "LU": 3, "IE": 3}),
+    ],
+)
+def test_research_quota(game, codes, expected):
+    assert curation.research_counts(codes, game, None) == expected
+    assert curation.research_counts(codes, game, 9) == dict.fromkeys(codes, 9)
+    with pytest.raises(ConfigError, match="positive"):
+        curation.research_counts(codes, game, 0)
+
+
+@pytest.mark.parametrize("game,code", [("ats", "RU"), ("ets2", "TX"), ("ets2", "ZZ")])
+def test_region_codes_are_game_specific(game, code):
+    with pytest.raises(ConfigError, match="region codes"):
+        curation.research_counts([code], game, None)
+
+
+def test_ets2_research_prompt(entry, tmp_path):
+    codes = ["DE", "FI", "RU", "TR", "LU"]
+
+    async def runner(command, workdir):
+        prompt = command[2]
+        assert "Euro Truck Simulator 2" in prompt
+        assert "most notable first" in prompt
+        assert "at most 2 per city" in prompt
+        assert "English Wikipedia article coordinates" in prompt
+        for code, count in curation.research_counts(codes, "ets2", None).items():
+            assert f"{code}: {count}\n" in prompt
+        assert "TR: Only European Turkey (East Thrace, including Istanbul)." in prompt
+        assert "RU: Only Kaliningrad Oblast and the St Petersburg/Leningrad/Pskov region." in prompt
+        assert "FI: Mainly southern and central Finland." in prompt
+        curation.write_pack(workdir / "landmarks.yaml", [{**entry, "state": "RU"}])
+
+    result = asyncio.run(curation.research(codes, None, tmp_path, game="ets2", runner=runner))
+    assert result[0]["state"] == "RU"
+
+
+def test_research_prompt_override_and_requested_regions(entry, tmp_path):
+    async def runner(command, workdir):
+        assert "DE: 7\nFI: 7\n" in command[2]
+        assert "TR: Only" not in command[2]
+        assert "RU: Only" not in command[2]
+        curation.write_pack(workdir / "landmarks.yaml", [{**entry, "state": "RU"}])
+
+    with pytest.raises(ConfigError, match="outside the requested"):
+        asyncio.run(curation.research(["DE", "FI"], 7, tmp_path, game="ets2", runner=runner))
+
+
+def test_pack_game_validation(entry, tmp_path):
+    path = tmp_path / "pack.yaml"
+    curation.write_pack(path, [{**entry, "state": "RU"}])
+    assert curation.read_pack(path, game="ets2")[0]["state"] == "RU"
+    with pytest.raises(ConfigError, match="region codes"):
+        curation.read_pack(path, game="ats")
+
+
+def test_new_ets2_pack_header(entry, tmp_path):
+    path = tmp_path / "ets2/landmarks.yaml"
+    russian = {**entry, "state": "RU"}
+    assert curation.merge(path, [russian], game="ets2") == (1, 0)
+    assert path.read_text().startswith(curation.ETS2_HEADER)
+    assert curation.read_pack(path, game="ets2") == [russian]
+    curation.merge(path, [], game="ets2")
+    assert path.read_text().startswith(curation.ETS2_HEADER)
+
+
+def test_spacing_research_order_and_existing_pack(entry):
+    existing = [{**entry, "lat": 0, "lon": 0}]
+    entries = [
+        {**entry, "id": "near-existing", "lat": 0, "lon": 0.1},
+        {**entry, "id": "notable", "state": "FR", "lat": 0, "lon": 1},
+        {**entry, "id": "near-notable", "state": "DE", "lat": 0, "lon": 1.1},
+        {**entry, "id": "far", "lat": 0, "lon": 2},
+    ]
+    before = json.dumps([entries, existing])
+    kept, dropped = curation.filter_spacing(entries, existing, curation.MIN_SPACING_KM)
+    assert [p["id"] for p in kept] == ["notable", "far"]
+    assert dropped == ["near-existing", "near-notable"]
+    assert json.dumps([entries, existing]) == before
+    assert curation.filter_spacing(entries, existing, None) == (entries, [])
+    assert curation.filter_spacing([], existing, 30) == ([], [])
+    assert curation.GAME_MIN_SPACING_KM == {"ats": None, "ets2": 30}
+
+
+def test_spacing_threshold(entry):
+    first = {**entry, "lat": 0, "lon": 0}
+    second = {**entry, "id": "second", "lat": 0, "lon": 1}
+    distance = curation.haversine_km((0, 0), (0, 1))
+    assert curation.filter_spacing([first, second], [], distance) == ([first, second], [])
+    assert curation.filter_spacing([first, second], [], distance + 0.01) == ([first], ["second"])
+
+
+def test_ets2_pipeline_spacing_after_checks(monkeypatch, tmp_path, entry, capsys):
+    pack = tmp_path / "pack.yaml"
+    existing = {**entry, "id": "existing", "state": "FR", "lat": 0, "lon": 0}
+    curation.write_pack(pack, [existing])
+    candidates = [
+        {**entry, "id": "failed-facts", "state": "DE", "lat": 0, "lon": 1},
+        {**entry, "id": "survivor", "state": "DE", "lat": 0, "lon": 1.1},
+        {**entry, "id": "near-survivor", "state": "DE", "lat": 0, "lon": 1.2},
+        {**entry, "id": "near-existing", "state": "DE", "lat": 0, "lon": 0.1},
+    ]
+
+    async def research(states, per_state, workdir, *, game):
+        assert game == "ets2"
+        assert states == ["DE"]
+        assert per_state is None
+        return candidates
+
+    async def factcheck(entries, llm, client, delay, report_path):
+        assert entries == candidates
+        return [
+            {"id": p["id"], "verdicts": [{"n": 1, "verdict": "supported"}]} for p in entries[1:]
+        ]
+
+    monkeypatch.setattr(curation, "pack_path", lambda game: {"ets2": pack}[game])
+    monkeypatch.setattr(curation, "research", research)
+    monkeypatch.setattr(
+        curation,
+        "verify_coordinates",
+        lambda entries, client: dict.fromkeys([p["id"] for p in entries], "OK"),
+    )
+    monkeypatch.setattr(curation, "factcheck", factcheck)
+    monkeypatch.setattr(cli, "load", lambda *args: FakeLLM())
+    args = SimpleNamespace(
+        landmark_action="add",
+        game="ets2",
+        states=["DE"],
+        per_state=None,
+        pack=None,
+        workdir=tmp_path / "work",
+        dry_run=False,
+    )
+    asyncio.run(cli._landmarks(args, AppConfig()))
+    assert [p["id"] for p in curation.read_pack(pack)] == ["existing", "survivor"]
+    assert [p["id"] for p in curation.read_pack(args.workdir / "landmarks.checked.yaml")] == [
+        "survivor"
+    ]
+    output = capsys.readouterr().out
+    assert "Spacing dropped: near-survivor, near-existing" in output
+    assert "DE: kept 1, dropped 3" in output

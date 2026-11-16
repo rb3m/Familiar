@@ -32,17 +32,19 @@ def _landmark_arguments(landmarks: Any) -> None:
     from pathlib import Path
 
     actions = landmarks.add_subparsers(dest="landmark_action", required=True)
-    status = actions.add_parser("status", help="Show installed and covered ATS states")
+    status = actions.add_parser("status", help="Show installed and covered states (ATS only)")
     status.add_argument("--game", choices=["ats"], default="ats")
     status.add_argument("--game-dir", type=Path)
-    add = actions.add_parser("add", help="Research, check and merge new states")
+    add = actions.add_parser("add", help="Research, check and merge states or countries")
     add.add_argument("states", nargs="+", type=str.upper, metavar="XX")
-    add.add_argument("--per-state", type=int, default=6)
+    add.add_argument("--per-state", type=int, help="Override the per-region research quota")
     add.add_argument("--pack", type=Path)
     add.add_argument("--dry-run", action="store_true")
     add.add_argument("--workdir", type=Path)
     check = actions.add_parser("check", help="Check a pack without modifying it")
     check.add_argument("pack", nargs="?", type=Path)
+    for command in (add, check):
+        command.add_argument("--game", choices=["ats", "ets2"], default="ats")
     for command in (status, add, check):
         command.add_argument("--config")
 
@@ -115,13 +117,13 @@ async def _curate_landmarks(args: argparse.Namespace, config=None) -> None:
     from familiar_scs import curation
 
     adding = args.landmark_action == "add"
-    pack = args.pack or curation.DEFAULT_PACK
+    pack = args.pack or curation.pack_path(args.game)
     workdir = Path("data/landmarks") / datetime.now(UTC).isoformat().replace("+00:00", "Z")
     if adding:
         workdir = args.workdir or workdir
-        entries = await curation.research(args.states, args.per_state, workdir)
+        entries = await curation.research(args.states, args.per_state, workdir, game=args.game)
     if not adding:
-        entries = curation.read_pack(pack)
+        entries = curation.read_pack(pack, game=args.game)
     workdir.mkdir(parents=True, exist_ok=True)
     report_path = workdir / "factcheck.json"
     with httpx.Client(headers=curation.HEADERS, timeout=30) as client:
@@ -140,6 +142,13 @@ async def _curate_landmarks(args: argparse.Namespace, config=None) -> None:
         finally:
             await close_backend(llm)
     kept, left_out = curation.apply_report(candidates, report)
+    spacing = curation.GAME_MIN_SPACING_KM[args.game]
+    existing = []
+    if adding and spacing is not None and pack.exists():
+        existing = curation.read_pack(pack, game=args.game)
+    if adding and spacing is not None:
+        kept, spaced_out = curation.filter_spacing(kept, existing, spacing)
+        print(f"Spacing dropped: {', '.join(spaced_out) or '-'}")
     _landmark_summary(entries, kept)
     print(f"Fact-check left out: {', '.join(left_out) or '-'}")
     print(f"Report: {report_path}")
@@ -150,7 +159,7 @@ async def _curate_landmarks(args: argparse.Namespace, config=None) -> None:
     print(f"Staged: {staged}")
     if args.dry_run:
         return
-    added, skipped = curation.merge(pack, kept)
+    added, skipped = curation.merge(pack, kept, game=args.game)
     print(f"Merged into {pack}: added {added}, skipped {skipped}")
 
 

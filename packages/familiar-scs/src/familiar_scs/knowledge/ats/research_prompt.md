@@ -18,3 +18,6 @@ YAML format, a top-level list, one entry per landmark:
   source: "https://en.wikipedia.org/wiki/..."   # a real page that confirms the facts and coordinates
 
 Rules: only real places; every coordinate and fact must come from the source page; prefer English Wikipedia URLs (they will be machine-checked against the Wikipedia API, so the article title must exist exactly). If unsure about something, leave it out. No commentary outside the YAML file.
+
+Requested counts by region:
+{counts}

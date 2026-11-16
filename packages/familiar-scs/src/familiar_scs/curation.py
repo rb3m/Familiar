@@ -14,14 +14,60 @@ import yaml
 from familiar.interfaces import ConfigError, Message
 
 from .knowledge import Landmark, _landmark
-from .places import STATE_NAMES
+from .places import REGION_NAMES, STATE_NAMES
 
 Entry = dict[str, Any]
 Runner = Callable[[Sequence[str], Path], Awaitable[None]]
 API = "https://en.wikipedia.org/w/api.php"
 HEADERS = {"User-Agent": "FamiliarLandmarkCheck/0.1 (personal project)"}
 DEFAULT_COMMAND = ("agy", "-p", "PROMPT", "--dangerously-skip-permissions")
-DEFAULT_PACK = Path(__file__).parent / "knowledge/ats/landmarks.yaml"
+KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
+DEFAULT_PACK = KNOWLEDGE_DIR / "ats/landmarks.yaml"
+ETS2_LANDMARK_QUOTA = {
+    **dict.fromkeys(["DE", "FR", "ES", "IT", "GB", "PL", "SE", "NO"], 20),
+    **dict.fromkeys(
+        ["PT", "AT", "CZ", "RO", "GR", "FI", "HU", "NL", "DK", "BG", "CH", "HR", "RS"], 12
+    ),
+    **dict.fromkeys(
+        ["BE", "SK", "SI", "BA", "EE", "LV", "LT", "AL", "MK", "ME", "RU", "TR", "XK"], 6
+    ),
+    "LU": 3,
+}
+MIN_SPACING_KM = 30
+GAME_MIN_SPACING_KM = {"ats": None, "ets2": MIN_SPACING_KM}
+REGION_NOTES = {
+    "TR": "Only European Turkey (East Thrace, including Istanbul).",
+    "RU": "Only Kaliningrad Oblast and the St Petersburg/Leningrad/Pskov region.",
+    "FI": "Mainly southern and central Finland.",
+}
+ETS2_HEADER = """# ETS2 real-world landmarks for proximity cues.
+# WGS84 coordinates; radius_km in kilometres; state holds the ISO country code.
+# Sources and facts checked against English Wikipedia; review before live use.
+
+"""
+
+
+def pack_path(game: str) -> Path:
+    return KNOWLEDGE_DIR / game / "landmarks.yaml"
+
+
+def validate_regions(states: Iterable[str], game: str) -> None:
+    if game not in REGION_NAMES:
+        raise ConfigError(f"Unsupported landmark game: {game}")
+    if set(states) - REGION_NAMES[game].keys():
+        raise ConfigError(f"Invalid {game} region codes")
+
+
+def research_counts(states: Sequence[str], game: str, per_state: int | None) -> dict[str, int]:
+    validate_regions(states, game)
+    if not states:
+        raise ConfigError("Research requires region codes")
+    if per_state is not None and per_state < 1:
+        raise ConfigError("per-state must be positive")
+    if per_state is not None:
+        return dict.fromkeys(states, per_state)
+    defaults = {"ats": dict.fromkeys(states, 6), "ets2": ETS2_LANDMARK_QUOTA}[game]
+    return {state: defaults.get(state, 3) for state in states}
 
 
 def owned_states(game_dir: Path) -> set[str]:
@@ -37,7 +83,7 @@ def pack_states(landmarks: Iterable[Landmark | Entry]) -> set[str]:
     return {p["state"] if isinstance(p, dict) else p.state for p in landmarks}
 
 
-def read_pack(path: Path) -> list[Entry]:
+def read_pack(path: Path, *, game: str | None = None) -> list[Entry]:
     """Validate untrusted research output before using or merging it."""
     try:
         entries = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -51,6 +97,8 @@ def read_pack(path: Path) -> list[Entry]:
         if landmark.id in seen:
             raise ConfigError(f"{path}: duplicate id {landmark.id}")
         seen.add(landmark.id)
+    if game is not None:
+        validate_regions(pack_states(entries), game)
     return entries
 
 
@@ -68,6 +116,24 @@ def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
         + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
     )
     return 2 * 6371 * math.asin(math.sqrt(h))
+
+
+def filter_spacing(
+    entries: list[Entry], existing: list[Entry], min_km: float | None
+) -> tuple[list[Entry], list[str]]:
+    """Keep research order; compare against the pack and earlier survivors globally."""
+    if min_km is None:
+        return list(entries), []
+    positions = [(entry["lat"], entry["lon"]) for entry in existing]
+    kept, dropped = [], []
+    for entry in entries:
+        position = (entry["lat"], entry["lon"])
+        if any(haversine_km(position, other) < min_km for other in positions):
+            dropped.append(entry["id"])
+            continue
+        kept.append(entry)
+        positions.append(position)
+    return kept, dropped
 
 
 def title_from(url: str) -> str | None:
@@ -279,7 +345,7 @@ def apply_report(entries: list[Entry], report: list[Entry]) -> tuple[list[Entry]
     return kept, left_out
 
 
-def merge(pack_path: Path, new_entries: list[Entry]) -> tuple[int, int]:
+def merge(pack_path: Path, new_entries: list[Entry], *, game: str = "ats") -> tuple[int, int]:
     """Append unique entries while retaining the exact leading comment block."""
     text = pack_path.read_text(encoding="utf-8") if pack_path.exists() else ""
     lines = text.splitlines(keepends=True)
@@ -288,6 +354,9 @@ def merge(pack_path: Path, new_entries: list[Entry]) -> tuple[int, int]:
         len(lines),
     )
     header = "".join(lines[:boundary])
+    if not text and game == "ets2":
+        header = ETS2_HEADER
+    pack_path.parent.mkdir(parents=True, exist_ok=True)
     entries = yaml.safe_load(text) or []
     ids = {entry["id"] for entry in entries}
     names = {(entry["name"], entry["state"]) for entry in entries}
@@ -318,25 +387,29 @@ async def _run_research(command: Sequence[str], workdir: Path) -> None:
 
 async def research(
     states: Sequence[str],
-    per_state: int,
+    per_state: int | None,
     workdir: Path,
     command: Sequence[str] = DEFAULT_COMMAND,
     *,
     runner: Runner = _run_research,
+    game: str = "ats",
 ) -> list[Entry]:
-    if per_state < 1:
-        raise ConfigError("per-state must be positive")
-    if not states or set(states) - STATE_NAMES.keys():
-        raise ConfigError("Research requires valid USPS state codes")
-    template = (Path(__file__).parent / "knowledge/research_prompt.md").read_text()
-    prompt = template.format(states=" ".join(states), per_state=per_state)
+    counts = research_counts(states, game, per_state)
+    template = (KNOWLEDGE_DIR / game / "research_prompt.md").read_text()
+    notes = "\n".join(f"{code}: {REGION_NOTES[code]}" for code in states if code in REGION_NOTES)
+    prompt = template.format(
+        states=" ".join(states),
+        per_state=next(iter(counts.values())),
+        counts="\n".join(f"{code}: {count}" for code, count in counts.items()),
+        region_notes=notes,
+    )
     workdir.mkdir(parents=True, exist_ok=True)
     # A failed/no-output run must never consume stale research from a previous run.
     output = workdir / "landmarks.yaml"
     if output.exists():
         raise ConfigError(f"Research output already exists: {output}; choose a new workdir")
     await runner([prompt if arg == "PROMPT" else arg for arg in command], workdir)
-    entries = read_pack(output)
+    entries = read_pack(output, game=game)
     if pack_states(entries) - set(states):
-        raise ConfigError("Research returned landmarks outside the requested states")
+        raise ConfigError("Research returned landmarks outside the requested regions")
     return entries

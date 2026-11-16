@@ -92,6 +92,7 @@ COUNTRY_NAMES = dict(
     PT="Portugal",
     RO="Romania",
     RS="Serbia",
+    RU="Russia",
     SK="Slovakia",
     SI="Slovenia",
     ES="Spain",
