@@ -12,3 +12,6 @@
 Later options: Gemini Live speech-to-speech `Conversation` backend, local backends (whisper.cpp
 Vulkan, Kokoro, Ollama), Mac desk assistant / note taker to an Obsidian vault, standard SCS telemetry
 plugin for users without the TruckSim GPS port.
+
+Before publishing to PyPI: rename the distributions (`familiar` is taken there by an unrelated
+project), e.g. `familiar-companion` and `familiar-companion-scs`.

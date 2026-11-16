@@ -30,12 +30,17 @@ uv sync --all-packages        # core + ATS/ETS2 pack
 cp config.example.toml config.toml
 ```
 
-Install only what you need with pip:
+Or install with pip, core only or core plus the truck pack:
 
 ```bash
-pip install "git+https://github.com/rb3m/Familiar.git#subdirectory=packages/familiar"
-pip install "git+https://github.com/rb3m/Familiar.git#subdirectory=packages/familiar-scs"  # trucks
+REPO=git+https://github.com/rb3m/Familiar.git
+pip install "familiar @ $REPO#subdirectory=packages/familiar"
+pip install "familiar @ $REPO#subdirectory=packages/familiar" \
+            "familiar-scs @ $REPO#subdirectory=packages/familiar-scs"
 ```
+
+Always name the core explicitly like this: the name `familiar` on PyPI belongs to an unrelated
+project, so a bare `familiar-scs` install would pull the wrong package.
 
 ### Keys
 
