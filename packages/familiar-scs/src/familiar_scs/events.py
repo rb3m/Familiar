@@ -13,7 +13,7 @@ from familiar.interfaces import GameEvent
 from .geo import haversine
 from .knowledge import KnowledgePack
 from .places import STATE_NAMES, Place, PlaceIndex
-from .telemetry import CARGO_DAMAGE_TO_PERCENT, Snapshot, number
+from .telemetry import CARGO_DAMAGE_TO_PERCENT, Snapshot, _game_clock, number
 from .units import Units, duration_text, rest_text
 
 # (snapshot flag, event kind, priority, details field)
@@ -38,6 +38,8 @@ WARNING_RULES = {
 }
 ENGINE_RUNNING_RULES = {"engine_warning"}
 TOWN_MIN_POPULATION = 20_000
+REST_RESET_MIN = timedelta(hours=3)
+DEADLINE_MARGIN = 1.1
 JAM_WINDOW_S = 120.0
 JAM_LOW_SPEED_RATIO = 0.35
 JAM_LOW_TIME_RATIO = 0.8
@@ -133,6 +135,55 @@ def _refuel_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
     return f"Refuelling paid; fuel now {u.volume(s.fuel)} ({s.fuel_fraction:.0%}).", {
         "fuel_litres": s.fuel,
     }
+
+
+def _on_time(s: Snapshot) -> bool:
+    return s.job_remaining >= s.nav_estimated * DEADLINE_MARGIN
+
+
+def _slept_part(s: Snapshot, previous: Snapshot) -> tuple[str, dict]:
+    before, after = _game_clock(previous.game_time), _game_clock(s.game_time)
+    if before is None or after is None or after <= before:
+        return "", {}
+    slept = after - before
+    return f" {duration_text(slept)}", {"slept_s": slept.total_seconds()}
+
+
+def _deadline_part(s: Snapshot) -> tuple[str, dict]:
+    if s.job_remaining is None:
+        return "", {}
+    text = f"; deadline in {duration_text(s.job_remaining)}"
+    data = {"deadline_remaining_s": s.job_remaining.total_seconds()}
+    if s.nav_estimated is None:
+        return text, data
+    on_time = _on_time(s)
+    return text + (" (comfortable)" if on_time else " (tight)"), {**data, "on_time": on_time}
+
+
+def _route_part(s: Snapshot, u: Units) -> tuple[str, dict]:
+    if not s.on_job or s.nav_distance_km <= 0:
+        return "", {}
+    text = f" {u.distance(s.nav_distance_km)}"
+    data: dict = {"nav_distance_km": s.nav_distance_km}
+    if s.destination_city:
+        text += f" to {s.destination_city}"
+        data["destination_city"] = s.destination_city
+    if s.nav_estimated is not None:
+        text += f", about {duration_text(s.nav_estimated)} of driving"
+        data["estimated_s"] = s.nav_estimated.total_seconds()
+    deadline_text, deadline_data = _deadline_part(s)
+    return text + deadline_text + ".", {**data, **deadline_data}
+
+
+def _rested_summary(s: Snapshot, previous: Snapshot, u: Units) -> tuple[str, dict]:
+    slept_text, slept_data = _slept_part(s, previous)
+    route_text, route_data = _route_part(s, u)
+    summary = (
+        f"Rested{slept_text}.{route_text}"
+        f" Next rest needed in {duration_text(s.rest_remaining)} (game time)."
+    )
+    data = {"rest_remaining_s": s.rest_remaining.total_seconds(), **slept_data, **route_data}
+    return summary, data
 
 
 SUMMARY_BUILDERS = {
@@ -340,6 +391,15 @@ class EventDetector:
         remaining = s.rest_remaining
         if remaining is None:
             return []
+        previous = self.previous
+        if (
+            previous.connected
+            and previous.rest_remaining is not None
+            and remaining - previous.rest_remaining >= REST_RESET_MIN
+        ):
+            self._rest_warned = False
+            summary, data = _rested_summary(s, previous, self.units)
+            return [self._event("rested", "notable", summary, **data)]
         if remaining >= timedelta(hours=1):
             self._rest_warned = False
             return []
@@ -365,7 +425,7 @@ class EventDetector:
             or s.nav_estimated is None
         ):
             return []
-        if s.job_remaining >= s.nav_estimated * 1.1:
+        if _on_time(s):
             return []
         self._deadline_warned = True
         return [

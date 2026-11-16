@@ -206,6 +206,132 @@ def test_rest_cycle(detector):
     assert kinds(detector.feed(soon)) == ["rest_soon"]
 
 
+@pytest.mark.parametrize("paused", [False, True])
+@pytest.mark.parametrize("system,travel", [("metric", "412 kilometers"), ("imperial", "256 miles")])
+@pytest.mark.parametrize("deadline_hours,on_time", [(14, True), (5, False)])
+def test_rested_with_route(detector, paused, system, travel, deadline_hours, on_time):
+    detector.units = Units(system)
+    before = Snapshot(
+        connected=True,
+        paused=paused,
+        on_job=True,
+        game_time="0001-01-05T22:00:00Z",
+        rest_remaining=timedelta(minutes=30),
+        destination_city="Bayonne",
+        nav_distance_km=412,
+        nav_estimated=timedelta(hours=5, minutes=10),
+        job_remaining=timedelta(hours=24),
+    )
+    assert "rest_soon" in kinds(detector.feed(before))
+    after = replace(
+        before,
+        game_time="0001-01-06T07:00:00Z",
+        rest_remaining=timedelta(hours=11),
+        job_remaining=timedelta(hours=deadline_hours),
+    )
+    event = next(e for e in detector.feed(after) if e.kind == "rested")
+    assert event.priority == "notable"
+    assert event.data == {
+        "slept_s": 9 * 3600,
+        "rest_remaining_s": 11 * 3600,
+        "destination_city": "Bayonne",
+        "nav_distance_km": 412,
+        "estimated_s": 310 * 60,
+        "deadline_remaining_s": deadline_hours * 3600,
+        "on_time": on_time,
+        "summary": (
+            f"Rested 9 hours. {travel} to Bayonne, about 5 hours 10 minutes of driving; "
+            f"deadline in {deadline_hours} hours ({'comfortable' if on_time else 'tight'}). "
+            "Next rest needed in 11 hours (game time)."
+        ),
+    }
+    assert "rested" not in kinds(detector.feed(after))
+    assert "rest_soon" in kinds(detector.feed(before))
+
+
+@pytest.mark.parametrize(
+    "before,after,expected",
+    [
+        (1, 4, True),
+        (1, 3.99, False),
+        (4, 4, False),
+        (4, 3, False),
+        (None, 11, False),
+        (1, None, False),
+    ],
+)
+def test_rested_timer_threshold(detector, before, after, expected):
+    s = Snapshot(connected=True, rest_remaining=timedelta(hours=before) if before else None)
+    detector.feed(s)
+    events = detector.feed(replace(s, rest_remaining=timedelta(hours=after) if after else None))
+    assert ("rested" in kinds(events)) is expected
+
+
+def test_rested_ignores_first_snapshot_and_reconnect(detector):
+    s = Snapshot(connected=True, rest_remaining=timedelta(hours=11))
+    assert "rested" not in kinds(detector.feed(s))
+    detector.feed(replace(s, rest_remaining=timedelta(minutes=30)))
+    detector.feed(Snapshot())
+    assert "rested" not in kinds(detector.feed(s))
+
+
+@pytest.mark.parametrize("on_job,route", [(False, 412), (True, 0)])
+def test_rested_without_job_or_route(detector, on_job, route):
+    s = Snapshot(
+        connected=True,
+        on_job=on_job,
+        nav_distance_km=route,
+        destination_city="Bayonne",
+        nav_estimated=timedelta(hours=5),
+        job_remaining=timedelta(hours=14),
+        rest_remaining=timedelta(hours=1),
+        game_time="0001-01-05T22:00:00",
+    )
+    detector.feed(s)
+    event = next(
+        e
+        for e in detector.feed(
+            replace(s, rest_remaining=timedelta(hours=11), game_time="0001-01-06T07:00:00")
+        )
+        if e.kind == "rested"
+    )
+    assert event.data == {
+        "slept_s": 9 * 3600,
+        "rest_remaining_s": 11 * 3600,
+        "summary": "Rested 9 hours. Next rest needed in 11 hours (game time).",
+    }
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("", ""),
+        ("invalid", "0001-01-06T07:00:00"),
+        ("0001-01-06T07:00:00", "invalid"),
+        ("0001-01-06T07:00:00", "0001-01-05T22:00:00"),
+    ],
+)
+def test_rested_omits_unavailable_sleep_and_route_fields(detector, before, after):
+    s = Snapshot(
+        connected=True,
+        on_job=True,
+        nav_distance_km=160.9344,
+        game_time=before,
+        rest_remaining=timedelta(hours=1),
+    )
+    detector.feed(s)
+    event = next(
+        e
+        for e in detector.feed(replace(s, game_time=after, rest_remaining=timedelta(hours=11)))
+        if e.kind == "rested"
+    )
+    assert event.data == {
+        "nav_distance_km": 160.9344,
+        "rest_remaining_s": 11 * 3600,
+        "summary": "Rested. 100 miles. Next rest needed in 11 hours (game time).",
+    }
+
+
 def test_deadline_once_per_job(detector):
     s = Snapshot(
         connected=True,
