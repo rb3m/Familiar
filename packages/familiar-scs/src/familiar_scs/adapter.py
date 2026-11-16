@@ -8,7 +8,7 @@ from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ToolSpec
 from .events import EventDetector
 from .geo import compass_name, true_heading
 from .knowledge import KnowledgePack
-from .places import STATE_NAMES, Place, PlaceIndex
+from .places import REGION_NAMES, Place, PlaceIndex, _packaged_places
 from .projection import PROJECTIONS
 from .telemetry import DEFAULT_URL, HttpTelemetry, ReplayTelemetry, Snapshot, TelemetrySource
 from .units import Units, duration_text, rest_text
@@ -24,10 +24,12 @@ class ScsAdapter:
         default_units = {"ats": "imperial", "ets2": "metric"}[self.game]
         self.units = Units(settings.get("units", default_units), self.game)
         self.projection = PROJECTIONS[self.game]
-        # The supplied gazetteer covers the US only; never assign US states to Europe.
+        self.region_names = REGION_NAMES[self.game]
         self.places = self._place_index()
         self.knowledge = KnowledgePack.for_game(self.game, settings.get("knowledge_paths"))
-        self.detector = EventDetector(self.projection, self.places, self.knowledge, self.units)
+        self.detector = EventDetector(
+            self.projection, self.places, self.knowledge, self.units, region_names=self.region_names
+        )
         self.latest = Snapshot()
         self.source: TelemetrySource
         if settings.get("replay"):
@@ -38,9 +40,8 @@ class ScsAdapter:
         )
 
     def _place_index(self) -> PlaceIndex:
-        if self.game == "ets2":
-            return PlaceIndex(places=())
-        return PlaceIndex()
+        filename = {"ats": "us_places.csv", "ets2": "eu_places.csv"}[self.game]
+        return PlaceIndex(places=_packaged_places(filename))
 
     async def events(self) -> AsyncIterator[GameEvent]:
         try:
@@ -82,7 +83,7 @@ class ScsAdapter:
         lat, lon, place = self._location()
         location = f"{lat:.4f}, {lon:.4f}"
         if place:
-            state = STATE_NAMES.get(place.state, place.state)
+            state = self.region_names.get(place.state, place.state)
             location = f"near {place.name}, {state}"  # no distance: compressed game map
         lines = [
             f"Location: {location}, heading "

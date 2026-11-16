@@ -98,3 +98,23 @@ def test_replay_adapter(places, tmp_path):
         await adapter.aclose()
 
     asyncio.run(run())
+
+
+def test_ets2_packaged_places_and_country_crossing():
+    adapter = Ets2Adapter({})
+    germany = Snapshot(connected=True, x=0, z=0)
+    france = Snapshot(connected=True, x=-26253.693, z=6106.096)
+    for sample in (germany, france):
+        events = [event for _ in range(3) for event in adapter.detector.feed(sample)]
+    crossing = next(event for event in events if event.kind == "entered_state")
+    assert crossing.data["summary"] == "Entered France from Germany."
+    assert crossing.data["from_state"] == "Germany"
+    assert crossing.data["to_state"] == "France"
+    assert crossing.data["from_code"] == "DE"
+    assert crossing.data["to_code"] == "FR"
+    adapter.latest = france
+    assert "near Château-Thierry, France" in adapter.describe()
+    snapshot = asyncio.run(adapter.snapshot())
+    assert snapshot["state"] == "FR"
+    assert snapshot["nearest_place"]["name"] == "Château-Thierry"
+    asyncio.run(adapter.aclose())

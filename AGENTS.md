@@ -10,7 +10,7 @@ API tier) is the first backend; others plug in via entry points.
 
 ## Current step
 - Milestone: **M2 ATS**: first live drive from the GUI 2026-11-15; speech used miles correctly. Core and game packs split into two packages (ADR 0004).
-- Next task: check ETS2 km on a Euro drive. Confirmed live 2026-11-15: miles, heading, rest time, chattiness (Frieren and Megumin). Game data and replies use spoken words for units (`familiar_scs/units.py`, `SPOKEN_RULE`). Fixed 2026-11-15: barge-in silence (`audio/player.py` docstring), rest time (absolute game clock), startup/engine-off warnings.
+- ETS2 2026-11-16: km confirmed live; GeoNames Europe gazetteer (`data/eu_places.csv`) gives country crossings, towns and location; projection checked live near Château-Thierry (UK branch unverified). Next task: confirm a border crossing live, then ETS2 landmarks pack. Confirmed live 2026-11-15: miles, heading, rest time, chattiness (Frieren and Megumin). Game data and replies use spoken words for units (`familiar_scs/units.py`, `SPOKEN_RULE`). Fixed 2026-11-15: barge-in silence (`audio/player.py` docstring), rest time (absolute game clock), startup/engine-off warnings.
 - Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk.
 
 ## Rules

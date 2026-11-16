@@ -65,19 +65,66 @@ STATE_NAMES = dict(
 )
 
 
+COUNTRY_NAMES = dict(
+    AT="Austria",
+    BE="Belgium",
+    BA="Bosnia and Herzegovina",
+    BG="Bulgaria",
+    HR="Croatia",
+    CZ="Czechia",
+    DK="Denmark",
+    EE="Estonia",
+    FI="Finland",
+    FR="France",
+    DE="Germany",
+    GR="Greece",
+    HU="Hungary",
+    IE="Ireland",
+    IT="Italy",
+    LV="Latvia",
+    LT="Lithuania",
+    LU="Luxembourg",
+    MK="North Macedonia",
+    ME="Montenegro",
+    NL="Netherlands",
+    NO="Norway",
+    PL="Poland",
+    PT="Portugal",
+    RO="Romania",
+    RS="Serbia",
+    SK="Slovakia",
+    SI="Slovenia",
+    ES="Spain",
+    SE="Sweden",
+    CH="Switzerland",
+    TR="Turkey",
+    GB="United Kingdom",
+    AL="Albania",
+    AD="Andorra",
+    LI="Liechtenstein",
+    MC="Monaco",
+    SM="San Marino",
+    VA="Vatican City",
+    MT="Malta",
+    XK="Kosovo",
+)
+REGION_NAMES = {"ats": STATE_NAMES, "ets2": COUNTRY_NAMES}
+
+
 @dataclass(frozen=True)
 class Place:
     name: str
     state: str
     lat: float
     lon: float
-    land_km2: float
+    land_km2: float = 0.0
     distance_km: float = 0.0
+    population: int = 0
 
 
-@lru_cache(maxsize=1)
-def _packaged_places() -> tuple[Place, ...]:
-    resource = files("familiar_scs").joinpath("data/us_places.csv")
+@lru_cache(maxsize=2)
+def _packaged_places(filename: str = "us_places.csv") -> tuple[Place, ...]:
+    resource = files("familiar_scs").joinpath(f"data/{filename}")
     if not resource.is_file():
         raise ConfigError(f"Missing SCS gazetteer: {resource}")
     with resource.open("r", encoding="utf-8", newline="") as stream:
@@ -87,7 +134,12 @@ def _packaged_places() -> tuple[Place, ...]:
 def _read_places(stream: TextIO) -> tuple[Place, ...]:
     return tuple(
         Place(
-            row["name"], row["state"], float(row["lat"]), float(row["lon"]), float(row["land_km2"])
+            row["name"],
+            row["state"],
+            float(row["lat"]),
+            float(row["lon"]),
+            float(row.get("land_km2") or 0),
+            population=int(row.get("population") or 0),
         )
         for row in csv.DictReader(stream)
     )

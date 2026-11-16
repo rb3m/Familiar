@@ -1,7 +1,7 @@
 """Stateful edge detection composed from small rule functions."""
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from functools import partial
 
@@ -33,6 +33,7 @@ WARNING_RULES = {
     ),
 }
 ENGINE_RUNNING_RULES = {"engine_warning"}
+TOWN_MIN_POPULATION = 20_000
 
 
 def _fuel_summary(s: Snapshot, d: dict, u: Units) -> tuple[str, dict]:
@@ -126,12 +127,15 @@ class EventDetector:
         knowledge: KnowledgePack,
         units: Units,
         clock: Callable[[], float] = time.monotonic,
+        *,
+        region_names: Mapping[str, str] = STATE_NAMES,
     ) -> None:
         self.projection = projection
         self.places = places
         self.knowledge = knowledge
         self.units = units
         self.clock = clock
+        self.region_names = region_names
         self.previous = Snapshot()
         self.state: str | None = None
         self._candidate: str | None = None
@@ -227,8 +231,8 @@ class EventDetector:
         previous, self.state = self.state, place.state
         if previous is None:
             return []
-        origin = STATE_NAMES.get(previous, previous)
-        target = STATE_NAMES.get(place.state, place.state)
+        origin = self.region_names.get(previous, previous)
+        target = self.region_names.get(place.state, place.state)
         return [
             self._event(
                 "entered_state",
@@ -273,13 +277,15 @@ class EventDetector:
         return events
 
     def _town(self, place: Place | None) -> list[GameEvent]:
-        if place is None or place.distance_km > 3 or place.land_km2 < 20:
+        if place is None or place.distance_km > 3:
+            return []
+        if place.land_km2 < 20 and place.population < TOWN_MIN_POPULATION:
             return []
         key = (place.name, place.state)
         if key in self._towns:
             return []
         self._towns.add(key)
-        state = STATE_NAMES.get(place.state, place.state)
+        state = self.region_names.get(place.state, place.state)
         return [
             self._event(
                 "passing_town",

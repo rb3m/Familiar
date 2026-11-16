@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from familiar_scs.events import EventDetector
 from familiar_scs.knowledge import KnowledgePack
-from familiar_scs.places import Place, PlaceIndex
+from familiar_scs.places import COUNTRY_NAMES, Place, PlaceIndex
 from familiar_scs.telemetry import Snapshot
 from familiar_scs.units import Units
 
@@ -170,6 +170,28 @@ def test_passing_town_session():
     small = PlaceIndex(places=(Place("Small", "WY", 40, -105, 19),))
     detector = EventDetector(lambda x, z: (x, z), small, KnowledgePack(), Units())
     assert "passing_town" not in kinds(detector.feed(near))
+
+
+@pytest.mark.parametrize(
+    "population,distance,expected",
+    [(19999, 0, False), (20000, 0, True), (20000, 3, True), (20000, 3.01, False)],
+)
+def test_passing_european_town(population, distance, expected):
+    detector = EventDetector(
+        lambda x, z: (x, z),
+        PlaceIndex(places=()),
+        KnowledgePack(),
+        Units("metric", "ets2"),
+        region_names=COUNTRY_NAMES,
+    )
+    place = Place("Town", "DE", 50, 10, distance_km=distance, population=population)
+    events = detector._town(place)
+    assert bool(events) is expected
+    if expected:
+        assert events[0].kind == "passing_town"
+        assert events[0].data["summary"] == "Passing Town, Germany."
+        assert events[0].data["state"] == "Germany"
+        assert detector._town(place) == []
 
 
 def test_rest_cycle(detector):
