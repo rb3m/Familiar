@@ -15,6 +15,12 @@ the GUI and overridable per persona. Each language maps the level to its own reg
 Japanese plain form vs です/ます vs 敬語 and honorifics (さん, 様), Spanish tú vs usted, German
 du vs Sie. English mostly changes tone. Lands with or before the Japanese practice mode (M5).
 
+Nice to have: **the companion as DJ.** Whoever rides shotgun runs the music. A `familiar.music`
+plugin group controls the user's player (Linux: MPRIS, e.g. Spotify, via D-Bus; macOS: Music
+app) for skip, volume, pause and "something calmer" requests, and the in-game radio through key
+presses once M5 hands exist. Persona-flavoured picks matched to the drive (night, mountain
+pass, tight deadline) and the occasional comment on the current song.
+
 Later options: Gemini Live speech-to-speech `Conversation` backend, local backends (whisper.cpp
 Vulkan, Kokoro, Ollama), Mac desk assistant / note taker to an Obsidian vault, standard SCS telemetry
 plugin for users without the TruckSim GPS port.
