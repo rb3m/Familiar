@@ -9,9 +9,9 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Milestone: **M2 ATS** built and replay-tested; **GUI launcher** (`familiar gui`, menu icon) built and live-tested 2026-11-15. Neither driven in-game yet.
-- Next task: live ATS drive from the GUI; confirm telemetry unit/heading assumptions (`packages/familiar-scs/src/familiar_scs/telemetry.py`) and HUD units; tune Director cooldowns from transcripts.
-- Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. Local config reads `GEMINI_FREE_KEY`. GUI sessions need the evdev (HOTAS) push-to-talk.
+- Milestone: **M2 ATS**: first live drive from the GUI 2026-11-15; speech used miles correctly. Core and game packs split into two packages (ADR 0004).
+- Next task: fix barge-in bug: after the user talks over a reply, audio stays silent while text replies continue (transcript of 2026-11-16 00:47 UTC). Then confirm heading, tune Director cooldowns, check ETS2 km.
+- Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk.
 
 ## Rules
 - Python 3.12 via uv: `uv sync --all-packages`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
@@ -23,6 +23,7 @@ API tier) is the first backend; others plug in via entry points.
 - One ADR per real decision in `docs/decisions/NNNN-slug.md`; ordinary "why" goes in commit messages.
 
 ## Index
+- `README.md`: user-facing overview and install. Keep it in step with features.
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
 - `docs/plugins.md`: how to add a backend, command, or game pack. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.

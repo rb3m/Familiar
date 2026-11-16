@@ -6,8 +6,8 @@ Read the section you need; ADR 0001 records why it is shaped this way.
 ## Installation
 
 For development, run `uv sync --all-packages` from the workspace root, then `uv run familiar gui`.
-Users can install the voice companion with `pip install familiar`; add ATS/ETS2 support with
-`pip install familiar familiar-scs`. Core works without any installed game pack.
+Users install the core straight from GitHub (not on PyPI yet) and add game packs the same way;
+the core works without any game pack. The commands are in `README.md`.
 
 ## Overview
 

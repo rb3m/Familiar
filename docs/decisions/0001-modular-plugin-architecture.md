@@ -6,8 +6,8 @@
 ## Context
 
 Familiar must run with different LLM, speech and game backends, on Linux and macOS, for the
-Commander and for other people with other accounts. The starting brief is the Vault note
-`SoftwareDevelopment/20261115-0215 AI Voice Copilot and Game Telemetry Bridge Architecture.md`.
+Commander and for other people with other accounts. The starting brief was a private design
+note, "AI Voice Copilot and Game Telemetry Bridge Architecture".
 
 ## Options
 
