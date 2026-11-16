@@ -3,6 +3,7 @@ name = "familiar-scs"
 version = "0.1.0"
 description = "ATS and ETS2 game pack for Familiar."
 requires-python = ">=3.12,<3.13"
+license = "MIT"
 dependencies = ["familiar>=0.1.0,<1.0.0"]
 
 [tool.uv.sources]

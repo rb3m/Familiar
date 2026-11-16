@@ -88,3 +88,7 @@ uv run ruff check . && uv run ruff format --check .
 
 Place data in the SCS pack comes from the US Census Gazetteer (public domain); landmark facts
 were checked against Wikipedia articles.
+
+## License
+
+MIT, see `LICENSE`.
