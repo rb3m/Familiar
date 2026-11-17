@@ -17,13 +17,13 @@ from familiar.interfaces import (
     WatchSpec,
 )
 
-from .actions import ARGUMENTS, STATE_FIELDS, action_specs
-from .bindings import ACTION_MIXES, GAME_NAMES, load_bindings
+from .actions import action_arguments, action_mixes, action_specs, load_catalogue
+from .bindings import GAME_NAMES, BindingSource
 from .events import EventDetector
 from .geo import compass_name, day_period, sun_elevation, true_heading
 from .knowledge import KnowledgePack
-from .places import REGION_NAMES, Place, PlaceIndex, _packaged_places
-from .projection import PROJECTIONS
+from .places import Place, PlaceIndex, _packaged_places, load_regions
+from .projection import projection_for_game
 from .telemetry import (
     DEFAULT_URL,
     HttpTelemetry,
@@ -48,18 +48,21 @@ class ScsAdapter:
     def __init__(self, settings: dict) -> None:
         default_units = {"ats": "imperial", "ets2": "metric"}[self.game]
         self.units = Units(settings.get("units", default_units), self.game)
-        self.projection = PROJECTIONS[self.game]
-        self.region_names = REGION_NAMES[self.game]
+        self.projection = projection_for_game(self.game)
+        self.region_names = load_regions()[self.game]
         self.places = self._place_index()
         self.knowledge = KnowledgePack.for_game(self.game, settings.get("knowledge_paths"))
         self.detector = EventDetector(
             self.projection, self.places, self.knowledge, self.units, region_names=self.region_names
         )
-        self.bindings = load_bindings(self.game, settings)
+        self._catalogue = load_catalogue()
+        self._mixes = action_mixes(self._catalogue)
+        self._binding_source = BindingSource(self.game, settings, self._mixes)
+        self.bindings = self._binding_source.table
         self._keyboard: Keyboard | None = None
-        self._hold_s = {"horn": 0.6, "air_horn": 0.6}
+        self._hold_s = {name: entry.get("hold_s", 0.08) for name, entry in self._catalogue.items()}
         for action, value in settings.get("hold_s", {}).items():
-            if action not in ACTION_MIXES:
+            if action not in self._mixes:
                 raise ConfigError(f"Unknown SCS hold_s action: {action}")
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ConfigError(f"hold_s.{action} must be positive and finite")
@@ -80,7 +83,7 @@ class ScsAdapter:
         self._keyboard = keyboard
 
     def actions(self) -> dict[str, ActionSpec]:
-        return action_specs()
+        return action_specs(self._catalogue)
 
     def action_context(self) -> str:
         s = self.latest
@@ -101,6 +104,7 @@ class ScsAdapter:
         return repr(identity) if len(identity) > 1 else identity[0]
 
     def _action_guard(self, name: str, mix: str) -> str | None:
+        self.bindings = self._binding_source.refresh()
         if self._keyboard is None:
             return "No keyboard attached"
         if not self.latest.connected:
@@ -123,51 +127,45 @@ class ScsAdapter:
             await asyncio.sleep(READBACK_STEP_S)
 
     async def perform(self, name: str, arguments: dict) -> dict:
-        if name not in ACTION_MIXES:
+        if name not in self._mixes:
             return {"status": "error", "detail": f"Unknown SCS action: {name}"}
-        expected = ARGUMENTS.get(name)
+        expected = action_arguments(self._catalogue[name])
         if expected:
             argument, choices = expected
             if set(arguments) != {argument} or arguments[argument] not in choices:
                 return {"status": "error", "detail": f"{argument} must be one of {choices}"}
         if not expected and arguments:
             return {"status": "error", "detail": f"{name} takes no arguments"}
-        mix = ACTION_MIXES[name]
+        mix = self._mixes[name]
         if isinstance(mix, dict):
             mix = mix[arguments[expected[0]]]
         reason = self._action_guard(name, mix)
         if reason:
             return {"status": "unavailable", "detail": reason}
-        field = STATE_FIELDS.get(name)
-        desired = arguments.get("state") == "on"
-        if field and getattr(self.latest, field) == desired:
-            return {"status": "already", "detail": f"{name} is already {arguments['state']}"}
+        field = self._catalogue[name].get("state_field")
+        desired = bool(expected and arguments.get(expected[0]) == "on")
+        if field and expected and getattr(self.latest, field) == desired:
+            return {"status": "already", "detail": f"{name} is already {arguments[expected[0]]}"}
         await self._keyboard.tap(self.bindings[mix], hold_s=self._hold_s.get(name, 0.08))
-        if field or name == "wipers":
-            await self._await_state(field, desired)
+        if field:
+            await self._await_state(field if expected else None, desired)
             reason = self._action_guard(name, mix)
             if reason:
                 return {"status": "unknown", "detail": f"Key pressed; {reason}"}
-            if name == "wipers":
+            if not expected:
                 return {
                     "status": "done",
-                    "detail": "Wipers cycled once",
-                    "wipers_on": self.latest.wipers_on,
+                    "detail": f"{name.capitalize()} cycled once",
+                    field: getattr(self.latest, field),
                 }
             if getattr(self.latest, field) == desired:
-                return {"status": "done", "detail": f"{name} is now {arguments['state']}"}
+                return {"status": "done", "detail": f"{name} is now {arguments[expected[0]]}"}
             return {"status": "unknown", "detail": f"Key pressed; {name} state did not change"}
-        toggles = {
-            "light_cycle",
-            "high_beams",
-            "beacon",
-            "hazards",
-            "blinker",
-            "lift_axle",
-            "trailer_attach",
-            "radio",
-        }
-        detail = "toggled; state is not observable" if name in toggles else "key pressed"
+        detail = (
+            "toggled; state is not observable"
+            if self._catalogue[name].get("toggle", False)
+            else "key pressed"
+        )
         return {"status": "done", "detail": f"{name}: {detail}"}
 
     def _place_index(self) -> PlaceIndex:

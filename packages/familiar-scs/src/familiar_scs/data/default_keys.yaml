@@ -1,0 +1,24 @@
+# SCS default keyboard layout; radio power is unbound.
+# Override: ~/.config/familiar/data/familiar_scs/default_keys.yaml
+# Write only keys to change; FAMILIAR_DATA_DIR overrides the data root.
+light: l
+hblight: k
+beacon: o
+flasher4way: f
+lighthorn: j
+horn: h
+airhorn: n
+lblinker: leftbrace
+rblinker: rightbrace
+wipers: p
+engine: e
+parkingbrake: space
+cruiectrl: c
+retarderup: semicolon
+retarderdown: apostrophe
+liftaxle: u
+attach: t
+radionext: pagedown
+radioprev: pageup
+quicksave: scrolllock
+screenshot: f10

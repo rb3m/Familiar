@@ -10,106 +10,24 @@ from typing import TextIO
 import numpy as np
 from familiar.interfaces import ConfigError
 
+from .data_files import mapping_data, require, string_mapping
 from .geo import EARTH_RADIUS_KM
 
-STATE_NAMES = dict(
-    AL="Alabama",
-    AZ="Arizona",
-    AR="Arkansas",
-    CA="California",
-    CO="Colorado",
-    CT="Connecticut",
-    DE="Delaware",
-    FL="Florida",
-    GA="Georgia",
-    ID="Idaho",
-    IL="Illinois",
-    IN="Indiana",
-    IA="Iowa",
-    KS="Kansas",
-    KY="Kentucky",
-    LA="Louisiana",
-    ME="Maine",
-    MD="Maryland",
-    MA="Massachusetts",
-    MI="Michigan",
-    MN="Minnesota",
-    MS="Mississippi",
-    MO="Missouri",
-    MT="Montana",
-    NE="Nebraska",
-    NV="Nevada",
-    NH="New Hampshire",
-    NJ="New Jersey",
-    NM="New Mexico",
-    NY="New York",
-    NC="North Carolina",
-    ND="North Dakota",
-    OH="Ohio",
-    OK="Oklahoma",
-    OR="Oregon",
-    PA="Pennsylvania",
-    RI="Rhode Island",
-    SC="South Carolina",
-    SD="South Dakota",
-    TN="Tennessee",
-    TX="Texas",
-    UT="Utah",
-    VT="Vermont",
-    VA="Virginia",
-    WA="Washington",
-    WV="West Virginia",
-    WI="Wisconsin",
-    WY="Wyoming",
-    DC="District of Columbia",
-)
+
+def load_regions() -> dict[str, dict[str, str]]:
+    data, source = mapping_data("regions")
+    require(set(data) == {"ats", "ets2"}, source, "expected ats and ets2 regions")
+    require(
+        all(string_mapping(regions) for regions in data.values()),
+        source,
+        "regions must map codes to names",
+    )
+    return data
 
 
-COUNTRY_NAMES = dict(
-    AT="Austria",
-    BE="Belgium",
-    BA="Bosnia and Herzegovina",
-    BG="Bulgaria",
-    HR="Croatia",
-    CZ="Czechia",
-    DK="Denmark",
-    EE="Estonia",
-    FI="Finland",
-    FR="France",
-    DE="Germany",
-    GR="Greece",
-    HU="Hungary",
-    IE="Ireland",
-    IT="Italy",
-    LV="Latvia",
-    LT="Lithuania",
-    LU="Luxembourg",
-    MK="North Macedonia",
-    ME="Montenegro",
-    NL="Netherlands",
-    NO="Norway",
-    PL="Poland",
-    PT="Portugal",
-    RO="Romania",
-    RS="Serbia",
-    RU="Russia",
-    SK="Slovakia",
-    SI="Slovenia",
-    ES="Spain",
-    SE="Sweden",
-    CH="Switzerland",
-    TR="Turkey",
-    GB="United Kingdom",
-    AL="Albania",
-    AD="Andorra",
-    LI="Liechtenstein",
-    MC="Monaco",
-    SM="San Marino",
-    VA="Vatican City",
-    MT="Malta",
-    XK="Kosovo",
-)
-REGION_NAMES = {"ats": STATE_NAMES, "ets2": COUNTRY_NAMES}
+REGION_NAMES = load_regions()
+STATE_NAMES = REGION_NAMES["ats"]
+COUNTRY_NAMES = REGION_NAMES["ets2"]
 
 
 @dataclass(frozen=True)

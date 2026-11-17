@@ -1,0 +1,33 @@
+# SCS Lambert projection calibration and ETS2 UK sector rule.
+# Override: ~/.config/familiar/data/familiar_scs/projections.yaml
+# Write only keys to change; FAMILIAR_DATA_DIR overrides the data root.
+ats:
+  scale_x: 0.000176689948
+  scale_z: -0.00017706234
+  parallels:
+  - 33
+  - 45
+  - 39
+  - -96
+  offset_x: 0
+  offset_z: 0
+ets2:
+  scale_x: 0.0001729241463
+  scale_z: -0.000171570875
+  parallels:
+  - 37
+  - 65
+  - 50
+  - 15
+  offset_x: 16660
+  offset_z: 4150
+  uk:
+    sector_size: 4000
+    max_sector_x: -8
+    max_sector_z: -2
+    excluded_sector:
+    - -8
+    - -2
+    offset_x: 15550
+    offset_z: 2750
+    scale: 0.75

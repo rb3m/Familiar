@@ -202,3 +202,107 @@ class Landmarks:
     async def run(self, args, config) -> int:
         await _landmarks(args, config)
         return 0
+
+
+def _unused_controls(bindings: dict, mixes: dict) -> dict:
+    from .data_files import mapping_data, require, text
+
+    ignored, source = mapping_data("ignored_controls")
+    require(set(ignored) == {"prefixes", "controls"}, source, "expected prefixes and controls")
+    require(
+        all(isinstance(v, list) and all(text(item) for item in v) for v in ignored.values()),
+        source,
+        "ignore lists must contain strings",
+    )
+    used = {
+        mix
+        for controls in mixes.values()
+        for mix in (controls.values() if isinstance(controls, dict) else (controls,))
+    }
+    return {
+        mix: chord
+        for mix, chord in sorted(bindings.items())
+        if mix not in used
+        and mix not in ignored["controls"]
+        and not mix.startswith(tuple(ignored["prefixes"]))
+    }
+
+
+def _bindings(args: argparse.Namespace, config) -> None:
+    from familiar.interfaces import read_user_data, save_user_data, user_data_path
+
+    from .actions import action_mixes, load_catalogue
+    from .bindings import bindings_for_path, discover_controls, read_controls
+    from .data_files import require
+
+    settings = dict(config.games.get(args.game, {}))
+    if args.profile is not None:
+        settings["profile"] = args.profile
+    everything = load_catalogue(include_disabled=True)
+    catalogue = {name: entry for name, entry in everything.items() if entry.get("enabled", True)}
+    mixes = action_mixes(catalogue)
+    path = discover_controls(args.game, settings.get("profile"))
+    bindings = bindings_for_path(path, settings, mixes)
+    print(f"Controls file: {path or '(none; packaged defaults)'}")
+    for name, controls in mixes.items():
+        variants = controls.items() if isinstance(controls, dict) else [(None, controls)]
+        for variant, mix in variants:
+            label = f"{name} ({variant})" if variant else name
+            chord = "+".join(bindings[mix]) if mix in bindings else "unbound (joystick-only?)"
+            print(f"{label}: {chord}")
+    # Suggestions describe actual profile bindings, rather than settings overrides.
+    drafts_pending = sorted(set(everything) - set(catalogue))
+    if drafts_pending:
+        print("disabled (set enabled: true after review): " + ", ".join(drafts_pending))
+    unused = _unused_controls(read_controls(path) if path else {}, action_mixes(everything))
+    print("bound in your profile but not used by Familiar:")
+    for mix, chord in unused.items():
+        print(f"  {mix}: {'+'.join(chord)}")
+    if not unused:
+        print("  (none)")
+    if not args.suggest:
+        return
+    existing = read_user_data("familiar_scs", "actions")
+    require(
+        existing is None or isinstance(existing, dict),
+        str(user_data_path("familiar_scs", "actions")),
+        "expected action mapping",
+    )
+    drafts = dict(existing or {})
+    for mix in unused:
+        # Preserve every user entry, including explicit null deletions.
+        if mix in everything or mix in drafts:
+            continue
+        drafts[mix] = {
+            "control": mix,
+            "description": "TODO: describe",
+            "risky": True,
+            "enabled": False,
+        }
+    save_user_data("familiar_scs", "actions", drafts)
+    print(f"Draft actions written to {user_data_path('familiar_scs', 'actions')}")
+    print(
+        "Drafts are disabled: write a description, decide risky, set enabled: true, "
+        "then restart Familiar to load them."
+    )
+
+
+class Scs:
+    name = "scs"
+    api_version = PLUGIN_API_VERSION
+    help = "Inspect SCS profile bindings"
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        actions = parser.add_subparsers(dest="scs_action", required=True)
+        bindings = actions.add_parser(
+            "bindings", help="Rescan keyboard bindings and suggest actions"
+        )
+        bindings.add_argument("game", choices=["ats", "ets2"])
+        bindings.add_argument(
+            "--profile", metavar="P", help="Profile name, directory or controls file"
+        )
+        bindings.add_argument("--suggest", action="store_true")
+
+    async def run(self, args, config) -> int:
+        _bindings(args, config)
+        return 0

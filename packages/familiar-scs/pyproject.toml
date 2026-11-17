@@ -17,6 +17,7 @@ ets2 = "familiar_scs.adapter:Ets2Adapter"
 watch = "familiar_scs.commands:Watch"
 telemetry-record = "familiar_scs.commands:TelemetryRecord"
 landmarks = "familiar_scs.commands:Landmarks"
+scs = "familiar_scs.commands:Scs"
 
 [build-system]
 requires = ["hatchling"]

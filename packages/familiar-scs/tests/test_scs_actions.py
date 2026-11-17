@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 from familiar.interfaces import Actuator, ConfigError, KeyboardUser
+from familiar_scs.actions import action_mixes, load_catalogue
 from familiar_scs.adapter import AtsAdapter, Ets2Adapter
 from familiar_scs.bindings import (
-    ACTION_MIXES,
     DEFAULT_BINDINGS,
     GAME_NAMES,
     discover_controls,
@@ -189,7 +189,7 @@ async def test_protocols(monkeypatch, tmp_path, cls):
     try:
         assert isinstance(instance, Actuator)
         assert isinstance(instance, KeyboardUser)
-        assert set(instance.actions()) == set(ACTION_MIXES)
+        assert set(instance.actions()) == set(action_mixes(load_catalogue()))
     finally:
         await instance.aclose()
 
@@ -282,7 +282,7 @@ async def test_chords_and_holds(adapter):
     "name,args,mix",
     [
         (name, {}, mix)
-        for name, mix in ACTION_MIXES.items()
+        for name, mix in action_mixes(load_catalogue()).items()
         if isinstance(mix, str) and name not in {"engine", "parking_brake", "cruise_control"}
     ]
     + [

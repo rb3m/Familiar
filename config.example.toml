@@ -70,13 +70,15 @@ knowledge_paths = []      # curated landmark/lore packs
 
 # Hands: newest controls file in steam_profiles/profiles is selected automatically.
 # With no controls file, use default SCS keys. Existing profiles never inherit defaults.
-# profile = "PROFILE_FOLDER"   # or an absolute profile directory
+# Bindings rescan before presses; inspect: familiar scs bindings ats --suggest
+# Catalogue/defaults: ~/.config/familiar/data/familiar_scs/*.yaml
+# profile = "PROFILE_FOLDER"   # or a profile directory / controls file
 # [games.ats.keys]             # lowercase evdev names; + joins a chord
 # beacon = "leftshift+o"
 # radio = "o"                 # bind radio power in-game too; unbound by default
 # blinker_left = "leftbrace"   # variant overrides: blinker_left/right,
 # retarder_up = "semicolon"    # retarder_up/down, radio_station_next/previous
-# [games.ats.hold_s]           # seconds; default 0.08, horn/air_horn 0.6
+# [games.ats.hold_s]           # seconds; overrides actions.yaml holds (default 0.08)
 # horn = 0.6
 # engine = 0.08
 

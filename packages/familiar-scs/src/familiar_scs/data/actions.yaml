@@ -1,0 +1,106 @@
+# SCS action catalogue, shared by ATS and ETS2.
+# Override: ~/.config/familiar/data/familiar_scs/actions.yaml
+# Write only keys to change; FAMILIAR_DATA_DIR overrides the data root.
+light_cycle:
+  description: Cycle exterior lights once (state is not observable).
+  control: light
+  toggle: true
+high_beams:
+  description: Toggle high beams.
+  control: hblight
+  toggle: true
+beacon:
+  description: Toggle the beacon.
+  control: beacon
+  toggle: true
+hazards:
+  description: Toggle hazard warning lights.
+  control: flasher4way
+  toggle: true
+flash_headlights:
+  description: Flash the headlights.
+  control: lighthorn
+horn:
+  description: Sound the horn briefly.
+  control: horn
+  hold_s: 0.6
+air_horn:
+  description: Sound the air horn briefly.
+  control: airhorn
+  hold_s: 0.6
+blinker:
+  description: Toggle the left or right turn signal.
+  variants:
+    argument: side
+    controls:
+      left: lblinker
+      right: rblinker
+  toggle: true
+wipers:
+  description: Cycle wipers once and report whether they are running.
+  control: wipers
+  state_field: wipers_on
+engine:
+  description: Set engine on or off; switching off requires confirmation.
+  control: engine
+  state:
+    argument: state
+    choices:
+    - 'on'
+    - 'off'
+  state_field: engine_on
+  risky_when:
+    state: 'off'
+parking_brake:
+  description: Set parking brake on or off; applying it requires confirmation.
+  control: parkingbrake
+  state:
+    argument: state
+    choices:
+    - 'on'
+    - 'off'
+  state_field: park_brake_on
+  risky_when:
+    state: 'on'
+cruise_control:
+  description: Set cruise control on or off.
+  control: cruiectrl
+  state:
+    argument: state
+    choices:
+    - 'on'
+    - 'off'
+  state_field: cruise_control_on
+retarder:
+  description: Increase or decrease retarder by one step.
+  variants:
+    argument: direction
+    controls:
+      up: retarderup
+      down: retarderdown
+lift_axle:
+  description: Toggle the truck lift axle.
+  control: liftaxle
+  toggle: true
+trailer_attach:
+  description: Toggle trailer coupling; this can detach the trailer.
+  control: attach
+  toggle: true
+  risky: true
+radio:
+  description: Toggle radio power without opening the radio screen.
+  control: radiotoggle
+  toggle: true
+radio_station:
+  description: Select the next or previous radio station.
+  variants:
+    argument: direction
+    controls:
+      next: radionext
+      previous: radioprev
+quick_save:
+  description: Quick-save the game.
+  control: quicksave
+screenshot:
+  description: Take a game screenshot.
+  control: screenshot

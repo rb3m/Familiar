@@ -224,3 +224,18 @@ are errors. Quote string keys such as `"yes"` and `"no"` to avoid YAML boolean c
 `user_data_path` locates overrides and `save_user_data` writes them atomically. Loads are
 uncached: call `load_data` again to refresh; existing backend instances and action keepers
 pick up defaults when recreated.
+
+
+SCS ships its shared ATS/ETS2 action catalogue in `actions.yaml`, the default keyboard
+layout in `default_keys.yaml`, key/modifier translations in `key_names.yaml`, projection
+calibration in `projections.yaml`, state/country names in `regions.yaml`, and suggestion
+exclusions in `ignored_controls.yaml`. Override these under
+`~/.config/familiar/data/familiar_scs/` (or `$FAMILIAR_DATA_DIR/familiar_scs/`); restart the
+adapter to reload data overrides. Profile bindings refresh automatically before key presses
+when the discovered controls file changes, appears or disappears; a failed parse retains the
+previous table and logs a warning. Settings `keys` overrides still apply. Inspect with
+`familiar scs bindings ats|ets2 [--profile P] [--suggest]`; `P` accepts a profile name,
+directory or controls file. `--suggest` merges risky draft actions for unused keyboard-bound
+controls into the user's `actions.yaml`, preserving existing entries. Review descriptions,
+risk and state behavior before restarting Familiar to use drafts. Missing profile controls
+remain unbound; only sessions without a controls file use packaged default keys.

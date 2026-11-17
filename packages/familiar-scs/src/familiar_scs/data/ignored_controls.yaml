@@ -1,0 +1,66 @@
+# UI, menu, debug, camera and console controls excluded from binding suggestions.
+# Override: ~/.config/familiar/data/familiar_scs/ignored_controls.yaml
+# Write only keys to change; FAMILIAR_DATA_DIR overrides the data root.
+prefixes:
+- dbg
+- cam
+- mve_
+- ui
+- menu
+- console
+- quit
+- copy
+- paste
+- select
+- prv_
+- nxt_
+- any_
+- cstm_
+- page_
+- delete_
+- line_
+- photo
+- album_
+- replay
+- repcam
+- bugrep
+- grading
+- demo_
+- quicksel
+- assistact
+- adj_
+- eye
+- head
+- look
+- map
+- chat
+- quick_chat
+- name_tags
+- cycl_zoom
+- adv
+- j_tr_
+- wnd
+- sb_
+- dsteer
+- gear
+controls:
+- dforward
+- dbackward
+- mpptt
+- back
+- skip
+- complete
+- cut
+- insert
+- recordonoff
+- teleport
+- pause
+- screenshot
+- adjuster
+- gar_man
+- services
+- profmode
+- imguitgl
+- activate
+- navmap
+- radio

@@ -24,6 +24,7 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   (read from your profile): beacon, hazards, lights, wipers, engine, parking brake, cruise
   control and more. KSP through kRPC: stage, SAS modes, RCS, gear, throttle, time warp. Risky
   actions (engine off, staging, warp, trailer) wait for a spoken "yes". Configure `[hands]`.
+  SCS bindings rescan automatically before presses; inspect them with `familiar scs bindings ats|ets2`.
 - **Trip memory**: remembers earlier places and trip events across personas, answers questions
   about previous visits, and occasionally recalls a distinctive moment when you return.
   Facts stay in a local SQLite database; `[memory]` controls storage and recall frequency.
