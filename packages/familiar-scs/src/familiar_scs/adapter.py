@@ -1,11 +1,24 @@
 """ATS and ETS2 adapters sharing telemetry and event detection."""
 
+import asyncio
+import math
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from time import monotonic
 
-from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ToolSpec, WatchSample, WatchSpec
+from familiar.interfaces import (
+    PLUGIN_API_VERSION,
+    ActionSpec,
+    ConfigError,
+    GameEvent,
+    Keyboard,
+    ToolSpec,
+    WatchSample,
+    WatchSpec,
+)
 
+from .actions import ARGUMENTS, STATE_FIELDS, action_specs
+from .bindings import ACTION_MIXES, GAME_NAMES, load_bindings
 from .events import EventDetector
 from .geo import compass_name, day_period, sun_elevation, true_heading
 from .knowledge import KnowledgePack
@@ -21,6 +34,9 @@ from .telemetry import (
     game_hour,
 )
 from .units import Units, duration_text, rest_text
+
+READBACK_TIMEOUT_S = 2.5
+READBACK_STEP_S = 0.25
 
 
 class ScsAdapter:
@@ -39,6 +55,17 @@ class ScsAdapter:
         self.detector = EventDetector(
             self.projection, self.places, self.knowledge, self.units, region_names=self.region_names
         )
+        self.bindings = load_bindings(self.game, settings)
+        self._keyboard: Keyboard | None = None
+        self._hold_s = {"horn": 0.6, "air_horn": 0.6}
+        for action, value in settings.get("hold_s", {}).items():
+            if action not in ACTION_MIXES:
+                raise ConfigError(f"Unknown SCS hold_s action: {action}")
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ConfigError(f"hold_s.{action} must be positive and finite")
+            if not math.isfinite(value) or value <= 0:
+                raise ConfigError(f"hold_s.{action} must be positive and finite")
+            self._hold_s[action] = value
         self.latest = Snapshot()
         self._watch_timestamp = monotonic()
         self.source: TelemetrySource
@@ -48,6 +75,100 @@ class ScsAdapter:
         self.source = HttpTelemetry(
             settings.get("url", DEFAULT_URL), settings.get("poll_interval_s", 1.0)
         )
+
+    def attach_keyboard(self, keyboard: Keyboard) -> None:
+        self._keyboard = keyboard
+
+    def actions(self) -> dict[str, ActionSpec]:
+        return action_specs()
+
+    def action_context(self) -> str:
+        s = self.latest
+        identity = [GAME_NAMES[self.game]]
+        if s.make or s.model:
+            identity.extend((s.make, s.model))
+        if s.on_job:
+            identity.extend(
+                (
+                    s.source_city,
+                    s.source_company,
+                    s.destination_city,
+                    s.destination_company,
+                    s.cargo,
+                    s.deadline_time,
+                )
+            )
+        return repr(identity) if len(identity) > 1 else identity[0]
+
+    def _action_guard(self, name: str, mix: str) -> str | None:
+        if self._keyboard is None:
+            return "No keyboard attached"
+        if not self.latest.connected:
+            return "Game telemetry is disconnected"
+        if monotonic() - self._watch_timestamp >= 2:
+            return "Game telemetry is stale (sample age must be less than 2 seconds)"
+        if self.latest.paused:
+            return "Game is paused or in menus"
+        if mix not in self.bindings:
+            return f"No keyboard binding for {name} in your profile; it may be joystick-only"
+        return None
+
+    async def _await_state(self, field: str | None, desired: bool) -> None:
+        """Wait for telemetry (polled about once a second) to show the result of a press."""
+        deadline = monotonic() + READBACK_TIMEOUT_S
+        await asyncio.sleep(READBACK_STEP_S)
+        while monotonic() < deadline:
+            if field and getattr(self.latest, field) == desired:
+                return
+            await asyncio.sleep(READBACK_STEP_S)
+
+    async def perform(self, name: str, arguments: dict) -> dict:
+        if name not in ACTION_MIXES:
+            return {"status": "error", "detail": f"Unknown SCS action: {name}"}
+        expected = ARGUMENTS.get(name)
+        if expected:
+            argument, choices = expected
+            if set(arguments) != {argument} or arguments[argument] not in choices:
+                return {"status": "error", "detail": f"{argument} must be one of {choices}"}
+        if not expected and arguments:
+            return {"status": "error", "detail": f"{name} takes no arguments"}
+        mix = ACTION_MIXES[name]
+        if isinstance(mix, dict):
+            mix = mix[arguments[expected[0]]]
+        reason = self._action_guard(name, mix)
+        if reason:
+            return {"status": "unavailable", "detail": reason}
+        field = STATE_FIELDS.get(name)
+        desired = arguments.get("state") == "on"
+        if field and getattr(self.latest, field) == desired:
+            return {"status": "already", "detail": f"{name} is already {arguments['state']}"}
+        await self._keyboard.tap(self.bindings[mix], hold_s=self._hold_s.get(name, 0.08))
+        if field or name == "wipers":
+            await self._await_state(field, desired)
+            reason = self._action_guard(name, mix)
+            if reason:
+                return {"status": "unknown", "detail": f"Key pressed; {reason}"}
+            if name == "wipers":
+                return {
+                    "status": "done",
+                    "detail": "Wipers cycled once",
+                    "wipers_on": self.latest.wipers_on,
+                }
+            if getattr(self.latest, field) == desired:
+                return {"status": "done", "detail": f"{name} is now {arguments['state']}"}
+            return {"status": "unknown", "detail": f"Key pressed; {name} state did not change"}
+        toggles = {
+            "light_cycle",
+            "high_beams",
+            "beacon",
+            "hazards",
+            "blinker",
+            "lift_axle",
+            "trailer_attach",
+            "radio",
+        }
+        detail = "toggled; state is not observable" if name in toggles else "key pressed"
+        return {"status": "done", "detail": f"{name}: {detail}"}
 
     def _place_index(self) -> PlaceIndex:
         filename = {"ats": "us_places.csv", "ets2": "eu_places.csv"}[self.game]

@@ -68,6 +68,25 @@ poll_interval_s = 1.0
 units = "imperial"         # display only; internal telemetry remains SI
 knowledge_paths = []      # curated landmark/lore packs
 
+# Hands: newest controls file in steam_profiles/profiles is selected automatically.
+# With no controls file, use default SCS keys. Existing profiles never inherit defaults.
+# profile = "PROFILE_FOLDER"   # or an absolute profile directory
+# [games.ats.keys]             # lowercase evdev names; + joins a chord
+# beacon = "leftshift+o"
+# radio = "o"                 # bind radio power in-game too; unbound by default
+# blinker_left = "leftbrace"   # variant overrides: blinker_left/right,
+# retarder_up = "semicolon"    # retarder_up/down, radio_station_next/previous
+# [games.ats.hold_s]           # seconds; default 0.08, horn/air_horn 0.6
+# horn = 0.6
+# engine = 0.08
+
+# [games.ets2]
+# profile = "PROFILE_FOLDER"   # or directory; same discovery and defaults as ATS
+# [games.ets2.keys]
+# beacon = "o"
+# [games.ets2.hold_s]
+# air_horn = 0.6
+
 [director]
 enabled = true
 idle_minutes = 12

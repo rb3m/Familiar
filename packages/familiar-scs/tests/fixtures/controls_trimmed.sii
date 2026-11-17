@@ -1,0 +1,17 @@
+SiiNunit
+{
+input_config : invented.profile {
+ config_lines[0]: "mix beacon `joy.b4?0 | keyboard.o?0 | keyboard.b?0 | semantical.beacon?0`"
+ config_lines[1]: "mix prv_ctrl `modifier(shift_only, keyboard.tab?0)`"
+ config_lines[2]: "mix ctrl_test `modifier(ctrl_only, keyboard.key2?0)`"
+ config_lines[3]: "mix alt_test `modifier(alt_only, keyboard.pgdn?0)`"
+ config_lines[4]: "mix plain_test `modifier(no_modifier, keyboard.numenter?0)`"
+ config_lines[5]: "mix combo `keyboard.lalt?0 & keyboard.d?0`"
+ config_lines[6]: "mix joystick `joy.b8?0 | semantical.joystick?0`"
+ config_lines[7]: "mix empty `unbound?0`"
+ config_lines[8]: "mix mystery `keyboard.space_laser?0 | keyboard.x?0`"
+ config_lines[9]: "mix wipers `keyboard.p?0 | joy.pov1_down?0`"
+ config_lines[10]: "mix engine `keyboard.e?0 | semantical.engine?0`"
+ config_lines[11]: "mix radiotoggle `semantical.radiotoggle?0`"
+}
+}
