@@ -60,6 +60,12 @@ class Snapshot:
     liquid_fuel: float | None = None  # whole vessel; the low-fuel warning uses this
     liquid_fuel_max: float | None = None
     stage_delta_v_ms: float | None = None
+    speed_mode: str | None = None  # navball mode: orbit, surface or target
+    navball_speed_ms: float | None = None  # the speed the navball shows in that mode
+    target_name: str | None = None
+    target_kind: str | None = None  # vessel, body or docking_port
+    target_distance_m: float | None = None
+    target_speed_ms: float | None = None  # relative speed
     total_delta_v_ms: float | None = None
     stage_liquid_fuel: float | None = None
     stage_liquid_fuel_max: float | None = None
@@ -170,6 +176,8 @@ def read_snapshot(connection) -> Snapshot:
     stage = values["current_stage"]
     resources = optional(lambda: burning_resources(vessel, stage)) if stage is not None else None
     values.update(delta_v(vessel, stage))
+    values.update(optional(lambda: target_values(sc, vessel, body)) or {})
+    values.update(navball(optional(lambda: vessel.control.speed_mode), values))
     for key, name in STAGE_RESOURCES.items():
         values.update(resource_values(resources, key, name))
     return Snapshot(**values)
@@ -199,6 +207,53 @@ def delta_v(vessel, current_stage: int | None) -> dict:
         "stage_delta_v_ms": burning[0] if burning else None,
         "total_delta_v_ms": sum(dv for _, dv in stages) if stages else None,
     }
+
+
+def _current_target(sc):
+    """Most specific target first, matching what KSP's navball uses."""
+    port = sc.target_docking_port
+    if port is not None:
+        return "docking_port", f"{port.part.vessel.name} docking port", port.part
+    target = sc.target_vessel
+    if target is not None:
+        return "vessel", target.name, target
+    target = sc.target_body
+    if target is not None:
+        return "body", target.name, target
+    return None
+
+
+def _norm(vector) -> float:
+    return math.sqrt(sum(component * component for component in vector))
+
+
+def target_values(sc, vessel, body) -> dict:
+    found = _current_target(sc)
+    if found is None:
+        return {}
+    kind, name, target = found
+    frame = body.non_rotating_reference_frame
+    offset = [a - b for a, b in zip(target.position(frame), vessel.position(frame), strict=True)]
+    relative = [a - b for a, b in zip(target.velocity(frame), vessel.velocity(frame), strict=True)]
+    return {
+        "target_kind": kind,
+        "target_name": name,
+        "target_distance_m": _norm(offset),
+        "target_speed_ms": _norm(relative),
+    }
+
+
+NAVBALL_SPEED = {
+    "orbit": "speed_orbital_ms",
+    "surface": "speed_surface_ms",
+    "target": "target_speed_ms",
+}
+
+
+def navball(mode, values: dict) -> dict:
+    name = enum_name(mode)
+    field = NAVBALL_SPEED.get(name)
+    return {"speed_mode": name, "navball_speed_ms": values.get(field) if field else None}
 
 
 PROPELLANTS = ("LiquidFuel", "Oxidizer", "SolidFuel")

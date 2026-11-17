@@ -554,3 +554,42 @@ async def test_probe_success(monkeypatch, capsys):
     assert "Vessel: Explorer" in output
     assert json.loads(output.splitlines()[-1])["vessel_name"] == "Explorer"
     assert closed
+
+
+def test_navball_speed_follows_mode():
+    from familiar_ksp.telemetry import navball
+
+    values = {"speed_orbital_ms": 2300, "speed_surface_ms": 2100, "target_speed_ms": 4}
+    assert navball(Ns(name="surface"), values) == {
+        "speed_mode": "surface",
+        "navball_speed_ms": 2100,
+    }
+    assert navball(Ns(name="target"), values)["navball_speed_ms"] == 4
+    assert navball(Ns(name="target"), {})["navball_speed_ms"] is None
+    assert navball(None, values) == {"speed_mode": None, "navball_speed_ms": None}
+
+
+def test_target_values_prefers_docking_port():
+    from familiar_ksp.telemetry import target_values
+
+    def body_at(position, velocity, **extra):
+        return Ns(position=lambda frame: position, velocity=lambda frame: velocity, **extra)
+
+    me = body_at((0, 0, 0), (0, 0, 0))
+    station = body_at((30, 40, 0), (3, 4, 0), name="Station")
+    port = Ns(part=body_at((6, 8, 0), (0, 0, 0), vessel=Ns(name="Station")))
+    body = Ns(non_rotating_reference_frame="nrf")
+    sc = Ns(target_docking_port=None, target_vessel=station, target_body=None)
+    assert target_values(sc, me, body) == {
+        "target_kind": "vessel",
+        "target_name": "Station",
+        "target_distance_m": 50,
+        "target_speed_ms": 5,
+    }
+    sc.target_docking_port = port
+    result = target_values(sc, me, body)
+    assert result["target_kind"] == "docking_port" and result["target_distance_m"] == 10
+    assert (
+        target_values(Ns(target_docking_port=None, target_vessel=None, target_body=None), me, body)
+        == {}
+    )

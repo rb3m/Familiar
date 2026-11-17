@@ -86,6 +86,7 @@ class KspAdapter:
                 else f"Speed: surface {number(s.speed_surface_ms, ' m/s')}"
             ]
         return [
+            *self._navball_lines(),
             f"Speed: orbital {number(s.speed_orbital_ms, ' m/s')}; "
             f"surface {number(s.speed_surface_ms, ' m/s')}; "
             f"vertical {number(s.vertical_speed_ms, ' m/s')}",
@@ -93,6 +94,21 @@ class KspAdapter:
             f"Pe: {distance(s.periapsis_alt_m)} in {duration(s.time_to_periapsis_s)}",
             f"Inclination: {number(s.inclination_deg, ' degrees')}",
         ]
+
+    def _navball_lines(self) -> list[str]:
+        s = self.latest
+        lines = []
+        if s.speed_mode:
+            lines.append(
+                f"Navball: {s.speed_mode} mode, {number(s.navball_speed_ms, ' m/s')} "
+                "(the speed the player is watching)"
+            )
+        if s.target_name:
+            lines.append(
+                f"Target: {s.target_name} ({s.target_kind}), {distance(s.target_distance_m)} away, "
+                f"relative speed {number(s.target_speed_ms, ' m/s')}"
+            )
+        return lines
 
     def whereabouts(self) -> dict | None:
         s = self.latest
