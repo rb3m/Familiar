@@ -7,7 +7,7 @@
 | **M2 ATS** (done 2026-11-15) | ATS adapter (TruckSim GPS server :31377), Director, first knowledge pack | Companion mentions a POI and low fuel during a real drive without spamming |
 | **M3 Memory** (in progress) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
 | **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP live 2026-11-17, ADR 0006: flight events, navball/target speed, quotes; voice-set alerts ADR 0007) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM), Minecraft (see below) | Each has an adapter + knowledge pack |
-| **M5 Hands & languages** (LLM tool calling exists since ADR 0007) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync, Japanese practice mode | Voice command toggles something in-game |
+| **M5 Hands & languages** (LLM tool calling exists since ADR 0007) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync, Japanese practice mode with vault tools and browser audio (see below) | Voice command toggles something in-game; a spoken Japanese lesson over Tailscale |
 
 Planned: **how the companion addresses the user.** A name or nickname the user picks (e.g.
 "Skipper"), plus a formality level (casual, polite, formal) set globally in `config.toml` /
@@ -20,6 +20,27 @@ plugin group controls the user's player (Linux: MPRIS, e.g. Spotify, via D-Bus; 
 app) for skip, volume, pause and "something calmer" requests, and the in-game radio through key
 presses once M5 hands exist. Persona-flavoured picks matched to the drive (night, mountain
 pass, tight deadline) and the occasional comment on the current song.
+
+Planned (M5): **Japanese practice mode with vault access and browser audio.** Megumin (Ayaka's
+voice) as a spoken Japanese tutor, used from any device over Tailscale. SwiftBlade (the
+Mac Mini chat front end for CLI agents) was considered and rejected for this: every turn runs a
+CLI agent, which is too slow for speech, and its voice stack would duplicate Familiar's in Swift.
+SwiftBlade stays the text workbench, and both share the vault. Steps:
+1. Vault tools (LLM tool calls, limited to the vault folder): `search_vault`, `read_note`,
+   `write_note`. The tutor uses the grammar guides and song analyses and saves vocabulary or
+   "mistakes from today" notes. Decide the write scope (new notes in a practice folder only,
+   or edits) before building.
+2. Practice mode: a lesson prompt (correct gently, then carry on in character), politeness
+   levels (see the addressing item above), and learning memory on top of M3 (words practised,
+   recurring mistakes).
+3. Browser audio in the GUI: push-to-talk, mic capture and playback in the page, over the
+   Tailscale HTTPS name (browsers require a secure page for the mic). Architecture decision:
+   get agy/codex consensus and an ADR first. Decide where it runs: this PC (vault local) or the
+   Mac Mini (always on).
+4. Pronunciation, test before building: speech-to-text tidies speech into correct words, so
+   grammar and word-choice correction works but pitch accent and vowel length mostly don't
+   survive. Try Gemini Live native audio and Azure Pronunciation Assessment (ja-JP) on real
+   recordings first.
 
 Planned (M4, later): **Minecraft (Java).** Mod loaders (Forge, NeoForge, Fabric) don't
 publish game data, so this needs our own small read-only client mod. The user plays 26.3 in
