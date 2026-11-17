@@ -127,9 +127,5 @@ The KSP kRPC mod must auto-start its server and auto-accept clients. `[games.ksp
 Replays accept plain snapshot dictionaries or `{ts, snapshot}` records, with timestamps in seconds.
 Resources use KSP resource units; distances and speeds use SI units.
 
-A pack may attach `event.data["flavor"]`, a list of quote candidates with string fields
-`id`, `text`, `speaker`, `context`, and `attribution` (`verified` or `attributed`).
-IDs are stable slugs unique within the game. Packs attach candidates only; core owns selection
-and recording of use. KSP's packaged `knowledge/quotes.yaml` is intentionally empty. Its loader
-also requires `source_url` and validated event-kind `triggers`, neither of which is attached
-to events. Supply curated real quotes with mission/year context and source attribution.
+KSP quotes live in `knowledge/quotes.yaml` (curated; each entry also carries `source_url` and
+event-kind `triggers`, which the loader validates and does not attach to events).
