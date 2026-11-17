@@ -7,7 +7,7 @@
 | **M2 ATS** (done 2026-11-15) | ATS adapter (TruckSim GPS server :31377), Director, first knowledge pack | Companion mentions a POI and low fuel during a real drive without spamming |
 | **M3 Memory** (in progress) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
 | **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP live 2026-11-17, ADR 0006: flight events, navball/target speed, quotes; voice-set alerts ADR 0007) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM), Minecraft (see below) | Each has an adapter + knowledge pack |
-| **M5 Hands** (in progress, ADR 0009) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync (both ways, see below) | Voice command toggles something in-game |
+| **M5 Hands** (built 2026-11-17, ADR 0009; live check pending) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync (both ways, see below) | Voice command toggles something in-game |
 
 Planned: **how the companion addresses the user.** A name or nickname the user picks (e.g.
 "Skipper"), plus a formality level (casual, polite, formal) set globally in `config.toml` /

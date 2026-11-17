@@ -20,6 +20,10 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
 - **Voice-set telemetry alerts** in KSP, ATS and ETS2: ask “tell me at 4,000 metres”,
   “warn me when we're 50 km out” or “tell me when fuel drops under 25%”. Alerts fire once,
   last for the session and can be listed or cancelled by voice. Configure `[alerts]` in TOML.
+- **Hands** (Linux): ask Mira to act in game. ATS/ETS2 by pressing your own key bindings
+  (read from your profile): beacon, hazards, lights, wipers, engine, parking brake, cruise
+  control and more. KSP through kRPC: stage, SAS modes, RCS, gear, throttle, time warp. Risky
+  actions (engine off, staging, warp, trailer) wait for a spoken "yes". Configure `[hands]`.
 - **Trip memory**: remembers earlier places and trip events across personas, answers questions
   about previous visits, and occasionally recalls a distinctive moment when you return.
   Facts stay in a local SQLite database; `[memory]` controls storage and recall frequency.
