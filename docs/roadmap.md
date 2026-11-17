@@ -21,6 +21,13 @@ app) for skip, volume, pause and "something calmer" requests, and the in-game ra
 presses once M5 hands exist. Persona-flavoured picks matched to the drive (night, mountain
 pass, tight deadline) and the occasional comment on the current song.
 
+Planned: **add new languages.** Only en/es/ja are offered today. The list is hard-coded in
+`persona.py` (`LANGUAGE_NAMES`), in the GUI (`app.js`) and in the `config.example.toml` comment,
+yet Gemini, ElevenLabs STT/TTS and Gemini TTS already handle many more. Let the user add any
+language (e.g. French, German, Portuguese) from the GUI or persona YAML by ISO code: one shared
+list of names in core, served to the GUI. Voices are chosen per language as today, and the
+voice dropdown already sorts native voices first. Check that each backend accepts the code.
+
 Planned, **test before building: expressive speech with ElevenLabs Eleven v3.** v3 acts out
 inline audio tags (`[excited]`, `[sighs]`, `[whispers]`, `[laughs]`), so the LLM could tag each
 line with its emotion. Today every line goes to Flash v2.5 with default voice settings, so
