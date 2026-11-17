@@ -17,6 +17,9 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   through the kRPC mod (enable auto-start servers and auto-accept clients).
 - **Launcher GUI** (`familiar gui`): pick the game and persona, watch the conversation, and
   create or edit personas, with optional AI drafting and voice previews.
+- **Voice-set telemetry alerts** in KSP, ATS and ETS2: ask “tell me at 4,000 metres”,
+  “warn me when we're 50 km out” or “tell me when fuel drops under 25%”. Alerts fire once,
+  last for the session and can be listed or cancelled by voice. Configure `[alerts]` in TOML.
 - **Trip memory**: remembers earlier places and trip events across personas, answers questions
   about previous visits, and occasionally recalls a distinctive moment when you return.
   Facts stay in a local SQLite database; `[memory]` controls storage and recall frequency.

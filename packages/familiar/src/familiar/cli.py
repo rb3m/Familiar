@@ -10,6 +10,7 @@ from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
+from familiar.alerts import AlertKeeper
 from familiar.audio.player import Player
 from familiar.audio.recorder import Recorder
 from familiar.config import AppConfig, BackendConfig, load_config
@@ -17,7 +18,14 @@ from familiar.conversation import Conversation
 from familiar.director import Director, feed_events
 from familiar.fallback import FallbackSTT, FallbackTTS, close_backend
 from familiar.flavor import FlavorKeeper
-from familiar.interfaces import BackendError, ConfigError, GameAdapter, GameEvent, PluginError
+from familiar.interfaces import (
+    BackendError,
+    ConfigError,
+    GameAdapter,
+    GameEvent,
+    PluginError,
+    Watchable,
+)
 from familiar.memory import MemoryKeeper, MemoryStore
 from familiar.persona import Persona, load_persona
 from familiar.plugins import GROUPS, available, command_plugins, load
@@ -119,6 +127,9 @@ class _Runtime:
                 conversation.game or "",
                 settings=self.config.flavor,
             )
+        if self.config.alerts.get("enabled", True) and isinstance(adapter, Watchable):
+            conversation.alerts = AlertKeeper(adapter, self.config.alerts)
+            conversation.alerts.register(conversation.tools)
         return conversation, adapter, director
 
     def speech(self, kind: str) -> Any:
@@ -186,6 +197,8 @@ async def _chat(args: argparse.Namespace) -> None:
                 asyncio.create_task(feed_events(adapter, director, conversation.memory)),
                 asyncio.create_task(events()),
             ]
+        if director is not None and conversation.alerts is not None:
+            tasks.append(asyncio.create_task(conversation.alerts.run(director.submit)))
         print(f"Chatting with {runtime.persona.display_name}. Type /quit to exit.")
         try:
             while True:

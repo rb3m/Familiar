@@ -67,6 +67,25 @@ and a 14-day cooldown per quote ID per game. The model may loosely paraphrase a 
 crediting its speaker and hedging uncertain attribution. Use is recorded after speech, in the
 shared memory database (or only in process memory when trip memory is disabled).
 
+## Tools and alerts
+
+Player turns offer core `ToolRegistry` tools to the LLM. Conversation retains assistant text
+and structured calls, validates and executes handlers, then supplies JSON tool results for the
+next response. Execution is bounded to three tool rounds followed by a tool-free response;
+interjections offer no tools. History trimming keeps each assistant call/results group intact,
+and the transcript records calls and results, including errors and interruptions.
+
+Adapters optionally implement `Watchable`, describing quantities in SI and returning cached
+samples with monotonic acquisition times, validity, prediction safety and a context identity.
+Core `AlertKeeper` supplies `set_alert`, `list_alerts` and `cancel_alert` only for those adapters
+when `[alerts]` is enabled. Up to eight session-only alerts bind to the current vessel/job;
+context changes drop them, and invalid samples suspend and reset their crossing baseline.
+A task beside `feed_events` polls at 2 Hz only while alerts exist. Directional crossings include
+equality and jumps, with a tiny arming hysteresis. Stable, approaching rates from three recent
+slopes may predict a crossing within `lead_s` to cover speech latency; warp, irregular spacing
+and unstable rates fall back to actual crossings. One-shot critical `alert` events carry a
+10-second TTL and zero memory salience; the Director keys them by alert ID.
+
 ## Memory
 
 Core memory stores sessions, salient episodes and per-persona recall history in one local SQLite

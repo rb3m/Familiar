@@ -1,6 +1,8 @@
 """Google GenAI asynchronous text streaming backend."""
 
 import asyncio
+import base64
+import json
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
@@ -23,12 +25,45 @@ RETRYABLE_CODES = frozenset({429, 500, 503, 504})
 
 def messages_to_contents(messages: list[Message]) -> list[types.Content]:
     """Translate chat history, leaving system instructions to request config."""
-    roles = {"user": "user", "assistant": "model"}
-    return [
-        types.Content(role=roles[message.role], parts=[types.Part(text=message.text)])
-        for message in messages
-        if message.role != "system"
-    ]
+    contents = []
+    names = {}
+    for message in messages:
+        if message.role == "system":
+            continue
+        if message.role == "tool":
+            call_id = message.tool_call_id
+            response = types.FunctionResponse(
+                id=call_id, name=names[call_id], response=json.loads(message.text)
+            )
+            _append_response(contents, response)
+            continue
+        parts = [types.Part(text=message.text)] if message.text else []
+        for call in message.tool_calls:
+            names[call.id] = call.name
+            signature = call.metadata.get("thought_signature")
+            parts.append(
+                types.Part(
+                    function_call=types.FunctionCall(
+                        id=call.id, name=call.name, args=call.arguments
+                    ),
+                    thought_signature=base64.b64decode(signature)
+                    if signature is not None
+                    else None,
+                )
+            )
+        contents.append(
+            types.Content(role={"user": "user", "assistant": "model"}[message.role], parts=parts)
+        )
+    return contents
+
+
+def _append_response(contents: list[types.Content], response: types.FunctionResponse) -> None:
+    """Parallel results belong to the same user turn."""
+    part = types.Part(function_response=response)
+    if contents and contents[-1].role == "user" and contents[-1].parts[0].function_response:
+        contents[-1].parts.append(part)
+        return
+    contents.append(types.Content(role="user", parts=[part]))
 
 
 def tool_to_declaration(tool: ToolSpec) -> types.FunctionDeclaration:
@@ -53,7 +88,16 @@ def _part_chunks(part: types.Part) -> list[LLMChunk]:
     call = part.function_call
     if call is not None:
         chunks.append(
-            LLMChunk(tool_call=ToolCall(call.id or uuid4().hex, call.name or "", call.args or {}))
+            LLMChunk(
+                tool_call=ToolCall(
+                    call.id or uuid4().hex,
+                    call.name or "",
+                    call.args or {},
+                    {"thought_signature": base64.b64encode(part.thought_signature).decode("ascii")}
+                    if part.thought_signature is not None
+                    else {},
+                )
+            )
         )
     return chunks
 

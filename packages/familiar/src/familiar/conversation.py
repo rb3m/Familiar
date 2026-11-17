@@ -1,16 +1,26 @@
 """Coordinate streamed replies, bounded history, and transcript events."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import asdict
 
+from familiar.alerts import AlertKeeper
 from familiar.flavor import FlavorKeeper, flavor_hint
 from familiar.interfaces import GameEvent, LLMProvider, Message, TextToSpeech
 from familiar.memory import MemoryKeeper
 from familiar.persona import Persona
 from familiar.pipeline.sentences import SentenceSplitter
+from familiar.tools import ToolRegistry
 from familiar.transcript import TranscriptLog
+
+ALERT_RULE = (
+    "\n\nAlerts: you cannot watch telemetry on your own. Whenever the player asks to be "
+    "told, warned or called out when a value is reached, call set_alert in this same reply "
+    "before saying anything about it, and confirm only what its result says. Never claim an "
+    "alert is set unless set_alert returned it."
+)
 
 
 class Conversation:
@@ -26,6 +36,8 @@ class Conversation:
         game: str | None = None,
         memory: MemoryKeeper | None = None,
         flavor: FlavorKeeper | None = None,
+        tools: ToolRegistry | None = None,
+        alerts: AlertKeeper | None = None,
     ) -> None:
         if history_limit < 1:
             raise ValueError("history_limit must be positive")
@@ -38,12 +50,21 @@ class Conversation:
         self.game = game
         self.memory = memory
         self.flavor = flavor
+        self.tools = tools if tools is not None else ToolRegistry()
+        self.alerts = alerts
         self.history_limit = history_limit
         self.history: list[Message] = []
 
     def _remember(self, message: Message) -> None:
-        self.history.append(message)
-        del self.history[: -self.history_limit]
+        self._remember_many([message])
+
+    def _remember_many(self, messages: list[Message]) -> None:
+        self.history.extend(messages)
+        start = max(0, len(self.history) - self.history_limit)
+        # The history limit is soft for an indivisible call/results group.
+        while start > 0 and self.history[start].role == "tool":
+            start -= 1
+        del self.history[:start]
 
     async def ask(self, user_text: str) -> AsyncIterator[str]:
         """Yield reply sentences and retain partial replies on cancellation."""
@@ -105,20 +126,54 @@ class Conversation:
             memories = self.memory.context(text)
         if memories:
             system += "\n\n" + memories
+        specs = self.tools.specs() if player_turn else []
+        if any(spec.name == "set_alert" for spec in specs):
+            system += ALERT_RULE
         self._remember(Message("user", text))
+        for round_index in range(4):
+            calls = []
+            offered = specs if round_index < 3 else []
+            async with aclosing(self._stream_round(system, offered, calls)) as sentences:
+                async for sentence in sentences:
+                    yield sentence
+            if not calls:
+                return
+            results = []
+            try:
+                for call in calls:
+                    result = {"error": "Tools are unavailable for this response"}
+                    if offered:
+                        result = await self.tools.execute(call)
+                    payload = json.dumps(result, separators=(",", ":"), ensure_ascii=False)
+                    self.transcript.record("tool_result", tool_call_id=call.id, text=payload)
+                    results.append(Message("tool", payload, tool_call_id=call.id))
+            finally:
+                # Cancellation still leaves a complete protocol group for the next turn.
+                for call in calls[len(results) :]:
+                    payload = '{"error":"Tool execution interrupted"}'
+                    self.transcript.record("tool_result", tool_call_id=call.id, text=payload)
+                    results.append(Message("tool", payload, tool_call_id=call.id))
+                self._remember_many(results)
+            if not offered:
+                return
+
+    async def _stream_round(self, system: str, tools: list, calls: list) -> AsyncIterator[str]:
         splitter = SentenceSplitter()
         fragments: list[str] = []
         interrupted = False
+        completed = False
         try:
-            async for chunk in self.llm.stream(list(self.history), system, []):
+            async for chunk in self.llm.stream(list(self.history), system, tools):
                 if chunk.tool_call is not None:
                     self.transcript.record("tool_call", **asdict(chunk.tool_call))
+                    calls.append(chunk.tool_call)
                 fragments.append(chunk.text)
                 for sentence in splitter.feed(chunk.text):
                     yield sentence
             remainder = splitter.flush()
             if remainder:
                 yield remainder
+            completed = True
         except (asyncio.CancelledError, GeneratorExit):
             interrupted = True
             raise
@@ -126,5 +181,18 @@ class Conversation:
             text = "".join(fragments)
             fields = {"interrupted": True} if interrupted else {}
             self.transcript.record("assistant", text=text, **fields)
-            if text:
-                self._remember(Message("assistant", text))
+            if text or calls:
+                # Defer trimming until results have been attached to their calls.
+                self.history.append(Message("assistant", text, tool_calls=tuple(calls)))
+            if not calls:
+                self._remember_many([])
+            if not completed and calls:
+                results = [
+                    Message("tool", '{"error":"Response interrupted"}', tool_call_id=call.id)
+                    for call in calls
+                ]
+                for result in results:
+                    self.transcript.record(
+                        "tool_result", tool_call_id=result.tool_call_id, text=result.text
+                    )
+                self._remember_many(results)

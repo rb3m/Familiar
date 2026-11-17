@@ -1,6 +1,8 @@
 """Kerbal Space Program game adapter."""
 
-from familiar.interfaces import PLUGIN_API_VERSION
+from time import monotonic
+
+from familiar.interfaces import PLUGIN_API_VERSION, WatchSample, WatchSpec
 
 from .events import GROUNDED, EventDetector
 from .quotes import attach_flavor, load_quotes
@@ -18,6 +20,7 @@ class KspAdapter:
 
     def __init__(self, settings: dict) -> None:
         self.latest = Snapshot()
+        self._watch_timestamp = monotonic()
         self.detector = EventDetector()
         self.quotes = load_quotes(settings.get("quotes_path"))
         self.source = self._source(settings)
@@ -32,6 +35,7 @@ class KspAdapter:
         try:
             async for snapshot in self.source:
                 self.latest = snapshot
+                self._watch_timestamp = monotonic()
                 for event in self.detector.feed(snapshot):
                     attach_flavor(event, self.quotes)
                     yield event
@@ -121,8 +125,51 @@ class KspAdapter:
             activity=f"flying the {s.vessel_name} with {', '.join(s.crew) or 'no crew'}",
         )
 
+    def watchables(self) -> dict[str, WatchSpec]:
+        return {
+            name: WatchSpec(unit, description)
+            for name, (_, unit, description) in WATCH_FIELDS.items()
+        }
+
+    def watch_sample(self) -> WatchSample:
+        s = self.latest
+        values = {name: getattr(s, field) for name, (field, _, _) in WATCH_FIELDS.items()}
+        for key in ("liquid_fuel", "electric_charge"):
+            amount, capacity = getattr(s, key), getattr(s, key + "_max")
+            values[key] = None
+            if amount is not None and capacity is not None and capacity > 0:
+                values[key] = 100 * amount / capacity
+        return WatchSample(
+            values,
+            s.vessel_id,
+            s.in_flight and s.paused is False,
+            s.warp_rate == 1,
+            self._watch_timestamp,
+        )
+
     def tools(self) -> list:
         return []
 
     async def aclose(self) -> None:
         await self.source.aclose()
+
+
+# Public names are stable across packs; telemetry member names stay private.
+WATCH_FIELDS = {
+    "altitude_sea_level": ("altitude_m", "m", "altitude above sea level"),
+    "altitude_terrain": ("surface_altitude_m", "m", "altitude above terrain"),
+    "apoapsis": ("apoapsis_alt_m", "m", "apoapsis altitude above sea level"),
+    "periapsis": ("periapsis_alt_m", "m", "periapsis altitude above sea level"),
+    "navball_speed": ("navball_speed_ms", "m/s", "speed shown in the current navball mode"),
+    "surface_speed": ("speed_surface_ms", "m/s", "speed relative to the surface"),
+    "orbital_speed": ("speed_orbital_ms", "m/s", "orbital speed"),
+    "vertical_speed": ("vertical_speed_ms", "m/s", "vertical speed, positive upward"),
+    "time_to_apoapsis": ("time_to_apoapsis_s", "s", "time remaining to apoapsis"),
+    "time_to_periapsis": ("time_to_periapsis_s", "s", "time remaining to periapsis"),
+    "target_distance": ("target_distance_m", "m", "distance to the current target"),
+    "target_speed": ("target_speed_ms", "m/s", "speed relative to the current target"),
+    "liquid_fuel": ("liquid_fuel", "%", "whole-vessel liquid fuel remaining"),
+    "electric_charge": ("electric_charge", "%", "whole-vessel electric charge remaining"),
+    "stage_delta_v": ("stage_delta_v_ms", "m/s", "available delta-v in the next stage"),
+    "mission_time": ("met_s", "s", "mission elapsed time"),
+}

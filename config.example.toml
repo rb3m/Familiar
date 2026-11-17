@@ -86,3 +86,8 @@ probability = 0.2          # chance to offer an event's real quote for a loose p
 cooldown_min = 30          # global cooldown in real minutes, across games and personas
 item_cooldown_days = 14    # cooldown per quote ID within its game
 # Uses share the memory database; with memory disabled, uses last only for this process.
+
+[alerts]
+enabled = true            # voice-set, one-shot telemetry alerts; session only
+lead_s = 1.5              # early warning for speech latency; finite and >= 0
+max_alerts = 8            # integer from 1 to 8

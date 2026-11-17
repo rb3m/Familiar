@@ -28,6 +28,9 @@ FLAVOR_DEFAULTS = {
 }
 
 
+ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.5, "max_alerts": 8}
+
+
 @dataclass
 class BackendConfig:
     backend: str
@@ -53,6 +56,7 @@ class AppConfig:
     director: dict = field(default_factory=dict)
     memory: dict = field(default_factory=lambda: MEMORY_DEFAULTS.copy())
     flavor: dict = field(default_factory=lambda: FLAVOR_DEFAULTS.copy())
+    alerts: dict = field(default_factory=lambda: ALERT_DEFAULTS.copy())
 
 
 def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig | None:
@@ -122,6 +126,22 @@ def _flavor(data: dict) -> dict:
     return settings
 
 
+def _alerts(data: dict) -> dict:
+    section = data.get("alerts", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[alerts] must be a table")
+    settings = {**ALERT_DEFAULTS, **section}
+    if not isinstance(settings["enabled"], bool):
+        raise ConfigError("alerts.enabled must be a boolean")
+    lead = settings["lead_s"]
+    if type(lead) not in {int, float} or not math.isfinite(lead) or lead < 0:
+        raise ConfigError("alerts.lead_s must be a finite nonnegative number")
+    maximum = settings["max_alerts"]
+    if type(maximum) is not int or not 1 <= maximum <= 8:
+        raise ConfigError("alerts.max_alerts must be an integer between 1 and 8")
+    return settings
+
+
 USER_CONFIG = Path("~/.config/familiar/config.toml")
 
 
@@ -167,6 +187,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         director=director,
         memory=_memory(data, base),
         flavor=_flavor(data),
+        alerts=_alerts(data),
         language=language,
         persona=persona,
         personas_dir=_path(data["personas_dir"], base) if "personas_dir" in data else None,

@@ -5,7 +5,7 @@ import json
 
 import pytest
 from familiar.conversation import Conversation
-from familiar.interfaces import LLMChunk, ToolCall
+from familiar.interfaces import LLMChunk
 from familiar.transcript import TranscriptLog
 
 
@@ -15,7 +15,6 @@ class FakeLLM:
         assert "Always reply in English." in system
         yield LLMChunk(text="Hello")
         yield LLMChunk(text=". Next ")
-        yield LLMChunk(tool_call=ToolCall("call-1", "look", {"where": "road"}))
         yield LLMChunk(text="sentence! ")
         yield LLMChunk(text="Tail")
 
@@ -34,8 +33,7 @@ async def test_stream_transcript_history(tmp_path, persona):
         "Tail",
     ]
     events = records(log)
-    assert [event["kind"] for event in events] == ["user", "tool_call", "assistant"]
-    assert events[1]["arguments"] == {"where": "road"}
+    assert [event["kind"] for event in events] == ["user", "assistant"]
     assert events[-1]["text"] == "Hello. Next sentence! Tail"
     assert events[0]["v"] == 1
     assert events[0]["ts"].endswith("+00:00")

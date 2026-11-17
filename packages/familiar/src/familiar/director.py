@@ -59,6 +59,8 @@ class Director:
 
     @staticmethod
     def _key(event: GameEvent) -> tuple:
+        if event.kind == "alert":
+            return (event.kind, event.data["alert_id"])
         if event.kind == "landmark_nearby":
             return (
                 event.kind,

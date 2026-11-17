@@ -17,7 +17,7 @@ class FakeEntryPoint:
 
 
 class FakePlugin:
-    api_version = "1.7"
+    api_version = "2.7"
 
     def __init__(self, settings):
         self.settings = settings
@@ -41,7 +41,7 @@ def test_unknown_name(monkeypatch):
 def test_compatible_and_incompatible(monkeypatch):
     monkeypatch.setattr(plugins, "entry_points", lambda **_: [FakeEntryPoint("fake", FakePlugin)])
     assert plugins.load("llm", "fake", {"test": 1}).settings == {"test": 1}
-    monkeypatch.setattr(FakePlugin, "api_version", "2.0")
+    monkeypatch.setattr(FakePlugin, "api_version", "1.0")
     with pytest.raises(PluginError, match="incompatible API version"):
         plugins.load("llm", "fake", {})
 

@@ -214,6 +214,10 @@ class VoiceSession:
                     ),
                     asyncio.create_task(self._game_replies()),
                 ]
+            if self.director is not None and self.conversation.alerts is not None:
+                tasks.append(
+                    asyncio.create_task(self.conversation.alerts.run(self.director.submit))
+                )
             async for pressed in self.ptt.events():
                 await self._event(pressed)
             if self._reply_task is not None:

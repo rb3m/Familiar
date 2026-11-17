@@ -15,7 +15,7 @@ from test_m2_director import Log, event, persona
 class FakeGameAdapter:
     name = "fake"
     game = "ats"
-    api_version = "1.0"
+    api_version = "2.0"
     capabilities = frozenset()
 
     def __init__(self, settings: dict) -> None:

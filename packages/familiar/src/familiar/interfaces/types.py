@@ -1,14 +1,16 @@
 """Immutable values exchanged through plugin interfaces."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
 
 @dataclass(frozen=True)
 class Message:
-    role: Literal["user", "assistant", "system"]
+    role: Literal["user", "assistant", "system", "tool"]
     text: str
+    tool_calls: tuple["ToolCall", ...] = ()
+    tool_call_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,7 @@ class ToolCall:
     id: str
     name: str
     arguments: dict
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

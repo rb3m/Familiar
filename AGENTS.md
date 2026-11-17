@@ -9,7 +9,7 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Milestone: **M3 Memory** built 2026-11-16 (ADR 0005, `familiar/memory/`); needs a live check: a second drive past a place from an earlier session, "have we been here before?", and a summary row after quitting. M2 done; ETS2 (M4) live. KSP pack (kRPC, ADR 0006) and core flavor quotes built; need a live flight (`familiar ksp-probe`).
+- Milestone: **M3 Memory** built 2026-11-16 (ADR 0005, `familiar/memory/`); needs a live check: a second drive past a place from an earlier session, "have we been here before?", and a summary row after quitting. M2 done; ETS2 (M4) live. KSP pack (ADR 0006) flown once; voice-set alerts via LLM tools (ADR 0007, API 2.0) need an in-game check.
 - Next task: live-verify M3, then tune from drives: `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`, 13:00 unverified), recall gate (`memory/keeper.py`). Unverified: ETS2 UK projection branch, Iceland (not in gazetteer/landmarks), ETS2 auto wipers.
 - Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk. Telemetry has no traffic/weather data; jams and rain are inferred.
 
@@ -27,7 +27,7 @@ API tier) is the first backend; others plug in via entry points.
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
 - `docs/plugins.md`: how to add a backend, command, or game pack. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.
-- `docs/decisions/`: ADRs. Read 0001 for structure, 0002 for location/landmarks, 0003 for GUI, 0004 for package boundaries, 0005 for trip memory, 0006 for KSP/flavor quotes.
+- `docs/decisions/`: ADRs. Read 0001 for structure, 0002 for location/landmarks, 0003 for GUI, 0004 for package boundaries, 0005 for trip memory, 0006 KSP/flavor quotes, 0007 tools/alerts.
 - `docs/gui-api.md`: GUI server/frontend contract (endpoints, auth, SSE). Read before changing `packages/familiar/src/familiar/gui/`.
 - `config.example.toml`: every config key with defaults.
 - `packages/familiar/src/familiar/personas/`: packaged built-in persona YAML; user personas live in `~/.config/familiar/personas/` and shadow them.

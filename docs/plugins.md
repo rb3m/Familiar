@@ -45,6 +45,57 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
 - Bump `PLUGIN_API_VERSION` in `interfaces/__init__.py` only for breaking interface changes; the
   loader refuses plugins with a different major version.
 
+## Plugin API 2.0: structured tool history
+
+API 2.0 is a breaking interface change; all in-repo plugins use the shared
+`PLUGIN_API_VERSION = "2.0"`. External plugins must declare API major 2 after updating their
+message translation; the loader rejects API 1 plugins.
+
+`Message` retains `role` and `text` and adds `tool_calls: tuple[ToolCall, ...] = ()` for assistant
+messages and `tool_call_id: str | None = None` for the new `"tool"` role. Tool result `text` is a
+compact JSON object. `ToolCall(id, name, arguments)` adds `metadata: dict` with an independent
+empty default. Metadata is opaque provider data and must survive the round trip.
+
+An LLM provider must translate assistant text and calls together and match each result to its
+call ID. Gemini maps these to model `function_call` parts and user `function_response` parts
+with `id`, matching function `name`, and the parsed JSON `response`. Its function-call Part's
+`thought_signature` is preserved as base64 in `ToolCall.metadata["thought_signature"]` and
+decoded back to SDK bytes when sending history. Do not discard it: Gemini 3 requires it for
+subsequent tool turns. Specs are supplied only on player turns; an empty tool list means no
+new calls are permitted, though history may still contain earlier calls and results.
+
+## Optional telemetry alerts: Watchable
+
+Packs may implement the runtime-checkable `familiar.interfaces.Watchable` independently of
+`GameAdapter`. Core owns alert tools, conversions, crossing/prediction logic and scheduling;
+packs only describe and sample quantities:
+
+```python
+from familiar.interfaces import WatchSample, WatchSpec
+
+
+def watchables(self) -> dict[str, WatchSpec]:
+    return {"altitude": WatchSpec("m", "altitude above sea level")}
+
+
+def watch_sample(self) -> WatchSample:
+    return WatchSample(
+        values={"altitude": self.latest.altitude_m},
+        context=self.latest.vessel_id,
+        valid=self.latest.in_flight and self.latest.paused is False,
+        predictable=self.latest.warp_rate == 1,
+        timestamp=self.last_acquired_monotonic,
+    )
+```
+
+Units are `m`, `m/s`, `s`, `%` (0–100), or `count`; unavailable quantities return `None`, never
+invented zeros. Descriptions distinguish remaining navigation distance from straight-line
+distance and game time from real time. Samples must be fast, nonblocking cached reads, with a
+monotonic timestamp updated on acquisition rather than on each read. Context is the current
+vessel ID, job source/destination identity or `"free roam"`; a change cancels bound alerts.
+Disconnected/paused/out-of-flight samples are invalid, and warp must disable prediction.
+Core converts m/km/ft/mi/nmi, m/s/km/h/mph/kn, s/min/h and percentages deterministically.
+
 ## Personas
 
 Personas are YAML, not plugins: copy `packages/familiar/src/familiar/personas/mira.yaml`, change the prompt and voices, and pick

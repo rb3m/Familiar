@@ -2,8 +2,9 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import asdict
+from time import monotonic
 
-from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ToolSpec
+from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ToolSpec, WatchSample, WatchSpec
 
 from .events import EventDetector
 from .geo import compass_name, day_period, sun_elevation, true_heading
@@ -39,6 +40,7 @@ class ScsAdapter:
             self.projection, self.places, self.knowledge, self.units, region_names=self.region_names
         )
         self.latest = Snapshot()
+        self._watch_timestamp = monotonic()
         self.source: TelemetrySource
         if settings.get("replay"):
             self.source = ReplayTelemetry(settings["replay"], settings.get("replay_speed", 1.0))
@@ -55,6 +57,7 @@ class ScsAdapter:
         try:
             async for snapshot in self.source:
                 self.latest = snapshot
+                self._watch_timestamp = monotonic()
                 for event in self.detector.feed(snapshot):
                     yield event
         finally:
@@ -138,6 +141,48 @@ class ScsAdapter:
         if s.paused:
             lines.append("Game paused")
         return "\n".join(lines)
+
+    def watchables(self) -> dict[str, WatchSpec]:
+        return {
+            "route_distance": WatchSpec(
+                "m", "remaining navigation route distance, not straight-line distance"
+            ),
+            "speed": WatchSpec("m/s", "truck speed"),
+            "fuel": WatchSpec("%", "fuel remaining as a percentage of tank capacity"),
+            "fuel_range": WatchSpec("m", "estimated remaining range on current fuel"),
+            "deadline_remaining": WatchSpec("s", "job deadline remaining in game time"),
+            "rest_remaining": WatchSpec("s", "time until required rest in game time"),
+            "speed_over_limit": WatchSpec(
+                "m/s", "speed minus the known posted limit, positive when speeding"
+            ),
+        }
+
+    def watch_sample(self) -> WatchSample:
+        s = self.latest
+        context = "free roam"
+        if s.on_job:
+            context = (
+                f"{s.source_city} ({s.source_company})->"
+                f"{s.destination_city} ({s.destination_company})"
+            )
+        values = {
+            "route_distance": s.nav_distance_km * 1000
+            if s.nav_distance_km > 0 or s.nav_estimated is not None or s.on_job
+            else None,
+            "speed": s.speed / 3.6,
+            "fuel": 100 * s.fuel_fraction if s.fuel_capacity > 0 else None,
+            "fuel_range": s.fuel_range * 1000 if s.fuel_capacity > 0 else None,
+            "deadline_remaining": s.job_remaining.total_seconds()
+            if s.on_job and s.job_remaining is not None
+            else None,
+            "rest_remaining": s.rest_remaining.total_seconds()
+            if s.rest_remaining is not None
+            else None,
+            "speed_over_limit": (s.speed - s.speed_limit) / 3.6 if s.speed_limit > 0 else None,
+        }
+        return WatchSample(
+            values, context, s.connected and not s.paused, True, self._watch_timestamp
+        )
 
     def tools(self) -> list[ToolSpec]:
         return []
