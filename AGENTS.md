@@ -19,6 +19,7 @@ API tier) is the first backend; others plug in via entry points.
 - Prefer early returns and mappings over nested ifs and `else`.
 - Plugins depend only on `familiar.interfaces`; bump `PLUGIN_API_VERSION` only for breaking changes.
 - Secrets only via env vars; never commit `config.toml` or keys.
+- Don't hardcode what we don't control (game data, mods, bindings, model names): data files + user overrides + rescan.
 - Internal dates ISO 8601; SI units in telemetry and knowledge packs.
 - One ADR per real decision in `docs/decisions/NNNN-slug.md`; ordinary "why" goes in commit messages.
 
