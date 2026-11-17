@@ -372,7 +372,31 @@ function fillEditor(data, isNew, draft = false) {
   $('#edit-name').focus();
 }
 
-function voiceInput(backend, value) {
+const LANGUAGE_NAMES = { en: 'English', es: 'Spanish', ja: 'Japanese' };
+
+function voiceLabel(voice) {
+  const language = voice.labels?.language;
+  if (!language) return voice.name;
+  const raw = voice.labels?.accent;
+  const accent = raw && raw !== 'standard' ? ` (${raw.replace(/\b\w/g, (c) => c.toUpperCase())})` : '';
+  return `${voice.name} · ${LANGUAGE_NAMES[language] || language}${accent}`;
+}
+
+// ElevenLabs voices native to the row's language come first, in their own group.
+function addElevenLabsOptions(select, options, language) {
+  const native = options.filter((voice) => voice.labels?.language === language);
+  const others = options.filter((voice) => voice.labels?.language !== language);
+  const groups = [[`${LANGUAGE_NAMES[language] || language} voices`, native], ['Other voices', others]];
+  for (const [label, list] of groups) {
+    if (!list.length) continue;
+    const group = element('optgroup');
+    group.label = label;
+    for (const voice of [...list].sort((a, b) => a.name.localeCompare(b.name))) group.append(new Option(voiceLabel(voice), voice.id));
+    select.append(group);
+  }
+}
+
+function voiceInput(backend, value, language) {
   if (!voices) {
     const input = element('input');
     input.type = 'text';
@@ -383,7 +407,11 @@ function voiceInput(backend, value) {
   const select = element('select');
   select.add(new Option('Choose a voice…', ''));
   const options = backend === 'gemini' ? voices.gemini.map((name) => ({ id: name, name })) : voices.elevenlabs;
-  for (const voice of options) select.add(new Option(backend === 'gemini' ? voice.name : `${voice.name} · ${voice.id}`, voice.id));
+  if (backend === 'gemini') {
+    // Gemini voices are all multilingual: the same list serves every language.
+    for (const voice of options) select.add(new Option(voice.name, voice.id));
+  }
+  if (backend !== 'gemini') addElevenLabsOptions(select, options, language);
   if (value && !options.some((voice) => voice.id === value)) select.add(new Option(`${value} (current)`, value));
   select.value = value || '';
   // An unavailable ElevenLabs catalog still needs an editable voice ID.
@@ -407,7 +435,7 @@ function renderVoiceRows(languages) {
   if (voices?.elevenlabs_error) {
     const list = element('datalist');
     list.id = 'elevenlabs-voices';
-    for (const voice of voices.elevenlabs) list.append(new Option(`${voice.name} · ${voice.id}`, voice.id));
+    for (const voice of voices.elevenlabs) list.append(new Option(voiceLabel(voice), voice.id));
     root.append(list);
   }
   const languageIds = [...new Set(['en', 'es', 'ja', ...Object.keys(languages)])];
@@ -423,7 +451,7 @@ function renderVoiceRows(languages) {
     for (const backend of ['gemini', 'elevenlabs']) {
       const group = element('div', 'voice-control');
       const voiceLabel = element('label', '', backend === 'gemini' ? 'Gemini' : 'ElevenLabs');
-      const input = voiceInput(backend, languages[id]?.voices?.[backend]);
+      const input = voiceInput(backend, languages[id]?.voices?.[backend], id);
       input.dataset.backend = backend;
       voiceLabel.append(input);
       const test = button('▶', () => busy(test, async () => {
