@@ -10,7 +10,7 @@ def _llm(script: dict[str, list]) -> tuple[GeminiLLM, list[str]]:
     llm = GeminiLLM({"model": "main", "fallback_models": ["lite"], "backoff_seconds": 0})
     calls: list[str] = []
 
-    async def fake_once(model, contents, config):
+    async def fake_once(model, contents, config, fallback=False):
         calls.append(model)
         outcome = script[model].pop(0)
         for text in outcome.get("texts", []):
@@ -92,5 +92,34 @@ async def test_silent_stall_times_out_and_falls_back(monkeypatch):
         class aio:  # noqa: N801
             models = FakeModels()
 
-    monkeypatch.setattr(llm, "_get_client", lambda: FakeClient)
+    monkeypatch.setattr(llm, "_get_client", lambda fallback=False: FakeClient)
     assert await _collect(llm) == "ok"
+
+
+def test_fallback_models_use_their_own_key(monkeypatch):
+    monkeypatch.setenv("FREE_KEY", "free")
+    monkeypatch.setenv("PAID_KEY", "paid")
+    made = []
+    monkeypatch.setattr(
+        "familiar.backends.gemini.llm.make_client",
+        lambda settings, api_version=None: made.append(settings["api_key_env"]) or object(),
+    )
+    llm = GeminiLLM({"api_key_env": "FREE_KEY", "fallback_api_key_env": "PAID_KEY"})
+    assert [fallback for _, _, fallback in llm._attempts()] == [False, False, False, True]
+    llm._get_client()
+    llm._get_client(fallback=True)
+    llm._get_client(fallback=True)
+    assert made == ["FREE_KEY", "PAID_KEY"]
+
+
+def test_missing_fallback_key_reuses_primary(monkeypatch):
+    monkeypatch.setenv("FREE_KEY", "free")
+    monkeypatch.delenv("PAID_KEY", raising=False)
+    made = []
+    monkeypatch.setattr(
+        "familiar.backends.gemini.llm.make_client",
+        lambda settings, api_version=None: made.append(settings["api_key_env"]) or object(),
+    )
+    llm = GeminiLLM({"api_key_env": "FREE_KEY", "fallback_api_key_env": "PAID_KEY"})
+    llm._get_client(fallback=True)
+    assert made == ["FREE_KEY"]

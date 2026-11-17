@@ -19,6 +19,7 @@ temperature = 0.8
 max_retries = 2               # retries on 429/5xx before the first word, with backoff
 backoff_seconds = 1.0
 fallback_models = ["gemini-3.8-flash"]   # tried after retries run out
+fallback_api_key_env = "GEMINI_PAID_KEY"   # optional: separate key for fallback models (e.g. capped paid key)
 first_chunk_timeout_seconds = 8.0   # an overloaded model may stall silently; give up and fall back
 timeout_seconds = 30.0
 

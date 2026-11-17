@@ -3,6 +3,8 @@
 import asyncio
 import base64
 import json
+import logging
+import os
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
@@ -20,6 +22,7 @@ from familiar.interfaces import (
 
 from .client import make_client
 
+_LOG = logging.getLogger(__name__)
 RETRYABLE_CODES = frozenset({429, 500, 503, 504})
 
 
@@ -117,18 +120,36 @@ class GeminiLLM:
         self.first_chunk_timeout = float(settings.get("first_chunk_timeout_seconds", 8.0))
         self.read_timeout = float(settings.get("timeout_seconds", 30.0))
         self._client: genai.Client | None = None
+        self._fallback_client: genai.Client | None = None
+        self._fallback_settings = self._fallback_key_settings(settings)
 
-    def _get_client(self) -> genai.Client:
+    def _fallback_key_settings(self, settings: dict) -> dict | None:
+        """Fallback models may use their own key (e.g. a capped paid key behind a free one)."""
+        variable = settings.get("fallback_api_key_env")
+        if not variable:
+            return None
+        if not os.environ.get(variable):
+            _LOG.warning(
+                "%s is unset; Gemini fallback models use %s", variable, self.settings["api_key_env"]
+            )
+            return None
+        return {**self.settings, "api_key_env": variable}
+
+    def _get_client(self, fallback: bool = False) -> genai.Client:
+        if fallback and self._fallback_settings is not None:
+            if self._fallback_client is None:
+                self._fallback_client = make_client(self._fallback_settings, api_version=None)
+            return self._fallback_client
         if self._client is not None:
             return self._client
         self._client = make_client(self.settings, api_version=None)
         return self._client
 
-    def _attempts(self) -> list[tuple[str, float]]:
-        """(model, delay before trying) for each attempt: retries, then fallback models."""
-        retries = [(self.model, self.backoff * 2**n) for n in range(self.max_retries)]
-        fallbacks = [(model, 0.0) for model in self.fallback_models]
-        return [(self.model, 0.0), *retries, *fallbacks]
+    def _attempts(self) -> list[tuple[str, float, bool]]:
+        """(model, delay before trying, is fallback) per attempt: retries, then fallbacks."""
+        retries = [(self.model, self.backoff * 2**n, False) for n in range(self.max_retries)]
+        fallbacks = [(model, 0.0, True) for model in self.fallback_models]
+        return [(self.model, 0.0, False), *retries, *fallbacks]
 
     async def stream(
         self, messages: list[Message], system: str, tools: list[ToolSpec]
@@ -143,11 +164,11 @@ class GeminiLLM:
         )
         contents = messages_to_contents(messages)
         last_error: BackendError | None = None
-        for model, delay in self._attempts():
+        for model, delay, fallback in self._attempts():
             await asyncio.sleep(delay)
             started = False
             try:
-                async for chunk in self._stream_once(model, contents, config):
+                async for chunk in self._stream_once(model, contents, config, fallback):
                     started = True
                     yield chunk
                 return
@@ -158,10 +179,14 @@ class GeminiLLM:
         raise last_error  # type: ignore[misc]
 
     async def _stream_once(
-        self, model: str, contents: list[types.Content], config: types.GenerateContentConfig
+        self,
+        model: str,
+        contents: list[types.Content],
+        config: types.GenerateContentConfig,
+        fallback: bool = False,
     ) -> AsyncIterator[LLMChunk]:
         try:
-            responses = await self._open_stream(model, contents, config)
+            responses = await self._open_stream(model, contents, config, fallback)
             async for response in responses:
                 for chunk in response_to_chunks(response):
                     yield chunk
@@ -177,7 +202,11 @@ class GeminiLLM:
             ) from exc
 
     async def _open_stream(
-        self, model: str, contents: list[types.Content], config: types.GenerateContentConfig
+        self,
+        model: str,
+        contents: list[types.Content],
+        config: types.GenerateContentConfig,
+        fallback: bool = False,
     ) -> AsyncIterator[types.GenerateContentResponse]:
         """Open the stream and wait for its first response under the first-chunk deadline.
 
@@ -185,7 +214,7 @@ class GeminiLLM:
         deadline turns that silence into a retryable failure instead of a frozen companion.
         """
         async with asyncio.timeout(self.first_chunk_timeout):
-            stream = await self._get_client().aio.models.generate_content_stream(
+            stream = await self._get_client(fallback).aio.models.generate_content_stream(
                 model=model, contents=contents, config=config
             )
             first = await anext(stream, None)
@@ -193,9 +222,11 @@ class GeminiLLM:
 
     async def aclose(self) -> None:
         """Release the async SDK client if a request created one."""
-        if self._client is not None:
-            await self._client.aio.aclose()
-            self._client = None
+        clients = (self._client, self._fallback_client)
+        self._client = self._fallback_client = None
+        for client in clients:
+            if client is not None:
+                await client.aio.aclose()
 
 
 async def _prepend(
