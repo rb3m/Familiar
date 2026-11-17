@@ -2,13 +2,14 @@
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from familiar.interfaces import GameEvent
 
 from .telemetry import Snapshot
 
-STAGE_QUIET_S = 5.0
+STAGE_QUIET_S = 1.0  # folds quick multi-staging; 5 s felt late in play
 ORBIT_HOLD_S = 3.0
 LANDING_HOLD_S = 2.0
 WARP_HOLD_S = 3.0
@@ -170,6 +171,7 @@ class EventDetector:
             and self._allowed("liftoff", now)
         ):
             events.append(self._event("liftoff", f"{s.vessel_name} lifted off from {s.body}."))
+            p = replace(p, current_stage=s.current_stage)  # the launch staging is the liftoff
         events.extend(self._staging(p, s, now))
         events.extend(self._orbit(s, now))
         if (

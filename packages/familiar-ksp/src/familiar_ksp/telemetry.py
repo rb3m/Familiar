@@ -126,7 +126,8 @@ def read_snapshot(connection) -> Snapshot:
         return Snapshot(**common)
     orbit = optional(lambda: vessel.orbit)
     body = optional(lambda: orbit.body)
-    flight = optional(lambda: vessel.flight())  # Default is the surface reference frame.
+    # The default frame moves with the vessel, so its speeds read 0; use the body's frame.
+    flight = optional(lambda: vessel.flight(body.reference_frame))
     values = dict(common)
     values.update(
         vessel_id=str(getattr(vessel, "_object_id", vessel.name)),

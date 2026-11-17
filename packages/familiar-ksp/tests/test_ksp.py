@@ -71,7 +71,9 @@ def test_mapping():
         met=42,
         resources=resources,
         orbit=Ns(
-            body=Ns(name="Kerbin", atmosphere_depth=70000, has_atmosphere=True),
+            body=Ns(
+                name="Kerbin", atmosphere_depth=70000, has_atmosphere=True, reference_frame="kerbin"
+            ),
             speed=2300,
             inclination=3.141592653589793 / 2,
             eccentricity=0.4,
@@ -119,7 +121,7 @@ def test_mapping():
     )
     assert s.dynamic_pressure_pa == 123 and s.crew == ("Valentina Kerman",)
     assert s.stage_monoprop == 12 and s.stage_monoprop_max == 24
-    assert frames == [()] and stages == [2, 1]
+    assert len(frames) == 1 and len(frames[0]) == 1 and stages == [2, 1]
     assert (s.stage_delta_v_ms, s.total_delta_v_ms) == (900, 900)
     with pytest.raises(FrozenInstanceError):
         s.altitude_m = 0
@@ -148,16 +150,19 @@ def test_suppression(detector, changes):
 def test_liftoff_staging_burst(detector):
     d, now = detector
     d.feed(flight(situation="pre_launch"))
-    assert kinds(d.feed(flight(altitude_m=1100))) == ["liftoff"]
-    now[0] = 1
-    assert d.feed(flight(current_stage=2)) == []
-    now[0] = 3
+    # The launch staging (3 -> 2) is the liftoff itself, not a separate call.
+    assert kinds(d.feed(flight(altitude_m=1100, current_stage=2))) == ["liftoff"]
+    now[0] = 5
+    assert kinds(d.feed(flight(current_stage=2))) == []
+    now[0] = 10
     assert d.feed(flight(current_stage=1)) == []
-    now[0] = 7.9
-    assert d.feed(flight(current_stage=1)) == []
-    now[0] = 8
-    e = d.feed(flight(current_stage=1))[0]
-    assert e.kind == "staged" and e.data["from_stage"] == 3 and e.data["current_stage"] == 1
+    now[0] = 10.5
+    assert d.feed(flight(current_stage=0)) == []
+    now[0] = 11.4
+    assert d.feed(flight(current_stage=0)) == []
+    now[0] = 11.5
+    e = d.feed(flight(current_stage=0))[0]
+    assert e.kind == "staged" and e.data["from_stage"] == 2 and e.data["current_stage"] == 0
     assert e.data["ttl_s"] > 0 and 0 <= e.data["memory_salience"] <= 1
 
 
