@@ -1,0 +1,12 @@
+# Packaged languages defaults.
+# Override at ~/.config/familiar/data/familiar/languages.yaml
+# with only the keys you change.
+en:
+  name: English
+  native: English
+es:
+  name: Spanish
+  native: Español
+ja:
+  name: Japanese
+  native: 日本語

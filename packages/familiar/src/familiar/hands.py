@@ -10,33 +10,50 @@ from dataclasses import dataclass
 from functools import partial
 from uuid import uuid4
 
-from familiar.interfaces import ACTION_STATUSES, ActionSpec, Actuator, ToolSpec
+from familiar.interfaces import (
+    ACTION_STATUSES,
+    ActionSpec,
+    Actuator,
+    ConfigError,
+    ToolSpec,
+    load_data,
+)
 from familiar.tools import ToolRegistry
 
-AFFIRMATIVES = {
-    "en": [
-        "yes",
-        "yeah",
-        "yep",
-        "yup",
-        "sure",
-        "confirm",
-        "confirmed",
-        "affirmative",
-        "do it",
-        "go ahead",
-        "go for it",
-        "ok",
-        "okay",
-    ],
-    "es": ["sí", "si", "dale", "hazlo", "confirmo", "claro", "adelante", "de acuerdo", "vale"],
-    "ja": ["はい", "うん", "お願い", "どうぞ", "やって", "了解", "オッケー"],
-}
-NEGATIVES = {
-    "en": ["no", "nope", "don't", "do not", "cancel", "stop", "abort", "wait", "belay"],
-    "es": ["no", "cancela", "cancelar", "espera", "alto", "detente"],
-    "ja": ["いいえ", "いや", "だめ", "ダメ", "やめ", "待って", "キャンセル"],
-}
+
+def confirmation_words() -> dict[str, dict[str, list[str]]]:
+    """Read word sets anew; false and deleted entries do not grant consent."""
+    dataset = load_data("familiar", "confirmation_words")
+    source = ", ".join(dataset.sources)
+    if not isinstance(dataset.value, dict):
+        raise ConfigError(f"Confirmation words must be a mapping in {source}")
+
+    def validate_keys(value):
+        if not isinstance(value, dict):
+            return
+        for key, entry in value.items():
+            if not isinstance(key, str):
+                raise ConfigError(f"Confirmation words require quoted string keys in {source}")
+            validate_keys(entry)
+
+    validate_keys(dataset.value)
+    result = {}
+    for category in ("affirmative", "negative"):
+        languages = dataset.value.get(category, {})
+        if not isinstance(languages, dict):
+            raise ConfigError(f"{category} must map languages to words in {source}")
+        result[category] = {}
+        for language, words in languages.items():
+            if not isinstance(language, str) or not isinstance(words, dict):
+                raise ConfigError(f"Confirmation language entries must be mappings in {source}")
+            if any(
+                not isinstance(word, str) or not isinstance(on, bool) for word, on in words.items()
+            ):
+                raise ConfigError(
+                    f"Confirmation words require quoted string keys and boolean values in {source}"
+                )
+            result[category][language] = [word for word, on in words.items() if on]
+    return result
 
 
 # Risky tools are still called at once: the result asks the player, so the model must not.
@@ -64,8 +81,9 @@ class ActionKeeper:
         self.language = language
         self.confirm_ttl_s = settings.get("confirm_ttl_s", 30)
         self.action_timeout_s = settings.get("action_timeout_s", 5)
-        self.affirmatives = self._words(AFFIRMATIVES, settings.get("affirmatives", {}))
-        self.negatives = self._words(NEGATIVES, settings.get("negatives", {}))
+        words = confirmation_words()
+        self.affirmatives = self._words(words["affirmative"], settings.get("affirmatives", {}))
+        self.negatives = self._words(words["negative"], settings.get("negatives", {}))
         self.pending: _Pending | None = None
         self.turn = 0
         self.utterance = ""

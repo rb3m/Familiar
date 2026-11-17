@@ -38,6 +38,8 @@ the core works without any game pack. The commands are in `README.md`.
 | SCS games | `packages/familiar-scs/src/familiar_scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
 | Backends | `packages/familiar/src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |
 
+Outside-owned core defaults live in packaged `data/*.yaml`, loaded through `interfaces.load_data` with uncached user overrides in `~/.config/familiar/data/` (`FAMILIAR_DATA_DIR` overrides the root).
+
 ## Interfaces (summary)
 
 - **LLMProvider**: `stream(messages, system, tools) -> AsyncIterator[LLMChunk]` (text deltas and tool

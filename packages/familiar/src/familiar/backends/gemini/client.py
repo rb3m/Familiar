@@ -10,6 +10,7 @@ from google.genai import errors, types
 from google.genai._interactions import APIConnectionError
 from google.genai._interactions import APIError as InteractionAPIError
 
+from familiar.backends.models import model_defaults
 from familiar.interfaces import BackendError, ConfigError
 
 
@@ -50,11 +51,11 @@ def backend_errors() -> Iterator[None]:
 class GeminiSpeechClient:
     """Lazy v1beta client lifecycle shared by clip and streaming speech."""
 
-    default_model: str
+    model_kind: str
 
     def __init__(self, settings: dict) -> None:
         self.settings = settings
-        self.model = settings.get("model", self.default_model)
+        self.model = settings.get("model", model_defaults("gemini")[self.model_kind])
         self._client: genai.Client | None = None
 
     def _get_client(self) -> genai.Client:

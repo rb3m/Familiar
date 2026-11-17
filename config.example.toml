@@ -1,7 +1,7 @@
 # Copy to config.toml (git-ignored) or ~/.config/familiar/config.toml and adjust.
 # Secrets never go here: settings name the environment variable that holds them.
 
-language = "en"            # en | es | ja (persona must support it)
+language = "en"            # catalog code; add languages in the GUI or data override (persona must support it)
 persona = "mira"        # file name in personas_dir, without .yaml
 # personas_dir = "my-personas"  # Optional extra personas; packaged Mira is always available.
 # GUI-created personas live here and take precedence over personas_dir.

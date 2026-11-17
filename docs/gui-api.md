@@ -28,6 +28,15 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
     "started_at": ISO-8601 | null, "exit_code": int | null}`
   - Game names: ats "American Truck Simulator", ets2 "Euro Truck Simulator 2"; unknown ids
     title-cased. The list comes from installed `familiar.games` plugins.
+- `GET /api/languages` → `[{"id": "en", "name": "English", "native": "English"}, ...]`
+  from packaged data plus user overrides, read afresh. `/api/state` includes the same catalog.
+- `POST /api/languages` body `{"code": "pt-BR", "name": "Portuguese", "native": "Português" (optional)}`
+  → `200 {"id": "pt-BR", "name": "Portuguese", "native": "Português"}`; native defaults to name.
+  Codes use 2–3 letters with an optional uppercase two-letter or three-digit region. Names must
+  be non-empty strings. Invalid input returns `400`; the usual token and origin checks apply.
+  Saves only user changes to `~/.config/familiar/data/familiar/languages.yaml` (or
+  `$FAMILIAR_DATA_DIR/familiar/languages.yaml`), preserving other overrides. Enable the language
+  and configure its voices in each persona that will use it.
 - `GET /api/personas/{id}` → full persona as JSON (same keys as the YAML) + `"builtin": bool`
   and `"overrides_builtin": bool`.
 - `PUT /api/personas/{id}` body = full persona JSON → validated with the persona loader rules;

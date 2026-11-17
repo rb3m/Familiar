@@ -13,7 +13,7 @@ class GeminiSTT(GeminiSpeechClient):
     api_version = PLUGIN_API_VERSION
     capabilities = frozenset()
 
-    default_model = "gemini-3.5-transcribe"
+    model_kind = "stt"
 
     async def transcribe(self, audio: AudioClip, language: str) -> str:
         with backend_errors():

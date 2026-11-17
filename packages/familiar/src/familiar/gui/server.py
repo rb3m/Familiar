@@ -14,15 +14,16 @@ from aiohttp import web
 from familiar.audio.player import Player
 from familiar.config import AppConfig, BackendConfig, find_config_path, load_config
 from familiar.fallback import close_backend
-from familiar.interfaces import ConfigError, Message
+from familiar.interfaces import ConfigError, Message, read_user_data, save_user_data
 from familiar.persona import (
     BUILTIN_PERSONAS_DIR,
-    LANGUAGE_NAMES,
     TRUTHFULNESS_RULES,
+    languages,
     list_personas,
     load_persona,
     persona_directories,
     validate_id,
+    validate_language,
     validate_persona,
 )
 from familiar.plugins import available, load, load_class
@@ -185,7 +186,7 @@ class APIService:
                     summary(asdict(p), builtin, self.overrides_builtin(p.id))
                     for p, builtin in self.personas()
                 ],
-                "languages": [{"id": key, "name": name} for key, name in LANGUAGE_NAMES.items()],
+                "languages": [{"id": code, **entry} for code, entry in languages().items()],
                 "defaults": {
                     "game": self.config.game,
                     "persona": self.config.persona,
@@ -195,6 +196,21 @@ class APIService:
                 "quota": await self.quota(),
             }
         )
+
+    async def get_languages(self, request: web.Request) -> web.Response:
+        return web.json_response([{"id": code, **entry} for code, entry in languages().items()])
+
+    async def add_language(self, request: web.Request) -> web.Response:
+        data = await body(request)
+        code = data.get("code")
+        entry = {"name": data.get("name"), "native": data.get("native", data.get("name"))}
+        validate_language(code, entry)
+        # Validate existing overrides before preserving just the user's changes.
+        languages()
+        overrides = read_user_data("familiar", "languages") or {}
+        overrides[code] = {**(overrides.get(code) or {}), **entry}
+        save_user_data("familiar", "languages", overrides)
+        return web.json_response({"id": code, **entry})
 
     async def get_persona(self, request: web.Request) -> web.Response:
         persona, builtin = self.persona(request.match_info["id"])
@@ -426,6 +442,8 @@ def create_app(
     app.add_routes(
         [
             web.get("/api/state", api.state),
+            web.get("/api/languages", api.get_languages),
+            web.post("/api/languages", api.add_language),
             web.post("/api/personas/draft", api.draft),
             web.get("/api/personas/{id}", api.get_persona),
             web.put("/api/personas/{id}", api.put_persona),

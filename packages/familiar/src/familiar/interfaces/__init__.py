@@ -1,6 +1,14 @@
 """Stable contracts shared by Familiar and its plugins."""
 
 from .action import ACTION_STATUSES, ActionSpec, Actuator, Keyboard, KeyboardUser
+from .data import (
+    DATA_DIR_ENV,
+    DataSet,
+    load_data,
+    read_user_data,
+    save_user_data,
+    user_data_path,
+)
 from .errors import BackendError, ConfigError, PluginError
 from .game import GameAdapter
 from .llm import LLMProvider
@@ -14,6 +22,12 @@ PLUGIN_API_VERSION = "2.0"
 
 __all__ = [
     "PLUGIN_API_VERSION",
+    "DATA_DIR_ENV",
+    "DataSet",
+    "load_data",
+    "read_user_data",
+    "save_user_data",
+    "user_data_path",
     "ACTION_STATUSES",
     "ActionSpec",
     "Actuator",

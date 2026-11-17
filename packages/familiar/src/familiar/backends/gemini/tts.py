@@ -13,7 +13,7 @@ class GeminiTTS(GeminiSpeechClient):
     api_version = PLUGIN_API_VERSION
     capabilities = frozenset({"streaming"})
 
-    default_model = "gemini-3.8-flash-lite-tts"
+    model_kind = "tts"
 
     async def synthesize(
         self, text: str, voice: str | None, language: str

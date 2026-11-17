@@ -1,0 +1,62 @@
+# Packaged spoken confirmation words.
+# Override at ~/.config/familiar/data/familiar/confirmation_words.yaml
+# with only the keys you change; false or null removes a word. Quote every key.
+"affirmative":
+  "en":
+    "yes": true
+    "yeah": true
+    "yep": true
+    "yup": true
+    "sure": true
+    "confirm": true
+    "confirmed": true
+    "affirmative": true
+    "do it": true
+    "go ahead": true
+    "go for it": true
+    "ok": true
+    "okay": true
+  "es":
+    "sí": true
+    "si": true
+    "dale": true
+    "hazlo": true
+    "confirmo": true
+    "claro": true
+    "adelante": true
+    "de acuerdo": true
+    "vale": true
+  "ja":
+    "はい": true
+    "うん": true
+    "お願い": true
+    "どうぞ": true
+    "やって": true
+    "了解": true
+    "オッケー": true
+"negative":
+  "en":
+    "no": true
+    "nope": true
+    "don't": true
+    "do not": true
+    "cancel": true
+    "stop": true
+    "abort": true
+    "wait": true
+    "belay": true
+  "es":
+    "no": true
+    "cancela": true
+    "cancelar": true
+    "espera": true
+    "alto": true
+    "detente": true
+  "ja":
+    "いいえ": true
+    "いや": true
+    "だめ": true
+    "ダメ": true
+    "やめ": true
+    "待って": true
+    "キャンセル": true

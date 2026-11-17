@@ -205,3 +205,22 @@ A `KeyboardUser` implements `attach_keyboard(keyboard)`; core loads `familiar.ke
 with lowercase evdev names without `KEY_`; chords release in reverse order. Unknown keys
 raise `ValueError`. Packs own bindings and toggle semantics and return `unavailable` when
 no keyboard is attached. The additive interfaces retain plugin API 2.0 (ADR 0009).
+
+
+## Data files and overrides
+
+Ship outside-owned defaults in `data/<name>.yaml` inside your package. Packs use
+`from familiar.interfaces import load_data` and `load_data("my_pack", "catalog")` with their
+own package name; identifiers may contain only lowercase letters, digits and underscores.
+The returned `DataSet.value` merges packaged data with
+`~/.config/familiar/data/<package>/<name>.yaml`; `FAMILIAR_DATA_DIR` overrides the root on all
+platforms. `DataSet.sources` lists the packaged path followed by any user file so validation
+errors can name their sources. Validate the merged shape in the caller.
+
+Put a header comment in each packaged file explaining its purpose and override path; users
+need only write keys they change. Mappings merge recursively, lists/scalars replace, and null
+mapping values delete keys. Empty user files leave defaults intact; duplicate mapping keys
+are errors. Quote string keys such as `"yes"` and `"no"` to avoid YAML boolean coercion.
+`user_data_path` locates overrides and `save_user_data` writes them atomically. Loads are
+uncached: call `load_data` again to refresh; existing backend instances and action keepers
+pick up defaults when recreated.

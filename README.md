@@ -57,6 +57,8 @@ project, so a bare `familiar-scs` install would pull the wrong package.
 ### Keys
 
 Secrets live in environment variables; `config.toml` only names them.
+Language, confirmation-word and model defaults can be overridden in
+`~/.config/familiar/data/familiar/*.yaml` (`FAMILIAR_DATA_DIR` changes the root); write only keys you change.
 
 | Service | Variable (default) | Used for |
 |---|---|---|

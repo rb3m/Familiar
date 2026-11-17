@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator
 from urllib.parse import quote
 
+from familiar.backends.models import model_defaults
 from familiar.interfaces import PLUGIN_API_VERSION, AudioChunk, BackendError
 
 from .client import ElevenLabsClient, backend_errors, check_response
@@ -25,7 +26,7 @@ class ElevenLabsTTS(ElevenLabsClient):
                 params={"output_format": "pcm_24000"},
                 json={
                     "text": text,
-                    "model_id": self.settings.get("model", "eleven_flash_v2_5"),
+                    "model_id": self.settings.get("model", model_defaults("elevenlabs")["tts"]),
                     "language_code": language,
                 },
             ) as response:

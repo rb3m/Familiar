@@ -7,11 +7,40 @@ from pathlib import Path
 
 import yaml
 
-from familiar.interfaces import ConfigError
+from familiar.interfaces import ConfigError, load_data
 
 BUILTIN_PERSONAS_DIR = Path(__file__).parent / "personas"
 
-LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "ja": "Japanese"}
+
+def validate_language(code: object, entry: object) -> None:
+    """Validate catalog entries without imposing a fixed language inventory."""
+    if not isinstance(code, str) or not re.fullmatch(
+        r"[a-zA-Z]{2,3}(?:-[A-Z]{2}|-[0-9]{3})?", code
+    ):
+        raise ConfigError(f"Invalid language code {code!r}; use a code such as en or pt-BR")
+    if not isinstance(entry, dict):
+        raise ConfigError(f"Language {code!r} must be a mapping")
+    for key in ("name", "native"):
+        if not isinstance(entry.get(key), str) or not entry[key].strip():
+            raise ConfigError(f"Language {code!r} {key} must be a non-empty string")
+
+
+def languages() -> dict[str, dict[str, str]]:
+    """Read and validate the packaged language catalog and user changes."""
+    dataset = load_data("familiar", "languages")
+    try:
+        if not isinstance(dataset.value, dict):
+            raise ConfigError("Languages must be a mapping")
+        for code, entry in dataset.value.items():
+            validate_language(code, entry)
+    except ConfigError as exc:
+        raise ConfigError(f"{exc} in {', '.join(dataset.sources)}") from exc
+    return dataset.value
+
+
+def language_names() -> dict[str, str]:
+    return {code: entry["name"] for code, entry in languages().items()}
+
 
 # How loosely a persona may treat facts. Practical information is always exact: a companion
 # who exaggerates the fuel level or a deadline stops being fun and starts being a hazard.
@@ -64,7 +93,7 @@ class Persona:
         parts.append(f"- {SPOKEN_RULE}")
         if game in self.game_hooks:
             parts.append(self.game_hooks[game])
-        parts.append(f"Always reply in {LANGUAGE_NAMES.get(language, language)}.")
+        parts.append(f"Always reply in {language_names().get(language, language)}.")
         return "\n".join(parts)
 
     def voice(self, tts_backend: str, language: str) -> str | None:

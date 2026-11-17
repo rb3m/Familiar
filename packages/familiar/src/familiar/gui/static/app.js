@@ -2,7 +2,8 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const token = new URLSearchParams(location.search).get('token') || '';
 const storageKey = 'familiar.launcher.choices';
-const languageNames = { en: 'English', es: 'Español', ja: '日本語' };
+let languageNames = {};
+let englishLanguageNames = {};
 const samples = {
   en: 'Hello! I’m ready for our next adventure.',
   es: '¡Hola! Estoy lista para nuestra próxima aventura.',
@@ -219,7 +220,7 @@ function renderLanguage() {
   const select = $('#language');
   select.replaceChildren();
   for (const language of state.languages.filter((item) => selectedPersona()?.languages.includes(item.id))) {
-    select.add(new Option(language.name, language.id));
+    select.add(new Option(language.native || language.name, language.id));
   }
   select.value = choices.language || '';
   select.disabled = state.session.running || sessionBusy || !select.options.length;
@@ -273,6 +274,8 @@ function applySession(session) {
 
 function applyState(nextState) {
   state = nextState;
+  languageNames = Object.fromEntries(state.languages.map((item) => [item.id, item.native || item.name]));
+  englishLanguageNames = Object.fromEntries(state.languages.map((item) => [item.id, item.name]));
   normalizeChoices(state.session.running ? state.session : choices);
   renderGames();
   renderPersonas();
@@ -282,7 +285,8 @@ function applyState(nextState) {
 }
 
 async function refreshState() {
-  applyState(await api('/api/state'));
+  const [nextState, languages] = await Promise.all([api('/api/state'), api('/api/languages')]);
+  applyState({ ...nextState, languages });
 }
 
 async function toggleSession() {
@@ -372,21 +376,19 @@ function fillEditor(data, isNew, draft = false) {
   $('#edit-name').focus();
 }
 
-const LANGUAGE_NAMES = { en: 'English', es: 'Spanish', ja: 'Japanese' };
-
 function voiceLabel(voice) {
   const language = voice.labels?.language;
   if (!language) return voice.name;
   const raw = voice.labels?.accent;
   const accent = raw && raw !== 'standard' ? ` (${raw.replace(/\b\w/g, (c) => c.toUpperCase())})` : '';
-  return `${voice.name} · ${LANGUAGE_NAMES[language] || language}${accent}`;
+  return `${voice.name} · ${englishLanguageNames[language] || language}${accent}`;
 }
 
 // ElevenLabs voices native to the row's language come first, in their own group.
 function addElevenLabsOptions(select, options, language) {
   const native = options.filter((voice) => voice.labels?.language === language);
   const others = options.filter((voice) => voice.labels?.language !== language);
-  const groups = [[`${LANGUAGE_NAMES[language] || language} voices`, native], ['Other voices', others]];
+  const groups = [[`${englishLanguageNames[language] || language} voices`, native], ['Other voices', others]];
   for (const [label, list] of groups) {
     if (!list.length) continue;
     const group = element('optgroup');
@@ -438,7 +440,7 @@ function renderVoiceRows(languages) {
     for (const voice of voices.elevenlabs) list.append(new Option(voiceLabel(voice), voice.id));
     root.append(list);
   }
-  const languageIds = [...new Set(['en', 'es', 'ja', ...Object.keys(languages)])];
+  const languageIds = [...new Set([...state.languages.map((item) => item.id), ...Object.keys(languages)])];
   for (const id of languageIds) {
     const row = element('div', 'language-row');
     row.dataset.language = id;
@@ -509,8 +511,8 @@ function addHook(id = '', text = '', fixed = false, name = id) {
   return row;
 }
 
-function collectPersona() {
-  const form = new FormData($('#editor-form'));
+function collectLanguages() {
+  if (!editor) return {};
   const languages = {};
   for (const row of $$('.language-row')) {
     if (!$('input[type=checkbox]', row).checked) continue;
@@ -523,6 +525,12 @@ function collectPersona() {
     }
     languages[id] = { ...editor.data.languages?.[id], voices: backendVoices };
   }
+  return languages;
+}
+
+function collectPersona() {
+  const form = new FormData($('#editor-form'));
+  const languages = collectLanguages();
   if (!Object.keys(languages).length) throw new Error('Enable at least one language.');
   const gameHooks = {};
   for (const row of $$('[data-hook]')) {
@@ -720,7 +728,47 @@ async function quit() {
   });
 }
 
+function addLanguageControl() {
+  const details = element('details');
+  details.append(element('summary', '', 'Add language'));
+  const form = element('form', 'actions');
+  const fields = {};
+  for (const [name, labelText, placeholder] of [['code', 'ISO code', 'pt-BR'], ['name', 'Name', 'Portuguese']]) {
+    const label = element('label', '', labelText);
+    const input = element('input');
+    input.name = name;
+    input.placeholder = placeholder;
+    input.required = true;
+    if (name === 'code') input.pattern = '[a-zA-Z]{2,3}(-[A-Z]{2}|-[0-9]{3})?';
+    label.append(input);
+    form.append(label);
+    fields[name] = input;
+  }
+  const save = element('button', '', 'Add language');
+  save.type = 'submit';
+  form.append(save);
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    busy(save, async () => {
+      if (editorBusy) throw new Error('Please wait for the current persona operation to finish.');
+      setEditorBusy(true);
+      try {
+        const currentLanguages = collectLanguages();
+        const added = await post('/api/languages', { code: fields.code.value.trim(), name: fields.name.value.trim() });
+        await refreshState();
+        if (editor) renderVoiceRows(currentLanguages);
+        toast(`${added.name} added. Enable it in the persona editor to use it.`);
+      } finally { setEditorBusy(false); }
+      form.reset();
+      details.open = false;
+    });
+  });
+  details.append(form);
+  $('#language').parentElement.after(details);
+}
+
 function bindControls() {
+  addLanguageControl();
   for (const tab of $$('[data-view]')) tab.addEventListener('click', () => switchView(tab.dataset.view));
   $('.brand').addEventListener('click', (event) => { event.preventDefault(); switchView('play'); });
   $('#language').addEventListener('change', (event) => {
@@ -785,7 +833,8 @@ async function init() {
     $('#session-status').textContent = 'Could not connect to the launcher.';
     return;
   }
-  applyState(results[0].value);
+  const languages = await api('/api/languages');
+  applyState({ ...results[0].value, languages });
   $('#main').setAttribute('aria-busy', 'false');
   $('#main').inert = false;
   connectEvents();

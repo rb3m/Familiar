@@ -12,6 +12,7 @@ from uuid import uuid4
 from google import genai
 from google.genai import errors, types
 
+from familiar.backends.models import model_defaults
 from familiar.interfaces import (
     PLUGIN_API_VERSION,
     BackendError,
@@ -120,11 +121,12 @@ class GeminiLLM:
 
     def __init__(self, settings: dict) -> None:
         self.settings = {"api_key_env": "GEMINI_API_KEY", **settings}
-        self.model = settings.get("model", "gemini-3.5-flash-lite")
+        defaults = model_defaults("gemini")
+        self.model = settings.get("model", defaults["llm"])
         self.temperature = settings.get("temperature", 0.8)
         self.max_retries = int(settings.get("max_retries", 2))
         self.backoff = float(settings.get("backoff_seconds", 1.0))
-        self.fallback_models = list(settings.get("fallback_models", ["gemini-3.8-flash"]))
+        self.fallback_models = list(settings.get("fallback_models", defaults["fallback_models"]))
         self.first_chunk_timeout = float(settings.get("first_chunk_timeout_seconds", 8.0))
         self.read_timeout = float(settings.get("timeout_seconds", 30.0))
         self._client: genai.Client | None = None

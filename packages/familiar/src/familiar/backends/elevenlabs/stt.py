@@ -1,6 +1,7 @@
 """ElevenLabs Scribe clip transcription."""
 
 from familiar.audio.wav import pcm_to_wav
+from familiar.backends.models import model_defaults
 from familiar.interfaces import PLUGIN_API_VERSION, AudioClip
 
 from .client import ElevenLabsClient, backend_errors, check_response
@@ -16,7 +17,7 @@ class ElevenLabsSTT(ElevenLabsClient):
             response = await self._get_client().post(
                 "/v1/speech-to-text",
                 data={
-                    "model_id": self.settings.get("model", "scribe_v2"),
+                    "model_id": self.settings.get("model", model_defaults("elevenlabs")["stt"]),
                     "language_code": language,
                     # Tags like "[outro jingle]" replace misheard speech; we want words.
                     "tag_audio_events": "false",
