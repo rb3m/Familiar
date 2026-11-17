@@ -27,30 +27,17 @@ status report, set an alert). Needs a Touch Portal plugin connection; see the `t
 skill for panel layouts. Also follow-up: a window-focus check for key presses (KWin scripting on
 KDE Wayland) so presses never land in another app.
 
-Planned (M5): **SCS actions as data, with rescan.** Today the 19 ATS/ETS2 actions are code:
-`ACTION_MIXES` and the defaults in `familiar_scs/bindings.py`, with descriptions, options and risk
-in `actions.py`. Bindings are re-read only when a session starts. When the player rebinds keys, or
-SCS adds new controls in an update, Familiar should catch up without code changes. Steps:
-1. Move the action catalogue to a data file packaged with the SCS pack (TOML): per action the SCS
-   control name (or variants such as left/right), description, options, risk (`risky` or a rule
-   like `state = "off"`), hold time, and the telemetry field for state-aware actions. A user file
-   in `~/.config/familiar/` adds actions or overrides fields, like user personas shadow built-ins.
-   Only the logic (state check, read-back, guards) stays in code.
-2. Reload bindings when `controls_linux.sii` changes (check its modification time before a
-   press), so a rebind works mid-session.
-3. `familiar scs bindings ats|ets2` reports each action with its key, flags unbound ones, and lists
-   controls bound in the profile that no action uses yet (new SCS controls show up here).
-   `--suggest` drafts catalogue entries for those into the user file, marked risky by default
-   until the player reviews them. Nothing is exposed automatically: the controls file also holds
-   menu, debug and console keys.
+Done 2026-11-17: **SCS actions as data, with rescan.** The catalogue, default keys, key names,
+projections and regions are YAML in `familiar_scs/data/`, overridable in
+`~/.config/familiar/data/familiar_scs/`. Bindings reload when the profile file changes.
+`familiar scs bindings ats|ets2 [--suggest]` lists keys and unused bound controls; drafts are
+written disabled until reviewed. Open: confirm in game that mid-session reload picks up a rebind.
 
-Planned: **move outside-owned data out of code** (rule in `AGENTS.md`, 2026-11-17). Audit found:
-KSP resource names (`PROPELLANTS`, `STAGE_RESOURCES` in `familiar_ksp/telemetry.py`; mods add
-fuels such as liquid hydrogen), SCS map projections and region names (`projection.py`,
-`places.py`; new map DLC), the SCS action catalogue (item above), the language list
-(`LANGUAGE_NAMES`, see "add new languages") and the yes/no word lists in `hands.py` (already
-overridable in config; defaults could move to a data file). Each moves to a packaged data file
-with a user override, read at start-up.
+Done 2026-11-17: **outside-owned data moved out of code** (rule in `AGENTS.md`). Shared loader
+`familiar.interfaces.data` (packaged YAML + user override). Moved: languages, yes/no words, model
+IDs (core); SCS catalogue, keys, projections, regions; KSP resource names, with propellants also
+discovered from the engines at runtime (modded fuels work without edits). Open: fly a modded-fuel
+stage to confirm discovery live.
 
 Dropped 2026-11-17: **Japanese practice mode.** The Commander chose to practise in SwiftBlade
 (the Mac Mini chat front end for CLI agents) and add a way to read its output aloud, instead of
@@ -73,12 +60,9 @@ Rebuild per Minecraft version (keep the mod small). It is the first Java code in
 so get agy/codex consensus and an ADR first. Bedrock's `/connect` WebSocket gives events with no
 mod, but only helps if Bedrock is played.
 
-Planned: **add new languages.** Only en/es/ja are offered today. The list is hard-coded in
-`persona.py` (`LANGUAGE_NAMES`), in the GUI (`app.js`) and in the `config.example.toml` comment,
-yet Gemini, ElevenLabs STT/TTS and Gemini TTS already handle many more. Let the user add any
-language (e.g. French, German, Portuguese) from the GUI or persona YAML by ISO code: one shared
-list of names in core, served to the GUI. Voices are chosen per language as today, and the
-voice dropdown already sorts native voices first. Check that each backend accepts the code.
+Done 2026-11-17: **add new languages.** Languages come from `familiar/data/languages.yaml`; the
+GUI's Add language control saves to the user override (`POST /api/languages`). Open: check that
+each backend (Gemini, ElevenLabs STT/TTS) accepts a newly added code.
 
 Planned: **Mac desk companion with alerts.** Familiar on the Mac as a desk assistant that
 speaks up about notifications and events, not games. Core already runs without a game pack;
