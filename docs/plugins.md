@@ -180,3 +180,21 @@ Resources use KSP resource units; distances and speeds use SI units.
 
 KSP quotes live in `knowledge/quotes.yaml` (19 curated, source-checked; each entry also carries `source_url` and
 event-kind `triggers`, which the loader validates and does not attach to events).
+
+
+## Actions (hands)
+
+A pack optionally implements `Actuator` from `familiar.interfaces`: `actions()` returns
+names mapped to `ActionSpec(description, parameters, risky=False, risky_when=None)`;
+`async perform(name, arguments)` returns a dict with `status` and `detail`. Status values
+are `done`, `already`, `unavailable`, `unknown`, and `error`. Parameters use the core tool
+JSON-schema subset. Set `risky` for confirmation, or supply `risky_when(arguments)` to
+override it per call. Optional `action_context()` returns a fast identity (`str | None`)
+that core checks again before confirming. Packs must re-check game safety before acting.
+
+Core offers `act_<name>` only on player turns and owns confirmation, timeouts and deduplication.
+A `KeyboardUser` implements `attach_keyboard(keyboard)`; core loads `familiar.keyboard`
+(default `uinput`) and owns cleanup. Use `await keyboard.tap(["leftctrl", "o"], hold_s=0.05)`
+with lowercase evdev names without `KEY_`; chords release in reverse order. Unknown keys
+raise `ValueError`. Packs own bindings and toggle semantics and return `unavailable` when
+no keyboard is attached. The additive interfaces retain plugin API 2.0 (ADR 0009).

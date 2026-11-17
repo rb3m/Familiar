@@ -1,5 +1,6 @@
 """Stable contracts shared by Familiar and its plugins."""
 
+from .action import ACTION_STATUSES, ActionSpec, Actuator, Keyboard, KeyboardUser
 from .errors import BackendError, ConfigError, PluginError
 from .game import GameAdapter
 from .llm import LLMProvider
@@ -13,6 +14,11 @@ PLUGIN_API_VERSION = "2.0"
 
 __all__ = [
     "PLUGIN_API_VERSION",
+    "ACTION_STATUSES",
+    "ActionSpec",
+    "Actuator",
+    "Keyboard",
+    "KeyboardUser",
     "PushToTalk",
     "BackendError",
     "ConfigError",

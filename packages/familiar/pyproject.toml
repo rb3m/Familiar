@@ -39,3 +39,6 @@ elevenlabs = "familiar.backends.elevenlabs.tts:ElevenLabsTTS"
 terminal = "familiar.ptt.terminal:TerminalPTT"
 evdev = "familiar.ptt.evdev:EvdevPTT"
 
+
+[project.entry-points."familiar.keyboard"]
+uinput = "familiar.keyboard.uinput:UinputKeyboard"

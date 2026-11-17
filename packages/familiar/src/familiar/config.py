@@ -31,6 +31,14 @@ FLAVOR_DEFAULTS = {
 ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.0, "max_alerts": 8}
 
 
+HANDS_DEFAULTS = {
+    "enabled": True,
+    "keyboard": "uinput",
+    "confirm_ttl_s": 30,
+    "action_timeout_s": 5,
+}
+
+
 @dataclass
 class BackendConfig:
     backend: str
@@ -57,6 +65,7 @@ class AppConfig:
     memory: dict = field(default_factory=lambda: MEMORY_DEFAULTS.copy())
     flavor: dict = field(default_factory=lambda: FLAVOR_DEFAULTS.copy())
     alerts: dict = field(default_factory=lambda: ALERT_DEFAULTS.copy())
+    hands: dict = field(default_factory=lambda: HANDS_DEFAULTS.copy())
 
 
 def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig | None:
@@ -142,6 +151,31 @@ def _alerts(data: dict) -> dict:
     return settings
 
 
+def _hands(data: dict) -> dict:
+    section = data.get("hands", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[hands] must be a table")
+    settings = {**HANDS_DEFAULTS, **section}
+    if not isinstance(settings["enabled"], bool):
+        raise ConfigError("hands.enabled must be a boolean")
+    if not isinstance(settings["keyboard"], str) or not settings["keyboard"]:
+        raise ConfigError("hands.keyboard must be a non-empty string")
+    for key in ("confirm_ttl_s", "action_timeout_s"):
+        value = settings[key]
+        if type(value) not in {int, float} or not math.isfinite(value) or value <= 0:
+            raise ConfigError(f"hands.{key} must be a finite positive number")
+    for key in ("affirmatives", "negatives"):
+        words = settings.get(key, {})
+        if not isinstance(words, dict) or any(
+            not isinstance(lang, str)
+            or not isinstance(entries, list)
+            or any(not isinstance(word, str) for word in entries)
+            for lang, entries in words.items()
+        ):
+            raise ConfigError(f"hands.{key} must be a table of string lists")
+    return settings
+
+
 USER_CONFIG = Path("~/.config/familiar/config.toml")
 
 
@@ -188,6 +222,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         memory=_memory(data, base),
         flavor=_flavor(data),
         alerts=_alerts(data),
+        hands=_hands(data),
         language=language,
         persona=persona,
         personas_dir=_path(data["personas_dir"], base) if "personas_dir" in data else None,

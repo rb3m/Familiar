@@ -6,6 +6,7 @@ from importlib.metadata import entry_points
 from familiar.interfaces import PLUGIN_API_VERSION, PluginError
 
 GROUPS = {
+    "keyboard": "familiar.keyboard",
     "llm": "familiar.llm",
     "stt": "familiar.stt",
     "tts": "familiar.tts",

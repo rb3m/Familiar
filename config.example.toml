@@ -92,3 +92,13 @@ item_cooldown_days = 14    # cooldown per quote ID within its game
 enabled = true            # voice-set, one-shot telemetry alerts; session only
 lead_s = 1.0              # fire early to cover speech latency (announcements skip the LLM); >= 0
 max_alerts = 8            # integer from 1 to 8
+
+# [hands]
+# enabled = true          # actions only on player turns; risky actions need a later yes
+# keyboard = "uinput"     # familiar.keyboard backend; Linux /dev/uinput permissions needed
+# confirm_ttl_s = 30      # positive seconds to confirm a pending action
+# action_timeout_s = 5    # positive seconds; timeout means outcome unknown, never retried
+# [hands.affirmatives]    # extra words, added to built-in en/es/ja lists (all are checked)
+# en = ["proceed"]
+# [hands.negatives]
+# en = ["hold on"]

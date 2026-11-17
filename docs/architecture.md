@@ -123,3 +123,14 @@ mode, practical information the player acts on (fuel, damage, distances, deadlin
 - The user is on open speakers about half the time, so the mic only records while PTT is held, and
   pressing PTT stops playback (barge-in). Without that, the companion would hear itself.
 - Key injection ("hands", M4) uses physical scancodes via uinput, never characters (latam layout).
+
+
+## Actions (hands)
+
+Optional `Actuator` packs expose action specs and execution; core `ActionKeeper` registers
+player-only tools, deduplicates each turn and bounds execution with a timeout. Risky actions
+require a later affirmative player turn within a TTL and unchanged context; negatives cancel,
+clarifying turns preserve pending actions. Pending consent is consumed before execution.
+Core owns the optional `Keyboard` backend (`familiar.keyboard`, initially Linux uinput),
+serialises chords and releases keys on cancellation and shutdown. Packs own game safety and
+bindings. See ADR 0009; these additive protocols retain API 2.0.

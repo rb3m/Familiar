@@ -8,6 +8,7 @@ from dataclasses import asdict
 
 from familiar.alerts import AlertKeeper
 from familiar.flavor import FlavorKeeper, flavor_hint
+from familiar.hands import ActionKeeper
 from familiar.interfaces import GameEvent, LLMProvider, Message, TextToSpeech
 from familiar.memory import MemoryKeeper
 from familiar.persona import Persona
@@ -20,6 +21,15 @@ ALERT_RULE = (
     "told, warned or called out when a value is reached, call set_alert in this same reply "
     "before saying anything about it, and confirm only what its result says. Never claim an "
     "alert is set unless set_alert returned it."
+)
+
+
+ACTION_RULE = (
+    "\n\nActions: act only when the player asks in this turn. When an action returns "
+    "needs_confirmation, ask its ask line as a short yes/no question and wait. Call "
+    "confirm_action only after the player answers yes in a later message. Never say an "
+    "action happened unless its status is done or already. Say plainly when it is "
+    "unavailable or unknown."
 )
 
 
@@ -38,6 +48,7 @@ class Conversation:
         flavor: FlavorKeeper | None = None,
         tools: ToolRegistry | None = None,
         alerts: AlertKeeper | None = None,
+        actions: ActionKeeper | None = None,
     ) -> None:
         if history_limit < 1:
             raise ValueError("history_limit must be positive")
@@ -52,6 +63,7 @@ class Conversation:
         self.flavor = flavor
         self.tools = tools if tools is not None else ToolRegistry()
         self.alerts = alerts
+        self.actions = actions
         self.history_limit = history_limit
         self.history: list[Message] = []
 
@@ -68,6 +80,8 @@ class Conversation:
 
     async def ask(self, user_text: str) -> AsyncIterator[str]:
         """Yield reply sentences and retain partial replies on cancellation."""
+        if self.actions is not None:
+            self.actions.begin_turn(user_text)
         self.transcript.record("user", text=user_text)
         async with aclosing(self._turn(user_text, player_turn=True)) as sentences:
             async for sentence in sentences:
@@ -138,6 +152,8 @@ class Conversation:
         specs = self.tools.specs() if player_turn else []
         if any(spec.name == "set_alert" for spec in specs):
             system += ALERT_RULE
+        if any(spec.name.startswith("act_") for spec in specs):
+            system += ACTION_RULE
         self._remember(Message("user", text))
         for round_index in range(4):
             calls = []

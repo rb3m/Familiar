@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import inspect
+import logging
 import signal
 import sys
 from collections.abc import AsyncIterator
@@ -18,11 +19,14 @@ from familiar.conversation import Conversation
 from familiar.director import Director, feed_events
 from familiar.fallback import FallbackSTT, FallbackTTS, close_backend
 from familiar.flavor import FlavorKeeper
+from familiar.hands import ActionKeeper
 from familiar.interfaces import (
+    Actuator,
     BackendError,
     ConfigError,
     GameAdapter,
     GameEvent,
+    KeyboardUser,
     PluginError,
     Watchable,
 )
@@ -130,6 +134,19 @@ class _Runtime:
         if self.config.alerts.get("enabled", True) and isinstance(adapter, Watchable):
             conversation.alerts = AlertKeeper(adapter, self.config.alerts)
             conversation.alerts.register(conversation.tools)
+        if self.config.hands.get("enabled", True) and isinstance(adapter, Actuator):
+            if isinstance(adapter, KeyboardUser):
+                try:
+                    keyboard = load(
+                        "keyboard", self.config.hands.get("keyboard", "uinput"), self.config.hands
+                    )
+                except BackendError as exc:
+                    logging.getLogger(__name__).warning("Keyboard unavailable: %s", exc)
+                else:
+                    self.stack.push_async_callback(keyboard.aclose)
+                    adapter.attach_keyboard(keyboard)
+            conversation.actions = ActionKeeper(adapter, self.config.hands, self.language)
+            conversation.actions.register(conversation.tools)
         return conversation, adapter, director
 
     def speech(self, kind: str) -> Any:
