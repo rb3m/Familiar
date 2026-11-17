@@ -28,7 +28,7 @@ FLAVOR_DEFAULTS = {
 }
 
 
-ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.5, "max_alerts": 8}
+ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.0, "max_alerts": 8}
 
 
 @dataclass

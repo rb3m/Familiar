@@ -5,6 +5,7 @@ import base64
 import json
 import logging
 import os
+import time
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
@@ -23,6 +24,13 @@ from familiar.interfaces import (
 from .client import make_client
 
 _LOG = logging.getLogger(__name__)
+QUOTA_PARK_S = 15 * 60  # a used-up daily quota won't come back within a session's retries
+
+
+class QuotaExhaustedError(BackendError):
+    """429 RESOURCE_EXHAUSTED for a quota, not a momentary rate spike."""
+
+
 RETRYABLE_CODES = frozenset({429, 500, 503, 504})
 
 
@@ -122,6 +130,7 @@ class GeminiLLM:
         self._client: genai.Client | None = None
         self._fallback_client: genai.Client | None = None
         self._fallback_settings = self._fallback_key_settings(settings)
+        self._parked: dict[tuple[str, bool], float] = {}  # (model, fallback) -> retry after
 
     def _fallback_key_settings(self, settings: dict) -> dict | None:
         """Fallback models may use their own key (e.g. a capped paid key behind a free one)."""
@@ -165,6 +174,8 @@ class GeminiLLM:
         contents = messages_to_contents(messages)
         last_error: BackendError | None = None
         for model, delay, fallback in self._attempts():
+            if self._parked.get((model, fallback), 0) > time.monotonic():
+                continue
             await asyncio.sleep(delay)
             started = False
             try:
@@ -172,11 +183,17 @@ class GeminiLLM:
                     started = True
                     yield chunk
                 return
+            except QuotaExhaustedError as exc:
+                _LOG.warning("%s; skipping it for %d min", exc, QUOTA_PARK_S // 60)
+                self._parked[model, fallback] = time.monotonic() + QUOTA_PARK_S
+                last_error = exc
             except BackendError as exc:
                 if started or not exc.retryable:
                     raise
                 last_error = exc
-        raise last_error  # type: ignore[misc]
+        if last_error is None:
+            raise BackendError("Gemini: every model is parked after quota errors", retryable=True)
+        raise last_error
 
     async def _stream_once(
         self,
@@ -191,10 +208,10 @@ class GeminiLLM:
                 for chunk in response_to_chunks(response):
                     yield chunk
         except errors.APIError as exc:
-            raise BackendError(
-                f"Gemini {model} failed ({exc.code}): {exc.message or 'API error'}",
-                retryable=exc.code in RETRYABLE_CODES,
-            ) from exc
+            message = f"Gemini {model} failed ({exc.code}): {exc.message or 'API error'}"
+            if exc.code == 429 and "quota" in (exc.message or "").lower():
+                raise QuotaExhaustedError(message, retryable=True) from exc
+            raise BackendError(message, retryable=exc.code in RETRYABLE_CODES) from exc
         except TimeoutError as exc:
             raise BackendError(
                 f"Gemini {model} sent nothing within {self.first_chunk_timeout:g}s",

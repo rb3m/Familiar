@@ -251,7 +251,13 @@ async def test_default_maximum_and_tool_registration():
                 ToolCall(
                     "x",
                     "set_alert",
-                    {"quantity": "q", "direction": "above", "value": 10, "unit": "m"},
+                    {
+                        "quantity": "q",
+                        "direction": "above",
+                        "value": 10,
+                        "unit": "m",
+                        "announcement": "Ten!",
+                    },
                 )
             )
         )["status"] == "created"
@@ -339,6 +345,6 @@ def test_bad_config(tmp_path, section):
 def test_config_defaults_and_overrides(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text("")
-    assert load_config(path).alerts == {"enabled": True, "lead_s": 1.5, "max_alerts": 8}
+    assert load_config(path).alerts == {"enabled": True, "lead_s": 1.0, "max_alerts": 8}
     path.write_text("[alerts]\nenabled = false\nlead_s = 0\nmax_alerts = 2")
     assert load_config(path).alerts == {"enabled": False, "lead_s": 0, "max_alerts": 2}

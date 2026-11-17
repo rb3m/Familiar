@@ -87,6 +87,15 @@ class Conversation:
         self.transcript.record(
             "event", event_kind=event.kind, priority=event.priority, summary=summary
         )
+        speak = event.data.get("speak")
+        if speak:
+            # Pre-written line (e.g. an alert): no LLM round trip, so it lands on time.
+            self.transcript.record("assistant", text=speak)
+            self._remember_many(
+                [Message("user", "[Game event] " + summary), Message("assistant", speak)]
+            )
+            yield speak
+            return
         text = (
             "[Game event, not said by the player. React briefly and in character; "
             "one or two sentences.] " + summary

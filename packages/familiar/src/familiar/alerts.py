@@ -49,6 +49,7 @@ class _Alert:
     description: str
     context: str | None
     label: str = ""
+    announcement: str = ""  # spoken verbatim on firing, skipping a slow LLM round trip
     points: deque = field(default_factory=lambda: deque(maxlen=4))
     armed: bool = False
     predictable: bool = False
@@ -79,7 +80,7 @@ class AlertKeeper:
     def __init__(self, adapter: Watchable, settings: dict | None = None) -> None:
         self.adapter = adapter
         settings = settings or {}
-        self.lead_s = settings.get("lead_s", 1.5)
+        self.lead_s = settings.get("lead_s", 1.0)
         self.max_alerts = min(8, settings.get("max_alerts", 8))
         self.alerts: dict[str, _Alert] = {}
         self.history: deque[dict] = deque(maxlen=32)
@@ -93,6 +94,12 @@ class AlertKeeper:
             "value": {"type": "number"},
             "unit": {"type": "string", "enum": list(UNITS)},
             "label": {"type": "string"},
+            "announcement": {
+                "type": "string",
+                "description": "Very short line said verbatim the moment it fires, in your "
+                "own voice and the conversation's language, e.g. 'Ten thousand metres!'. "
+                "No current values: it is spoken exactly as written.",
+            },
         }
         descriptions = "; ".join(
             f"{key} ({spec.unit}): {spec.description}" for key, spec in quantities.items()
@@ -105,7 +112,7 @@ class AlertKeeper:
                 {
                     "type": "object",
                     "properties": properties,
-                    "required": ["quantity", "direction", "value", "unit"],
+                    "required": ["quantity", "direction", "value", "unit", "announcement"],
                     "additionalProperties": False,
                 },
             ),
@@ -134,7 +141,13 @@ class AlertKeeper:
         )
 
     async def set_alert(
-        self, quantity: str, direction: str, value: float, unit: str, label: str = ""
+        self,
+        quantity: str,
+        direction: str,
+        value: float,
+        unit: str,
+        label: str = "",
+        announcement: str = "",
     ) -> dict:
         spec = self.adapter.watchables().get(quantity)
         if spec is None:
@@ -162,6 +175,7 @@ class AlertKeeper:
             spec.description,
             sample.context,
             label,
+            announcement.strip(),
         )
         details = {**alert.details(), "current_value": current, "current_unit": spec.unit}
         if alert.sign * (current - threshold) >= 0:
@@ -277,7 +291,9 @@ class AlertKeeper:
                 "summary": f"Alert: {alert.description} reaching "
                 f"{alert.requested_value:,.6g} {alert.requested_unit} ({alert.direction}), "
                 "as the player asked. Announce briefly; do not claim it has already arrived.",
-                "facts": [f"Current value: {value:,.6g} {alert.unit}", f"Label: {alert.label}"],
+                # No current value: it is stale by the time a reply is spoken.
+                "facts": [f"Label: {alert.label}"] if alert.label else [],
+                "speak": alert.announcement,
                 "ttl_s": 10,
                 "alert_id": alert.id,
                 "memory_salience": 0,

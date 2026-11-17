@@ -18,6 +18,8 @@ class ElevenLabsSTT(ElevenLabsClient):
                 data={
                     "model_id": self.settings.get("model", "scribe_v2"),
                     "language_code": language,
+                    # Tags like "[outro jingle]" replace misheard speech; we want words.
+                    "tag_audio_events": "false",
                 },
                 files={"file": ("audio.wav", pcm_to_wav(audio), "audio/wav")},
             )

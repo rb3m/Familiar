@@ -56,6 +56,7 @@ class LLM:
                     "direction": "above",
                     "value": 4,
                     "unit": "km",
+                    "announcement": "Four kilometres!",
                 },
             )
         )
@@ -105,7 +106,7 @@ async def test_player_request_confirmation_poll_and_interjection(tmp_path, monke
             event = await asyncio.wait_for(director.next(), 1)
             assert event.kind == "alert"
             assert [s async for s in conversation.interject(event)] == [
-                "Passing four thousand metres now."
+                "Four kilometres!"  # spoken verbatim, no LLM call
             ]
             assert not conversation.alerts.alerts
         finally:

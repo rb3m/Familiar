@@ -123,3 +123,13 @@ def test_missing_fallback_key_reuses_primary(monkeypatch):
     llm = GeminiLLM({"api_key_env": "FREE_KEY", "fallback_api_key_env": "PAID_KEY"})
     llm._get_client(fallback=True)
     assert made == ["FREE_KEY"]
+
+
+async def test_quota_exhausted_parks_model_without_retries():
+    from familiar.backends.gemini.llm import QuotaExhaustedError
+
+    quota = {"error": QuotaExhaustedError("quota", retryable=True)}
+    llm, calls = _llm({"main": [quota], "lite": [{"texts": ["a"]}, {"texts": ["b"]}]})
+    assert await _collect(llm) == "a"
+    assert await _collect(llm) == "b"
+    assert calls == ["main", "lite", "lite"]  # no retries, and main stays parked
