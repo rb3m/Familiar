@@ -6,8 +6,8 @@
 | **M1 Voice loop** | Push-to-talk → Gemini STT → LLM → Gemini TTS, ElevenLabs as 2nd TTS; Linux + Mac | Spoken round trip under ~2 s on both machines |
 | **M2 ATS** (done 2026-11-15) | ATS adapter (TruckSim GPS server :31377), Director, first knowledge pack | Companion mentions a POI and low fuel during a real drive without spamming |
 | **M3 Memory** (in progress) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
-| **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP pack built 2026-11-16, ADR 0006, awaiting live check) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM) | Each has an adapter + knowledge pack |
-| **M5 Hands & languages** | uinput actions as LLM tools, Touch Portal sync, Japanese practice mode | Voice command toggles something in-game |
+| **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP live 2026-11-17, ADR 0006: flight events, navball/target speed, quotes; voice-set alerts ADR 0007) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM) | Each has an adapter + knowledge pack |
+| **M5 Hands & languages** (LLM tool calling exists since ADR 0007) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync, Japanese practice mode | Voice command toggles something in-game |
 
 Planned: **how the companion addresses the user.** A name or nickname the user picks (e.g.
 "Skipper"), plus a formality level (casual, polite, formal) set globally in `config.toml` /

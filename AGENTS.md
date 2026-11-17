@@ -9,9 +9,9 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Milestone: **M3 Memory** built 2026-11-16 (ADR 0005, `familiar/memory/`); needs a live check: a second drive past a place from an earlier session, "have we been here before?", and a summary row after quitting. M2 done; ETS2 (M4) live. KSP pack (ADR 0006) flown once; voice-set alerts via LLM tools (ADR 0007, API 2.0) need an in-game check.
-- Next task: live-verify M3, then tune from drives: `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`, 13:00 unverified), recall gate (`memory/keeper.py`). Unverified: ETS2 UK projection branch, Iceland (not in gazetteer/landmarks), ETS2 auto wipers.
-- Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk. Telemetry has no traffic/weather data; jams and rain are inferred.
+- Milestone: **M3 Memory** built 2026-11-16 (ADR 0005, `familiar/memory/`); needs a live check: a second drive past a place from an earlier session, "have we been here before?", and a summary row after quitting. M2 done; ETS2 (M4) live. KSP live (ADR 0006, two orbits 2026-11-17); voice-set alerts via LLM tools (ADR 0007, API 2.0) verified in flight.
+- Next task: live-verify M3, then tune from drives: `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`, 13:00 unverified), recall gate (`memory/keeper.py`). Unverified: ETS2 UK projection, Iceland, ETS2 auto wipers. Later: kRPC-fed Touch Portal KSP panel.
+- Known: LLM is flash-lite on the free key; quota 429s park a model 15 min and fall back to `fallback_api_key_env` (paid, capped). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk. Telemetry has no traffic/weather data; jams and rain are inferred.
 
 ## Rules
 - Python 3.12 via uv: `uv sync --all-packages`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.

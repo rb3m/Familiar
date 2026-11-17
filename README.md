@@ -77,6 +77,9 @@ ATS/ETS2 telemetry comes from a local TruckSim GPS telemetry server (default
 `http://localhost:31377`); see `[games.ats]` in `config.example.toml`.
 
 For KSP, install the kRPC mod and enable **Auto-start servers** and **Auto-accept new clients**.
+kRPC 0.7 ships with no server defined: in the Space Center open the kRPC window, **Add server**
+(Protobuf over TCP, localhost, RPC port 50000, stream port 50001) and start it once; it is saved
+and auto-started afterwards. Check with `uv run familiar ksp-probe`.
 Run `familiar ksp-probe` to inspect a snapshot or `familiar ksp-record flight.jsonl` to record one.
 Select KSP with `familiar voice --game ksp --persona mira`. Live flight verification is pending.
 
