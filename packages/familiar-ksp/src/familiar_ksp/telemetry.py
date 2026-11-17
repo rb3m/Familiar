@@ -7,12 +7,14 @@ import random
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Protocol
 
 import krpc
 from familiar.interfaces import ConfigError
+
+from .resources import ResourceConfig, load_resources
 
 
 def positive(value: float, name: str) -> float:
@@ -76,6 +78,8 @@ class Snapshot:
     stage_monoprop: float | None = None
     stage_monoprop_max: float | None = None
     paused: bool | None = None
+    stage_propellants: dict[str, dict[str, float | None]] = field(default_factory=dict)
+    stage_propellant_fraction: float | None = None
 
     @property
     def in_flight(self) -> bool:
@@ -119,8 +123,13 @@ def resource_values(resources, prefix: str, name: str) -> dict:
     }
 
 
-def read_snapshot(connection) -> Snapshot:
+def read_snapshot(
+    connection,
+    cache: dict[tuple[str, int], tuple[str, ...]] | None = None,
+    resources_config: ResourceConfig | None = None,
+) -> Snapshot:
     """Map the kRPC 0.7 object graph. Called only by the owning worker."""
+    res_cfg = resources_config if resources_config is not None else load_resources()
     scene = enum_name(connection.krpc.game_scene)
     common = dict(connected=True, scene=scene, paused=optional(lambda: connection.krpc.paused))
     if scene != "flight":
@@ -171,26 +180,114 @@ def read_snapshot(connection) -> Snapshot:
     inclination = optional(lambda: orbit.inclination)
     values["inclination_deg"] = math.degrees(inclination) if inclination is not None else None
     vessel_resources = optional(lambda: vessel.resources)
-    values.update(resource_values(vessel_resources, "electric_charge", "ElectricCharge"))
-    values.update(resource_values(vessel_resources, "liquid_fuel", "LiquidFuel"))
+    for field_name, res_name in res_cfg.vessel.items():
+        values.update(resource_values(vessel_resources, field_name, res_name))
     stage = values["current_stage"]
-    resources = optional(lambda: burning_resources(vessel, stage)) if stage is not None else None
+    vessel_id = values.get("vessel_id")
+
+    cache_key = (vessel_id, stage) if vessel_id is not None and stage is not None else None
+    if cache is not None and cache_key is not None and cache_key in cache:
+        propellants = cache[cache_key]
+    else:
+        fallback = res_cfg.fallback_propellants
+        propellants = discover_propellants(vessel, stage, fallback)
+        if cache is not None and cache_key is not None:
+            for k in [k for k in cache if k[0] == vessel_id and k[1] != stage]:
+                cache.pop(k, None)
+            cache[cache_key] = propellants
+
+    resources = (
+        optional(lambda: burning_resources(vessel, stage, propellants))
+        if stage is not None
+        else None
+    )
     values.update(delta_v(vessel, stage))
     values.update(optional(lambda: target_values(sc, vessel, body)) or {})
     values.update(navball(optional(lambda: vessel.control.speed_mode), values))
-    for key, name in STAGE_RESOURCES.items():
+    for key, name in res_cfg.stage.items():
         values.update(resource_values(resources, key, name))
+
+    stage_propellants = {}
+    fractions = []
+    if resources is not None:
+        for name in propellants:
+            amt = optional(lambda name=name: resources.amount(name))
+            cap = optional(lambda name=name: resources.max(name))
+            stage_propellants[name] = {"amount": amt, "max": cap}
+            if amt is not None and cap is not None and cap > 0:
+                fractions.append(amt / cap)
+
+    values["stage_propellants"] = stage_propellants
+    values["stage_propellant_fraction"] = min(fractions) if fractions else None
     return Snapshot(**values)
 
 
-def burning_resources(vessel, current_stage: int):
+def discover_propellants(
+    vessel, current_stage: int | None, fallback: tuple[str, ...]
+) -> tuple[str, ...]:
+    engines = optional(lambda: vessel.parts.engines)
+    if not engines:
+        return fallback
+
+    active = [e for e in engines if optional(lambda e=e: e.active)]
+    if active:
+        names = _extract_propellant_names(active)
+        if names:
+            return names
+
+    if current_stage is None:
+        return fallback
+
+    candidates = _staged_engines(engines)
+    if not candidates:
+        return fallback
+
+    future = [item for item in candidates if item[0] < current_stage]
+    target_stages = future if future else [item for item in candidates if item[0] <= current_stage]
+    if not target_stages:
+        return fallback
+
+    next_stage_num = max(stage_num for stage_num, _ in target_stages)
+    next_engines = [e for stage_num, e in target_stages if stage_num == next_stage_num]
+    names = _extract_propellant_names(next_engines)
+    if names:
+        return names
+
+    return fallback
+
+
+def _staged_engines(engines) -> list[tuple[int, object]]:
+    result = []
+    for engine in engines:
+        part = optional(lambda e=engine: e.part)
+        if part is None:
+            continue
+        stage_num = optional(lambda p=part: p.stage)
+        if stage_num is not None and stage_num >= 0:
+            result.append((stage_num, engine))
+    return result
+
+
+def _extract_propellant_names(engines) -> tuple[str, ...]:
+    seen: list[str] = []
+    for engine in engines:
+        p_names = optional(lambda e=engine: e.propellant_names)
+        if not p_names:
+            continue
+        for name in p_names:
+            if name and name not in seen:
+                seen.append(name)
+    return tuple(seen)
+
+
+def burning_resources(vessel, current_stage: int, propellants: tuple[str, ...] | list[str]):
     """Tanks feeding the next burn: the highest decouple stage below the current one with
     propellant (on the pad the engines' tanks sit two stage numbers down)."""
     for stage in sorted(vessel.decouple_stages, key=lambda item: item.number, reverse=True):
         if stage.number >= current_stage:
             continue
         resources = stage.resources(cumulative=False)
-        if any(resources.max(name) > 0 for name in PROPELLANTS):
+        if any(optional(lambda name=name, r=resources: r.max(name) > 0) for name in propellants):
             return resources
     return None
 
@@ -256,15 +353,6 @@ def navball(mode, values: dict) -> dict:
     return {"speed_mode": name, "navball_speed_ms": values.get(field) if field else None}
 
 
-PROPELLANTS = ("LiquidFuel", "Oxidizer", "SolidFuel")
-STAGE_RESOURCES = {
-    "stage_liquid_fuel": "LiquidFuel",
-    "stage_oxidizer": "Oxidizer",
-    "stage_solid_fuel": "SolidFuel",
-    "stage_monoprop": "MonoPropellant",
-}
-
-
 class TelemetrySource(Protocol):
     def __aiter__(self) -> AsyncIterator[Snapshot]: ...
     async def aclose(self) -> None: ...
@@ -280,6 +368,8 @@ class KrpcTelemetry:
         self.connection = None
         self.closed = False
         self.last_error = ""
+        self.resources = load_resources()
+        self._propellant_cache: dict[tuple[str, int], tuple[str, ...]] = {}
 
     def _close(self) -> None:
         connection, self.connection = self.connection, None
@@ -298,7 +388,11 @@ class KrpcTelemetry:
                     stream_port=None,
                     timeout=self.timeout,
                 )
-            snapshot = read_snapshot(self.connection)
+            snapshot = read_snapshot(
+                self.connection,
+                cache=self._propellant_cache,
+                resources_config=self.resources,
+            )
             self.last_error = ""
             return snapshot
         except Exception as exc:

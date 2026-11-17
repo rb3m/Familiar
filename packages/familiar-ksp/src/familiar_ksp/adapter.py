@@ -7,7 +7,8 @@ from familiar.interfaces import PLUGIN_API_VERSION, ActionSpec, WatchSample, Wat
 from .actions import KspActionController
 from .events import GROUNDED, EventDetector
 from .quotes import attach_flavor, load_quotes
-from .telemetry import STAGE_RESOURCES, KrpcTelemetry, ReplayTelemetry, Snapshot
+from .resources import display_name, load_resources
+from .telemetry import KrpcTelemetry, ReplayTelemetry, Snapshot
 from .units import distance, duration, number, resource
 
 
@@ -24,9 +25,23 @@ class KspAdapter:
         self._watch_timestamp = monotonic()
         self.detector = EventDetector()
         self.quotes = load_quotes(settings.get("quotes_path"))
+        self.resources = load_resources()
         self.source = self._source(settings)
         self.actions_controller = KspActionController(
             settings, context_provider=self.action_context
+        )
+
+    def _stage_fuels(self, s: Snapshot) -> str:
+        """Stage tanks by spoken name: discovered propellants first, configured ones otherwise."""
+        names = self.resources.display_names
+        if s.stage_propellants:
+            return "; ".join(
+                f"{display_name(name, names)}: {resource(level['amount'], level['max'])}"
+                for name, level in s.stage_propellants.items()
+            )
+        return "; ".join(
+            f"{display_name(name, names)}: {resource(getattr(s, key), getattr(s, key + '_max'))}"
+            for key, name in self.resources.stage.items()
         )
 
     @staticmethod
@@ -57,10 +72,7 @@ class KspAdapter:
             return ""
         if not s.in_flight:
             return "Not in flight"
-        fuels = "; ".join(
-            f"{name}: {resource(getattr(s, key), getattr(s, key + '_max'))}"
-            for key, name in STAGE_RESOURCES.items()
-        )
+        fuels = self._stage_fuels(s)
         return "\n".join(
             [
                 f"Vessel: {s.vessel_name} ({s.vessel_type or 'unknown'})",
@@ -143,6 +155,10 @@ class KspAdapter:
             values[key] = None
             if amount is not None and capacity is not None and capacity > 0:
                 values[key] = 100 * amount / capacity
+        prop_val = (
+            100 * s.stage_propellant_fraction if s.stage_propellant_fraction is not None else None
+        )
+        values["stage_propellant"] = prop_val
         return WatchSample(
             values,
             s.vessel_id,
@@ -189,4 +205,9 @@ WATCH_FIELDS = {
     "electric_charge": ("electric_charge", "%", "whole-vessel electric charge remaining"),
     "stage_delta_v": ("stage_delta_v_ms", "m/s", "available delta-v in the next stage"),
     "mission_time": ("met_s", "s", "mission elapsed time"),
+    "stage_propellant": (
+        "stage_propellant_fraction",
+        "%",
+        "propellant remaining in the next burning stage",
+    ),
 }

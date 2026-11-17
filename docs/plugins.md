@@ -181,6 +181,16 @@ Resources use KSP resource units; distances and speeds use SI units.
 KSP quotes live in `knowledge/quotes.yaml` (19 curated, source-checked; each entry also carries `source_url` and
 event-kind `triggers`, which the loader validates and does not attach to events).
 
+KSP resource definitions live in `data/resources.yaml` (vessel and stage mappings, fallback
+propellants, and spoken display names for stock and Community Resource Pack fuels). Users can
+override or extend resource definitions at `~/.config/familiar/data/familiar_ksp/resources.yaml`.
+At runtime, telemetry discovers the propellants burned by active or next-to-fire engines via kRPC
+(`Engine.propellant_names`, falling back to `fallback_propellants` when unavailable). Propellant
+names are cached per `(vessel, stage)` and refreshed on stage changes. Telemetry provides generic
+`stage_propellants` (per-propellant amount/max) and derives `stage_propellant_fraction` (the
+minimum remaining fraction across discovered propellants), exposed as the `stage_propellant` watchable
+(`%`). Unknown resource names are converted to spoken English by splitting CamelCase.
+
 KSP hands (actions) implement `Actuator` through a dedicated kRPC connection (`"Familiar actions"`)
 on its own single-worker thread, opened lazily and bounded by `action_timeout_s` (default 3 s).
 Supported actions cover staging, abort, SAS state and mode steering, RCS, landing gear, lights,
