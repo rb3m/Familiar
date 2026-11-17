@@ -87,6 +87,13 @@ knowledge_paths = []      # curated landmark/lore packs
 # [games.ets2.hold_s]
 # air_horn = 0.6
 
+# [games.ksp]
+# address = "127.0.0.1"
+# rpc_port = 50000
+# timeout_s = 3.0          # telemetry connection timeout
+# action_timeout_s = 3.0   # timeout for hands actions (dedicated worker thread)
+# poll_interval_s = 0.5
+
 [director]
 enabled = true
 idle_minutes = 12
