@@ -64,6 +64,29 @@ language (e.g. French, German, Portuguese) from the GUI or persona YAML by ISO c
 list of names in core, served to the GUI. Voices are chosen per language as today, and the
 voice dropdown already sorts native voices first. Check that each backend accepts the code.
 
+Planned: **Mac desk companion with alerts.** Familiar on the Mac as a desk assistant that
+speaks up about notifications and events, not games. Core already runs without a game pack;
+which alerts matter most is still undecided, so pick sources before building. Steps:
+1. macOS push-to-talk on a **mouse button**: the user's Elecom HUGE trackball has spare buttons.
+   A `PushToTalk` backend that listens for "other" mouse buttons (pynput/CGEventTap; needs
+   Accessibility or Input Monitoring) with the button picked in config or by a "press it now"
+   setup, like the joystick. It should consume the press so the button doesn't also act as
+   browser back/forward. Check which buttons reach macOS without Elecom's driver; the Fn buttons
+   may need mapping there first. A keyboard hotkey is the fallback.
+2. A `familiar-desk` pack: a `GameAdapter` registered under `familiar.games` that emits events
+   with priorities, so the Director's cooldowns and stale-dropping apply unchanged. Sources:
+   - Local webhook (`POST` to localhost) as the core: scripts, cron, Home Assistant, Claude
+     Code / agy / codex hooks ("build finished") and CI can all hand Mira something to say.
+     No permissions needed.
+   - Calendar (Google Calendar API, or EventKit for local calendars), Gmail (filtered), GitHub
+     via `gh` (reviews, failed runs), and system state (battery, disk space, network/Tailscale).
+3. Manners: respect Focus/Do Not Disturb, stay quiet while another app uses the mic (calls),
+   and keep quiet hours.
+Not planned: reading other apps' notifications from Notification Center's private database. It
+needs Full Disk Access, the format is undocumented and it breaks across macOS versions. If a
+permission like that is ever needed, put it in a small signed Swift helper rather than granting
+it to Terminal/Python. Get agy/codex consensus and an ADR on the pack design first.
+
 Planned, **test before building: expressive speech with ElevenLabs Eleven v3.** v3 acts out
 inline audio tags (`[excited]`, `[sighs]`, `[whispers]`, `[laughs]`), so the LLM could tag each
 line with its emotion. Today every line goes to Flash v2.5 with default voice settings, so
@@ -74,7 +97,7 @@ only for event remarks, keeping Flash for alert callouts. A build would also str
 transcripts and before the Gemini TTS fallback.
 
 Later options: Gemini Live speech-to-speech `Conversation` backend, local backends (whisper.cpp
-Vulkan, Kokoro, Ollama), Mac desk assistant / note taker to an Obsidian vault, standard SCS telemetry
+Vulkan, Kokoro, Ollama), note taker to an Obsidian vault, standard SCS telemetry
 plugin for users without the TruckSim GPS port.
 
 Before publishing to PyPI: rename the distributions (`familiar` is taken there by an unrelated
