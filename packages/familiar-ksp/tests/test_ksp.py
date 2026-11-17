@@ -338,7 +338,8 @@ def quote():
 
 
 def test_quotes(tmp_path, detector):
-    assert load_quotes() == []
+    packaged = load_quotes()
+    assert packaged and all(q["triggers"] for q in packaged)
     path = tmp_path / "quotes.yaml"
     path.write_text(yaml.safe_dump([quote()]))
     d, now = detector

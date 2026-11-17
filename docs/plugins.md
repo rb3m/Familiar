@@ -127,5 +127,5 @@ The KSP kRPC mod must auto-start its server and auto-accept clients. `[games.ksp
 Replays accept plain snapshot dictionaries or `{ts, snapshot}` records, with timestamps in seconds.
 Resources use KSP resource units; distances and speeds use SI units.
 
-KSP quotes live in `knowledge/quotes.yaml` (curated; each entry also carries `source_url` and
+KSP quotes live in `knowledge/quotes.yaml` (19 curated, source-checked; each entry also carries `source_url` and
 event-kind `triggers`, which the loader validates and does not attach to events).

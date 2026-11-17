@@ -1,9 +1,136 @@
-# Curated quotes only. Example schema (replace all placeholders before use):
-# - id: mission-quote-slug
-#   text: "Exact quote"
-#   speaker: "Speaker name"
-#   context: "Mission, year"
-#   attribution: verified  # or attributed
-#   triggers: [liftoff]
-#   source_url: https://example.org/primary-source
-[]
+# Curated real spaceflight quotes. The core offers one rarely (see familiar/flavor.py);
+# the companion paraphrases it in character. "attributed" = popularly credited, origin uncertain.
+# Every source_url was checked to contain the quote (2026-11-16).
+- id: shepard-light-this-candle
+  text: "Why don't you fix your little problem and light this candle?"
+  speaker: Alan Shepard
+  context: "Freedom 7 launch holds, 1961"
+  attribution: attributed
+  triggers: [liftoff]
+  source_url: https://en.wikipedia.org/wiki/Alan_Shepard
+- id: shepard-lowest-bidder
+  text: "Every part of this ship was built by the lowest bidder."
+  speaker: Alan Shepard (also credited to John Glenn)
+  context: "Waiting atop the Redstone before Freedom 7, 1961; told by Gene Kranz"
+  attribution: attributed
+  triggers: [liftoff, reentry]
+  source_url: https://en.wikipedia.org/wiki/Alan_Shepard
+- id: gagarin-poyekhali
+  text: "Poyekhali! (Let's go!)"
+  speaker: Yuri Gagarin
+  context: "Vostok 1 launch, 1961"
+  attribution: verified
+  triggers: [liftoff]
+  source_url: https://en.wikiquote.org/wiki/Yuri_Gagarin
+- id: carpenter-godspeed
+  text: "Godspeed, John Glenn."
+  speaker: Scott Carpenter
+  context: "Capsule communicator at the Friendship 7 launch, 1962"
+  attribution: verified
+  triggers: [liftoff]
+  source_url: https://en.wikipedia.org/wiki/Mercury-Atlas_6
+- id: glenn-zero-g
+  text: "Zero-g and I feel fine."
+  speaker: John Glenn
+  context: "Friendship 7, first American orbit, 1962"
+  attribution: verified
+  triggers: [orbit_reached]
+  source_url: https://mercury6.spacelog.org/00:00:07:14/00:00:13:05/
+- id: gagarin-beautiful-planet
+  text: "I saw how beautiful our planet is."
+  speaker: Yuri Gagarin
+  context: "Handwritten note after Vostok 1, 1961"
+  attribution: attributed
+  triggers: [orbit_reached]
+  source_url: https://en.wikiquote.org/wiki/Yuri_Gagarin
+- id: glenn-fireball
+  text: "This is Friendship 7 - a real fireball outside."
+  speaker: John Glenn
+  context: "Friendship 7 reentry, 1962"
+  attribution: verified
+  triggers: [reentry]
+  source_url: https://en.wikipedia.org/wiki/Mercury-Atlas_6
+- id: armstrong-eagle-landed
+  text: "Houston, Tranquility Base here. The Eagle has landed."
+  speaker: Neil Armstrong
+  context: "Apollo 11 lunar landing, 1969"
+  attribution: verified
+  triggers: [landed]
+  source_url: https://en.wikiquote.org/wiki/Neil_Armstrong
+- id: duke-turn-blue
+  text: "You got a bunch of guys about to turn blue. We're breathing again."
+  speaker: Charlie Duke
+  context: "Capcom after the low-fuel Apollo 11 landing, 1969"
+  attribution: verified
+  triggers: [landed]
+  source_url: https://en.wikiquote.org/wiki/Neil_Armstrong
+- id: gagarin-friend-comrades
+  text: "I am a friend, comrades, a friend!"
+  speaker: Yuri Gagarin
+  context: "To startled farm workers after landing in a field, Vostok 1, 1961"
+  attribution: attributed
+  triggers: [landed]
+  source_url: https://en.wikiquote.org/wiki/Yuri_Gagarin
+- id: grissom-dull-thud
+  text: "I was lying there, minding my own business, when I heard a dull thud."
+  speaker: Gus Grissom
+  context: "Liberty Bell 7's hatch blew after splashdown and the capsule sank, 1961"
+  attribution: verified
+  triggers: [splashed]
+  source_url: https://en.wikipedia.org/wiki/Mercury-Redstone_4
+- id: armstrong-small-step
+  text: "That's one small step for man, one giant leap for mankind."
+  speaker: Neil Armstrong
+  context: "First step on the Moon, Apollo 11, 1969"
+  attribution: verified
+  triggers: [eva_started]
+  source_url: https://en.wikiquote.org/wiki/Neil_Armstrong
+- id: conrad-small-one
+  text: "Whoopee! Man, that may have been a small one for Neil, but that's a long one for me."
+  speaker: Pete Conrad
+  context: "Apollo 12, stepping off the ladder to win a bet, 1969"
+  attribution: verified
+  triggers: [eva_started]
+  source_url: https://en.wikipedia.org/wiki/Pete_Conrad
+- id: leonov-earth-round
+  text: "The Earth is round!"
+  speaker: Alexei Leonov
+  context: "First spacewalk, Voskhod 2, 1965"
+  attribution: verified
+  triggers: [eva_started]
+  source_url: https://www.collectspace.com/news/news-031815c-spacewalk-50th-alexei-leonov.html
+- id: swigert-problem
+  text: "Okay, Houston, we've had a problem here."
+  speaker: Jack Swigert
+  context: "Apollo 13 oxygen tank failure and main bus undervolt, 1970"
+  attribution: verified
+  triggers: [low_charge]
+  source_url: https://en.wikiquote.org/wiki/Apollo_13
+- id: aaron-sce-to-aux
+  text: "Flight, EECOM. Try SCE to Aux."
+  speaker: John Aaron
+  context: "Mission Control after lightning struck Apollo 12 during launch, 1969"
+  attribution: verified
+  triggers: [low_charge]
+  source_url: https://en.wikipedia.org/wiki/Apollo_12
+- id: lovell-other-side
+  text: "We'll see you on the other side."
+  speaker: Jim Lovell
+  context: "Apollo 8, before going behind the Moon for lunar orbit insertion, 1968"
+  attribution: verified
+  triggers: [soi_changed]
+  source_url: https://en.wikipedia.org/wiki/Apollo_8
+- id: lovell-santa-claus
+  text: "Please be informed, there is a Santa Claus."
+  speaker: Jim Lovell
+  context: "Apollo 8, reappearing after the trans-Earth burn on Christmas Day, 1968"
+  attribution: verified
+  triggers: [soi_changed]
+  source_url: https://en.wikipedia.org/wiki/Apollo_8
+- id: armstrong-thumb-earth
+  text: "I put up my thumb and shut one eye, and my thumb blotted out the planet Earth."
+  speaker: Neil Armstrong
+  context: "Recalling the long coast home from the Moon, Apollo 11"
+  attribution: verified
+  triggers: [warp_changed]
+  source_url: https://en.wikiquote.org/wiki/Neil_Armstrong
