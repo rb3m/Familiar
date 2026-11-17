@@ -6,7 +6,7 @@
 | **M1 Voice loop** | Push-to-talk → Gemini STT → LLM → Gemini TTS, ElevenLabs as 2nd TTS; Linux + Mac | Spoken round trip under ~2 s on both machines |
 | **M2 ATS** (done 2026-11-15) | ATS adapter (TruckSim GPS server :31377), Director, first knowledge pack | Companion mentions a POI and low fuel during a real drive without spamming |
 | **M3 Memory** (in progress) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
-| **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP live 2026-11-17, ADR 0006: flight events, navball/target speed, quotes; voice-set alerts ADR 0007) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM) | Each has an adapter + knowledge pack |
+| **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP live 2026-11-17, ADR 0006: flight events, navball/target speed, quotes; voice-set alerts ADR 0007) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM), Minecraft (see below) | Each has an adapter + knowledge pack |
 | **M5 Hands & languages** (LLM tool calling exists since ADR 0007) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync, Japanese practice mode | Voice command toggles something in-game |
 
 Planned: **how the companion addresses the user.** A name or nickname the user picks (e.g.
@@ -20,6 +20,21 @@ plugin group controls the user's player (Linux: MPRIS, e.g. Spotify, via D-Bus; 
 app) for skip, volume, pause and "something calmer" requests, and the in-game radio through key
 presses once M5 hands exist. Persona-flavoured picks matched to the drive (night, mountain
 pass, tight deadline) and the occasional comment on the current song.
+
+Planned (M4, later): **Minecraft (Java).** Mod loaders (Forge, NeoForge, Fabric) don't
+publish game data, so this needs our own small read-only client mod. The user plays 26.3 in
+Prism Launcher on NeoForge (Sodium, Iris, Distant Horizons, Xaero's Minimap). Steps:
+1. No mod: tail `logs/latest.log` (vanilla too) for deaths with causes, advancements, chat and
+   world joins.
+2. A NeoForge client mod serving local JSON, like TruckSim GPS: dimension, biome, position,
+   nearby structure, time, weather, light, health/hunger/armour/oxygen, effects, damage source,
+   nearby hostiles, held item and durability, advancements, first visits (for memory). Modded
+   content appears as registry IDs. Watchables for voice alerts ("warn me under 4 hearts").
+3. Later: Fabric via Architectury; actions as tool calls through the mod (Xaero waypoints,
+   commands in creative) instead of key injection.
+Rebuild per Minecraft version (keep the mod small). It is the first Java code in the project,
+so get agy/codex consensus and an ADR first. Bedrock's `/connect` WebSocket gives events with no
+mod, but only helps if Bedrock is played.
 
 Planned: **add new languages.** Only en/es/ja are offered today. The list is hard-coded in
 `persona.py` (`LANGUAGE_NAMES`), in the GUI (`app.js`) and in the `config.example.toml` comment,
