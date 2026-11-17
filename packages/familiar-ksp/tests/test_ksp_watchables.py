@@ -37,6 +37,7 @@ def adapter():
         electric_charge_max=100,
         stage_delta_v_ms=1500,
         met_s=60,
+        stage_propellant_fraction=0.5,
     )
     return value
 
@@ -62,6 +63,7 @@ def test_all_quantities_and_units():
         "electric_charge": (90, "%"),
         "stage_delta_v": (1500, "m/s"),
         "mission_time": (60, "s"),
+        "stage_propellant": (50, "%"),
     }
     sample = value.watch_sample()
     assert sample.values == {key: item[0] for key, item in expected.items()}

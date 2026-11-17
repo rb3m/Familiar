@@ -1,0 +1,32 @@
+# Packaged KSP resource definitions and propellant discovery fallbacks.
+# Override at ~/.config/familiar/data/familiar_ksp/resources.yaml
+# with only the keys you change.
+vessel:
+  electric_charge: ElectricCharge
+  liquid_fuel: LiquidFuel
+
+stage:
+  stage_liquid_fuel: LiquidFuel
+  stage_oxidizer: Oxidizer
+  stage_solid_fuel: SolidFuel
+  stage_monoprop: MonoPropellant
+
+fallback_propellants:
+  - LiquidFuel
+  - Oxidizer
+  - SolidFuel
+
+display_names:
+  LiquidFuel: liquid fuel
+  Oxidizer: oxidizer
+  SolidFuel: solid fuel
+  MonoPropellant: monopropellant
+  ElectricCharge: electric charge
+  LqdHydrogen: liquid hydrogen
+  LqdMethane: liquid methane
+  XenonGas: xenon gas
+  ArgonGas: argon gas
+  Lithium: lithium
+  Ore: ore
+  EnrichedUranium: enriched uranium
+  DepletedUranium: depleted uranium
