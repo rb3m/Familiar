@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import asdict
 
+from familiar.flavor import FlavorKeeper, flavor_hint
 from familiar.interfaces import GameEvent, LLMProvider, Message, TextToSpeech
 from familiar.memory import MemoryKeeper
 from familiar.persona import Persona
@@ -24,6 +25,7 @@ class Conversation:
         context: Callable[[], str] | None = None,
         game: str | None = None,
         memory: MemoryKeeper | None = None,
+        flavor: FlavorKeeper | None = None,
     ) -> None:
         if history_limit < 1:
             raise ValueError("history_limit must be positive")
@@ -35,6 +37,7 @@ class Conversation:
         self.context = context
         self.game = game
         self.memory = memory
+        self.flavor = flavor
         self.history_limit = history_limit
         self.history: list[Message] = []
 
@@ -70,16 +73,23 @@ class Conversation:
         facts = event.data.get("facts")
         if facts:
             text += "\nFacts you may use: - " + "\n- ".join(facts)
-        recalled = False
+        candidate = self.flavor.choose(event) if self.flavor is not None else None
+        if candidate is not None:
+            text += flavor_hint(candidate)
+        recorded = False
         async with aclosing(self._turn(text)) as sentences:
             async for sentence in sentences:
                 yield sentence
-                if self.memory is None or recalled or "memory_episode_id" not in event.data:
+                if recorded or (spoken is not None and not spoken()):
                     continue
-                if spoken is not None and not spoken():
-                    continue
-                self.memory.recalled(event)
-                recalled = True
+                self._record_interjection(event, candidate)
+                recorded = True
+
+    def _record_interjection(self, event: GameEvent, candidate: dict | None) -> None:
+        if self.memory is not None and "memory_episode_id" in event.data:
+            self.memory.recalled(event)
+        if self.flavor is not None and candidate is not None:
+            self.flavor.used(self.game or "", candidate)
 
     async def aclose(self) -> None:
         if self.memory is not None:

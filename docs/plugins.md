@@ -87,6 +87,25 @@ ats = "familiar_scs.adapter:AtsAdapter"
 ets2 = "familiar_scs.adapter:Ets2Adapter"
 ```
 
+A pack may attach `event.data["flavor"]` as a list of candidate dictionaries:
+
+```python
+{
+    "id": "shepard-light-this-candle",
+    "text": "Let's light this candle",
+    "speaker": "Alan Shepard",
+    "context": "Freedom 7, 1961",
+    "attribution": "verified",
+}
+```
+
+`id` is a stable slug unique within the game; `text` is the real quote, `speaker` names who
+said it, and `context` identifies its mission/year or equivalent setting. `attribution` must
+be `verified` or `attributed` (popularly credited, origin uncertain). Attach candidates only;
+packs never gate them. Core skips critical events, applies probability and global/per-item
+cooldowns, and records use after speech. It offers a loose paraphrase in the companion's own
+voice with natural credit, hedging `attributed` lines, never a long quotation.
+
 Keep all game-specific defaults, dependencies and resources inside the pack. Ship data as package
 data and read it with `importlib.resources`. Familiar SCS pins `familiar>=0.1.0,<1.0.0` to keep
 core within the same distribution major version; the runtime plugin API check is separate.

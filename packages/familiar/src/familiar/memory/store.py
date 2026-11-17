@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .text import words
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (
@@ -34,6 +34,14 @@ CREATE INDEX IF NOT EXISTS episodes_region ON episodes(game, region, session_id)
 CREATE INDEX IF NOT EXISTS recalls_episode ON recalls(episode_id, persona, ts_utc);
 """
 
+_FLAVOR_SCHEMA = """
+CREATE TABLE IF NOT EXISTS flavor_uses (
+    game TEXT NOT NULL, item_id TEXT NOT NULL, used_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS flavor_item ON flavor_uses(game, item_id, used_at);
+CREATE INDEX IF NOT EXISTS flavor_latest ON flavor_uses(used_at);
+"""
+
 
 def default_path() -> Path:
     root = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
@@ -57,12 +65,15 @@ class MemoryStore:
             self.db.execute("PRAGMA foreign_keys=ON")
             self.db.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
             version = self.db.execute("SELECT version FROM schema_version").fetchone()
-            if version is not None and version[0] != SCHEMA_VERSION:
+            if version is not None and version[0] not in {1, SCHEMA_VERSION}:
                 raise ValueError(f"Unsupported memory schema version: {version[0]}")
             with self.db:
                 self.db.executescript(_SCHEMA)
+                self.db.executescript(_FLAVOR_SCHEMA)
                 if version is None:
                     self.db.execute("INSERT INTO schema_version VALUES (?)", (SCHEMA_VERSION,))
+                if version is not None and version[0] < SCHEMA_VERSION:
+                    self.db.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         except BaseException:
             self.close()
             raise
@@ -191,4 +202,22 @@ class MemoryStore:
 
     def latest_recall(self) -> datetime | None:
         row = self.db.execute("SELECT MAX(ts_utc) FROM recalls").fetchone()
+        return datetime.fromisoformat(row[0]) if row[0] else None
+
+    def record_flavor_use(self, game: str, item_id: str, now: datetime | None = None) -> None:
+        with self.db:
+            self.db.execute(
+                "INSERT INTO flavor_uses(game, item_id, used_at) VALUES (?, ?, ?)",
+                (game, item_id, utc_text(now)),
+            )
+
+    def last_flavor_use(self, game: str, item_id: str) -> datetime | None:
+        row = self.db.execute(
+            "SELECT MAX(used_at) FROM flavor_uses WHERE game = ? AND item_id = ?",
+            (game, item_id),
+        ).fetchone()
+        return datetime.fromisoformat(row[0]) if row[0] else None
+
+    def latest_flavor_use(self) -> datetime | None:
+        row = self.db.execute("SELECT MAX(used_at) FROM flavor_uses").fetchone()
         return datetime.fromisoformat(row[0]) if row[0] else None

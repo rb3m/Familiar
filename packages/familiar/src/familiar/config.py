@@ -6,6 +6,11 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from familiar.flavor import (
+    FLAVOR_COOLDOWN_MIN,
+    FLAVOR_ITEM_COOLDOWN_DAYS,
+    FLAVOR_PROBABILITY,
+)
 from familiar.interfaces import ConfigError
 
 MEMORY_DEFAULTS = {
@@ -13,6 +18,13 @@ MEMORY_DEFAULTS = {
     "path": "",
     "recall_probability": 0.25,
     "recall_cooldown_min": 45,
+}
+
+FLAVOR_DEFAULTS = {
+    "enabled": True,
+    "probability": FLAVOR_PROBABILITY,
+    "cooldown_min": FLAVOR_COOLDOWN_MIN,
+    "item_cooldown_days": FLAVOR_ITEM_COOLDOWN_DAYS,
 }
 
 
@@ -40,6 +52,7 @@ class AppConfig:
     games: dict[str, dict] = field(default_factory=dict)
     director: dict = field(default_factory=dict)
     memory: dict = field(default_factory=lambda: MEMORY_DEFAULTS.copy())
+    flavor: dict = field(default_factory=lambda: FLAVOR_DEFAULTS.copy())
 
 
 def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig | None:
@@ -93,6 +106,22 @@ def _memory(data: dict, base: Path) -> dict:
     return settings
 
 
+def _flavor(data: dict) -> dict:
+    section = data.get("flavor", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[flavor] must be a table")
+    settings = {**FLAVOR_DEFAULTS, **section}
+    if not isinstance(settings["enabled"], bool):
+        raise ConfigError("flavor.enabled must be a boolean")
+    for key in ("probability", "cooldown_min", "item_cooldown_days"):
+        value = settings[key]
+        if type(value) not in {int, float} or not math.isfinite(value) or value < 0:
+            raise ConfigError(f"flavor.{key} must be a finite nonnegative number")
+    if settings["probability"] > 1:
+        raise ConfigError("flavor.probability must be between 0 and 1")
+    return settings
+
+
 USER_CONFIG = Path("~/.config/familiar/config.toml")
 
 
@@ -137,6 +166,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         games=games,
         director=director,
         memory=_memory(data, base),
+        flavor=_flavor(data),
         language=language,
         persona=persona,
         personas_dir=_path(data["personas_dir"], base) if "personas_dir" in data else None,

@@ -79,3 +79,10 @@ enabled = true
 path = ""                 # default: $XDG_DATA_HOME/familiar/memory.db or ~/.local/share/familiar/memory.db
 recall_probability = 0.25  # chance on revisiting a place with a distinctive earlier episode
 recall_cooldown_min = 45   # real minutes between spoken memories; same episode/persona: 7 days
+
+[flavor]
+enabled = true
+probability = 0.2          # chance to offer an event's real quote for a loose paraphrase
+cooldown_min = 30          # global cooldown in real minutes, across games and personas
+item_cooldown_days = 14    # cooldown per quote ID within its game
+# Uses share the memory database; with memory disabled, uses last only for this process.

@@ -161,7 +161,9 @@ class VoiceSession:
                         timings["first_sentence_ms"] = (monotonic() - released) * 1000
                     print(f"{label}: {sentence}", flush=True)
                     await self.player.play(self._audio(sentence, released, timings))
-                    if event is not None and "memory_episode_id" in event.data:
+                    if event is not None and (
+                        "memory_episode_id" in event.data or event.data.get("flavor")
+                    ):
                         await self.player.wait_idle()
             await self.player.wait_idle()
         finally:

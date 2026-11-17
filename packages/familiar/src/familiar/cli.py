@@ -16,6 +16,7 @@ from familiar.config import AppConfig, BackendConfig, load_config
 from familiar.conversation import Conversation
 from familiar.director import Director, feed_events
 from familiar.fallback import FallbackSTT, FallbackTTS, close_backend
+from familiar.flavor import FlavorKeeper
 from familiar.interfaces import BackendError, ConfigError, GameAdapter, GameEvent, PluginError
 from familiar.memory import MemoryKeeper, MemoryStore
 from familiar.persona import Persona, load_persona
@@ -112,6 +113,12 @@ class _Runtime:
                 settings=self.config.memory,
             )
             self.stack.push_async_callback(conversation.aclose)
+        if self.config.flavor.get("enabled", True):
+            conversation.flavor = FlavorKeeper(
+                conversation.memory.store if conversation.memory is not None else None,
+                conversation.game or "",
+                settings=self.config.flavor,
+            )
         return conversation, adapter, director
 
     def speech(self, kind: str) -> Any:

@@ -60,6 +60,13 @@ Backend plugin classes expose `name`, `api_version` and `capabilities` (a set of
 - Queued interjections carry a deadline; stale ones are dropped, not spoken late.
 - Per-persona `chattiness` scales cooldowns for `ambient` and `notable`.
 
+Game packs may attach `event.data["flavor"]`, a list of real quote candidates with `id`, `text`,
+`speaker`, `context` and `attribution` (`verified` or `attributed`). Packs supply candidates;
+core `FlavorKeeper` gates them: no critical events, a 20% chance, a 30-minute global cooldown
+and a 14-day cooldown per quote ID per game. The model may loosely paraphrase a fitting quote,
+crediting its speaker and hedging uncertain attribution. Use is recorded after speech, in the
+shared memory database (or only in process memory when trip memory is disabled).
+
 ## Memory
 
 Core memory stores sessions, salient episodes and per-persona recall history in one local SQLite
