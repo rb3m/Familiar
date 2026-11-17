@@ -84,6 +84,25 @@ class ScsAdapter:
             return "no posted speed limit known"  # telemetry reports 0 when there is none
         return f"limit {self.units.speed(limit_kmh)}"
 
+    def whereabouts(self) -> dict | None:
+        s = self.latest
+        if not s.connected:
+            return None
+        _, _, place = self._location()
+        if place is None:
+            return None
+        activity = "driving without a job"
+        if s.on_job:
+            activity = (
+                f"hauling {self.units.mass(s.cargo_mass)} of {s.cargo} to {s.destination_city}"
+            )
+        return {
+            "place_key": f"{place.state}/{place.name}",
+            "place": place.name,
+            "region": self.region_names.get(place.state, place.state),
+            "activity": activity,
+        }
+
     def describe(self) -> str:
         s = self.latest
         if not s.connected:

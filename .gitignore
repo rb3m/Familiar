@@ -7,3 +7,6 @@ dist/
 config.toml
 .env
 /data/
+*.db
+*.db-wal
+*.db-shm

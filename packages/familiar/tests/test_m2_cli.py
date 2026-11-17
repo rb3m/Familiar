@@ -31,6 +31,7 @@ def test_runtime_game_override_and_context(monkeypatch, tmp_path) -> None:
             game="other",
             games={"ats": {"units": "imperial"}},
             transcript_dir=tmp_path,
+            memory={"path": tmp_path / "memory.db"},
             llm=BackendConfig("fake"),
         )
         async with AsyncExitStack() as stack:

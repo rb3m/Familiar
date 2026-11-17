@@ -17,6 +17,7 @@ from familiar.conversation import Conversation
 from familiar.director import Director, feed_events
 from familiar.fallback import FallbackSTT, FallbackTTS, close_backend
 from familiar.interfaces import BackendError, ConfigError, GameAdapter, GameEvent, PluginError
+from familiar.memory import MemoryKeeper, MemoryStore
 from familiar.persona import Persona, load_persona
 from familiar.plugins import GROUPS, available, command_plugins, load
 from familiar.transcript import TranscriptLog
@@ -102,6 +103,15 @@ class _Runtime:
             context=adapter.describe if adapter is not None else None,
             game=adapter.game if adapter is not None else None,
         )
+        if self.config.memory.get("enabled", True):
+            conversation.memory = MemoryKeeper(
+                MemoryStore(self.config.memory.get("path")),
+                adapter.game if adapter is not None else "",
+                self.persona.id,
+                getattr(adapter, "whereabouts", None),
+                settings=self.config.memory,
+            )
+            self.stack.push_async_callback(conversation.aclose)
         return conversation, adapter, director
 
     def speech(self, kind: str) -> Any:
@@ -166,7 +176,7 @@ async def _chat(args: argparse.Namespace) -> None:
 
         if adapter is not None and director is not None:
             tasks = [
-                asyncio.create_task(feed_events(adapter, director)),
+                asyncio.create_task(feed_events(adapter, director, conversation.memory)),
                 asyncio.create_task(events()),
             ]
         print(f"Chatting with {runtime.persona.display_name}. Type /quit to exit.")

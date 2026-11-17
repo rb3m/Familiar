@@ -15,6 +15,9 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   Euro Truck Simulator 2: live telemetry, a hand-checked landmark pack and town lookup.
 - **Launcher GUI** (`familiar gui`): pick the game and persona, watch the conversation, and
   create or edit personas, with optional AI drafting and voice previews.
+- **Trip memory**: remembers earlier places and trip events across personas, answers questions
+  about previous visits, and occasionally recalls a distinctive moment when you return.
+  Facts stay in a local SQLite database; `[memory]` controls storage and recall frequency.
 
 Status: early and personal, but working. Linux (KDE Wayland) is the daily driver; macOS on Apple
 Silicon is the next target. See `docs/roadmap.md`.
@@ -67,6 +70,11 @@ On Linux, `packaging/linux/install.sh` adds Familiar to the applications menu.
 
 ATS/ETS2 telemetry comes from a local TruckSim GPS telemetry server (default
 `http://localhost:31377`); see `[games.ats]` in `config.example.toml`.
+
+Memory is enabled by default at `$XDG_DATA_HOME/familiar/memory.db`, falling back to
+`~/.local/share/familiar/memory.db`. Set `[memory] enabled = false` to disable it, or `path`
+to choose another database. Retrieval is local; clean shutdown asks the configured LLM for a
+short factual summary of sessions with at least four user/assistant utterances (15-second limit).
 
 ### Your own personas
 

@@ -37,6 +37,22 @@ WARNING_RULES = {
     ),
 }
 ENGINE_RUNNING_RULES = {"engine_warning"}
+MEMORY_SALIENCE = {
+    "passing_town": 0.1,
+    "entered_state": 0.2,
+    "landmark_nearby": 0.4,
+    "job_started": 0.5,
+    "job_delivered": 0.6,
+    "ferry": 0.5,
+    "train": 0.5,
+    "traffic_jam": 0.5,
+    "fined": 0.7,
+    "collision": 0.8,
+    "hard_braking": 0.4,
+    "rested": 0.3,
+    "rain_started": 0.2,
+}
+MEMORY_ARRIVALS = {"passing_town", "entered_state", "landmark_nearby"}
 TOWN_MIN_POPULATION = 20_000
 REST_RESET_MIN = timedelta(hours=3)
 DEADLINE_MARGIN = 1.1
@@ -251,6 +267,10 @@ class EventDetector:
         self._last_rain = {kind: float("-inf") for kind in ("rain_started", "rain_stopped")}
 
     def _event(self, kind: str, priority: str, summary: str, **data) -> GameEvent:
+        if kind in MEMORY_SALIENCE:
+            data["memory_salience"] = MEMORY_SALIENCE[kind]
+        if kind in MEMORY_ARRIVALS:
+            data["memory_arrival"] = True
         return GameEvent(kind, priority, {**data, "summary": summary}, datetime.now(UTC))
 
     def feed(self, snapshot: Snapshot) -> list[GameEvent]:

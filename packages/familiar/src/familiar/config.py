@@ -1,11 +1,19 @@
 """Load application settings, resolving paths relative to their TOML file."""
 
+import math
 import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from familiar.interfaces import ConfigError
+
+MEMORY_DEFAULTS = {
+    "enabled": True,
+    "path": "",
+    "recall_probability": 0.25,
+    "recall_cooldown_min": 45,
+}
 
 
 @dataclass
@@ -31,6 +39,7 @@ class AppConfig:
     game: str | None = None
     games: dict[str, dict] = field(default_factory=dict)
     director: dict = field(default_factory=dict)
+    memory: dict = field(default_factory=lambda: MEMORY_DEFAULTS.copy())
 
 
 def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig | None:
@@ -61,6 +70,27 @@ def _path(value: object, base: Path) -> Path:
         raise ConfigError("Configured paths must be strings")
     path = Path(value).expanduser()
     return (base / path).resolve()
+
+
+def _memory(data: dict, base: Path) -> dict:
+    section = data.get("memory", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[memory] must be a table")
+    settings = {**MEMORY_DEFAULTS, **section}
+    if not isinstance(settings["enabled"], bool):
+        raise ConfigError("memory.enabled must be a boolean")
+    path = settings["path"]
+    if not isinstance(path, str):
+        raise ConfigError("memory.path must be a string")
+    if path:
+        settings["path"] = _path(path, base)
+    for key in ("recall_probability", "recall_cooldown_min"):
+        value = settings[key]
+        if type(value) not in {int, float} or not math.isfinite(value) or value < 0:
+            raise ConfigError(f"memory.{key} must be a finite nonnegative number")
+    if settings["recall_probability"] > 1:
+        raise ConfigError("memory.recall_probability must be between 0 and 1")
+    return settings
 
 
 USER_CONFIG = Path("~/.config/familiar/config.toml")
@@ -106,6 +136,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         game=game,
         games=games,
         director=director,
+        memory=_memory(data, base),
         language=language,
         persona=persona,
         personas_dir=_path(data["personas_dir"], base) if "personas_dir" in data else None,

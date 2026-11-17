@@ -47,7 +47,8 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   `200 {"ok": true}`.
 - `POST /api/session/start` body `{"game": "ats" | null, "persona": "mira", "language": "en"}`
   → `200` Session; `409` if one is already running.
-- `POST /api/session/stop` → `200` Session (graceful SIGINT, then terminate/kill after 5 s).
+- `POST /api/session/stop` → `200` Session (graceful SIGINT, then terminate after 20 s and kill
+  after another 2 s; the grace period includes the trip summary's 15-second deadline).
 - `POST /api/shutdown` → stops any session and exits the server (`200` then exit).
 - `GET /api/events?token=T` (Server-Sent Events). Event types:
   - `line`: `{"stream": "stdout" | "stderr", "text": "...", "ts": ISO-8601}`, one per output line

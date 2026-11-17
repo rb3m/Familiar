@@ -141,3 +141,62 @@ def test_describe_game_time(places, cls, game_time, expected):
         return
     assert expected in description
     asyncio.run(adapter.aclose())
+
+
+@pytest.mark.parametrize(
+    "cls,code,name,region",
+    [
+        (AtsAdapter, "WY", "Kaycee", "Wyoming"),
+        (Ets2Adapter, "FR", "Château-Thierry", "France"),
+    ],
+)
+async def test_memory_whereabouts(cls, code, name, region, monkeypatch):
+    index = PlaceIndex(places=(Place(name, code, 49, 3, 20),))
+    monkeypatch.setattr(cls, "_place_index", lambda self: index)
+    adapter = cls({"units": "metric"})
+    adapter.projection = lambda x, z: (49, 3)
+    assert adapter.whereabouts() is None
+    adapter.latest = Snapshot(connected=True)
+    assert adapter.whereabouts() == {
+        "place_key": f"{code}/{name}",
+        "place": name,
+        "region": region,
+        "activity": "driving without a job",
+    }
+    adapter.latest = Snapshot(
+        connected=True, on_job=True, cargo="cattle", cargo_mass=18000, destination_city="Bayonne"
+    )
+    assert adapter.whereabouts()["activity"] == "hauling 18 tonnes of cattle to Bayonne"
+    adapter.places = PlaceIndex(places=())
+    assert adapter.whereabouts() is None
+    await adapter.aclose()
+
+
+@pytest.mark.parametrize(
+    "kind,salience,arrival",
+    [
+        ("passing_town", 0.1, True),
+        ("entered_state", 0.2, True),
+        ("landmark_nearby", 0.4, True),
+        ("job_started", 0.5, False),
+        ("job_delivered", 0.6, False),
+        ("ferry", 0.5, False),
+        ("train", 0.5, False),
+        ("traffic_jam", 0.5, False),
+        ("fined", 0.7, False),
+        ("collision", 0.8, False),
+        ("hard_braking", 0.4, False),
+        ("rested", 0.3, False),
+        ("rain_started", 0.2, False),
+        ("fuel_low", 0, False),
+        ("rain_stopped", 0, False),
+        ("speeding", 0, False),
+    ],
+)
+async def test_event_memory_metadata(places, kind, salience, arrival):
+    adapter = AtsAdapter({})
+    event = adapter.detector._event(kind, "notable", "A grounded fact.")
+    assert event.data.get("memory_salience", 0) == salience
+    assert event.data.get("memory_arrival", False) is arrival
+    assert event.data["summary"] == "A grounded fact."
+    await adapter.aclose()

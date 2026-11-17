@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from familiar.interfaces import GameAdapter, GameEvent
+from familiar.memory import MemoryKeeper
 
 _LOG = logging.getLogger(__name__)
 
@@ -156,11 +157,20 @@ class Director:
                     await self._changed.wait()
 
 
-async def feed_events(adapter: GameAdapter, director: Director) -> None:
+async def feed_events(
+    adapter: GameAdapter, director: Director, memory: MemoryKeeper | None = None
+) -> None:
     """Refresh state before admitting each event, including log-only updates."""
     snapshot = await adapter.snapshot()
     director.set_game_state(snapshot["connected"], snapshot["paused"])
     async for event in adapter.events():
         snapshot = await adapter.snapshot()
         director.set_game_state(snapshot["connected"], snapshot["paused"])
+        if memory is not None:
+            memory.observe(event)
         director.submit(event)
+        if memory is None:
+            continue
+        recall = memory.maybe_recall(event)
+        if recall is not None:
+            director.submit(recall)

@@ -27,7 +27,7 @@ API tier) is the first backend; others plug in via entry points.
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
 - `docs/plugins.md`: how to add a backend, command, or game pack. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.
-- `docs/decisions/`: ADRs. Read 0001 before changing the overall structure, 0002 before changing location/landmarks, 0003 before changing the GUI approach, 0004 before changing package boundaries.
+- `docs/decisions/`: ADRs. Read 0001 for structure, 0002 for location/landmarks, 0003 for GUI, 0004 for package boundaries, 0005 for trip memory.
 - `docs/gui-api.md`: GUI server/frontend contract (endpoints, auth, SSE). Read before changing `packages/familiar/src/familiar/gui/`.
 - `config.example.toml`: every config key with defaults.
 - `packages/familiar/src/familiar/personas/`: packaged built-in persona YAML; user personas live in `~/.config/familiar/personas/` and shadow them.
