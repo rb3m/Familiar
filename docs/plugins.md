@@ -116,3 +116,20 @@ its entry points for development. External packs can be published and installed 
 Personas are searched in the user directory first, then an optional configured `personas_dir`,
 then the packaged built-ins. A missing configured directory is skipped. Save edits in the user
 directory; using a built-in ID creates an override that the GUI can reset by deleting that copy.
+
+### KSP pack
+
+`familiar-ksp` uses the kRPC 0.7 client with polling on one worker thread and no streams.
+The KSP kRPC mod must auto-start its server and auto-accept clients. `[games.ksp]` accepts
+`address` (127.0.0.1), `rpc_port` (50000), `timeout_s` (3), `poll_interval_s` (0.5),
+`replay` (JSONL path), `replay_speed` (1), and an optional `quotes_path` override.
+`familiar ksp-probe` connects once; `familiar ksp-record FILE` records timestamped snapshots.
+Replays accept plain snapshot dictionaries or `{ts, snapshot}` records, with timestamps in seconds.
+Resources use KSP resource units; distances and speeds use SI units.
+
+A pack may attach `event.data["flavor"]`, a list of quote candidates with string fields
+`id`, `text`, `speaker`, `context`, and `attribution` (`verified` or `attributed`).
+IDs are stable slugs unique within the game. Packs attach candidates only; core owns selection
+and recording of use. KSP's packaged `knowledge/quotes.yaml` is intentionally empty. Its loader
+also requires `source_url` and validated event-kind `triggers`, neither of which is attached
+to events. Supply curated real quotes with mission/year context and source attribution.

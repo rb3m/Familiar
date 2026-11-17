@@ -13,6 +13,8 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   are built in; adding another provider is a small class (see `docs/plugins.md`).
 - **Game packs** install separately. `familiar-scs` adds American Truck Simulator and
   Euro Truck Simulator 2: live telemetry, a hand-checked landmark pack and town lookup.
+  `familiar-ksp` adds Kerbal Space Program flight telemetry, mission events and resource warnings
+  through the kRPC mod (enable auto-start servers and auto-accept clients).
 - **Launcher GUI** (`familiar gui`): pick the game and persona, watch the conversation, and
   create or edit personas, with optional AI drafting and voice previews.
 - **Trip memory**: remembers earlier places and trip events across personas, answers questions
@@ -29,7 +31,7 @@ Familiar needs Python 3.12 and [uv](https://docs.astral.sh/uv/) (or pip).
 ```bash
 git clone https://github.com/rb3m/Familiar.git
 cd Familiar
-uv sync --all-packages        # core + ATS/ETS2 pack
+uv sync --all-packages        # core + ATS/ETS2 and KSP packs
 cp config.example.toml config.toml
 ```
 
@@ -70,6 +72,10 @@ On Linux, `packaging/linux/install.sh` adds Familiar to the applications menu.
 
 ATS/ETS2 telemetry comes from a local TruckSim GPS telemetry server (default
 `http://localhost:31377`); see `[games.ats]` in `config.example.toml`.
+
+For KSP, install the kRPC mod and enable **Auto-start servers** and **Auto-accept new clients**.
+Run `familiar ksp-probe` to inspect a snapshot or `familiar ksp-record flight.jsonl` to record one.
+Select KSP with `familiar voice --game ksp --persona mira`. Live flight verification is pending.
 
 Memory is enabled by default at `$XDG_DATA_HOME/familiar/memory.db`, falling back to
 `~/.local/share/familiar/memory.db`. Set `[memory] enabled = false` to disable it, or `path`

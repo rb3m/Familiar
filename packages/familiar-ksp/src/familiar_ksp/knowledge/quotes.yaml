@@ -1,0 +1,9 @@
+# Curated quotes only. Example schema (replace all placeholders before use):
+# - id: mission-quote-slug
+#   text: "Exact quote"
+#   speaker: "Speaker name"
+#   context: "Mission, year"
+#   attribution: verified  # or attributed
+#   triggers: [liftoff]
+#   source_url: https://example.org/primary-source
+[]
