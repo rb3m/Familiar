@@ -25,8 +25,9 @@ ALERT_RULE = (
 
 
 ACTION_RULE = (
-    "\n\nActions: act only when the player asks in this turn. When an action returns "
-    "needs_confirmation, ask its ask line as a short yes/no question and wait. Call "
+    "\n\nActions: act only when the player asks in this turn. Call the act_ tool right "
+    "away, even for risky actions; never ask for confirmation before calling it. When an "
+    "action returns needs_confirmation, ask its ask line as a short yes/no question and wait. Call "
     "confirm_action only after the player answers yes in a later message. Never say an "
     "action happened unless its status is done or already. Say plainly when it is "
     "unavailable or unknown."

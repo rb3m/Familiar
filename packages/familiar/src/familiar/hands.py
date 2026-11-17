@@ -39,6 +39,15 @@ NEGATIVES = {
 }
 
 
+# Risky tools are still called at once: the result asks the player, so the model must not.
+RISK_NOTES = {
+    (False, False): "Runs immediately",
+    (True, False): "Call it right away; the result asks the player to confirm",
+    (False, True): "Call it right away; for risky arguments the result asks the player to confirm",
+    (True, True): "Call it right away; for risky arguments the result asks the player to confirm",
+}
+
+
 @dataclass(frozen=True)
 class _Pending:
     id: str
@@ -102,13 +111,7 @@ class ActionKeeper:
 
     def register(self, registry: ToolRegistry) -> None:
         for name, spec in self.actuator.actions().items():
-            risk = (
-                "Needs the player's confirmation"
-                if spec.risky
-                else "Does not need the player's confirmation"
-            )
-            if spec.risky_when is not None:
-                risk = "Needs the player's confirmation when arguments are risky"
+            risk = RISK_NOTES[(spec.risky, spec.risky_when is not None)]
             registry.register(
                 ToolSpec("act_" + name, f"{spec.description}. {risk}.", spec.parameters),
                 partial(self.request, name, spec),
