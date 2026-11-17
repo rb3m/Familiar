@@ -62,6 +62,10 @@ parking_brake:
   state_field: park_brake_on
   risky_when:
     state: 'on'
+quick_park:
+  description: Quick-park the truck at the delivery spot ("park it"). Only works when the
+    game offers parking at a destination; elsewhere the press does nothing.
+  control: quickpark
 cruise_control:
   description: Set cruise control on or off.
   control: cruiectrl

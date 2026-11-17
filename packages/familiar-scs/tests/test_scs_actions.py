@@ -247,6 +247,14 @@ async def test_guards(adapter, guard, detail):
     assert not keyboard.presses
 
 
+async def test_quick_park_taps_the_bound_key(adapter):
+    assert not adapter.actions()["quick_park"].risky
+    adapter.bindings["quickpark"] = ("q",)
+    result = await adapter.perform("quick_park", {})
+    assert result["status"] == "done"
+    assert [keys for keys, _ in adapter._keyboard.presses] == [("q",)]
+
+
 async def test_risk_and_context(adapter):
     specs = adapter.actions()
     assert specs["engine"].risky_when({"state": "off"})
