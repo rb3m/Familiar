@@ -9,9 +9,9 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Milestone: **M2 ATS**: first live drive from the GUI 2026-11-15; speech used miles correctly. Core and game packs split into two packages (ADR 0004).
-- ETS2 2026-11-16: km confirmed live; GeoNames Europe gazetteer (`data/eu_places.csv`) gives country crossings, towns and location; projection checked live near Château-Thierry (UK branch unverified). Added 2026-11-16: toll, traffic_jam, hard_braking, collision, rested, day_period, rain_started/stopped events; `SOLAR_NOON_HOUR` in `geo.py` (13:00) unverified, calibrate from one sunset observation (inferred; telemetry has no traffic data). Next task: confirm a border crossing and a jam live, tune `JAM_*` constants in `events.py`, then ETS2 landmarks pack. Confirmed live 2026-11-15: miles, heading, rest time, chattiness (Frieren and Megumin). Game data and replies use spoken words for units (`familiar_scs/units.py`, `SPOKEN_RULE`). Fixed 2026-11-15: barge-in silence (`audio/player.py` docstring), rest time (absolute game clock), startup/engine-off warnings.
-- Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk.
+- Milestone: **M3 Memory** built 2026-11-16 (ADR 0005, `familiar/memory/`); needs a live check: a second drive past a place from an earlier session, "have we been here before?", and a summary row after quitting. M2 done; ETS2 (M4) live: countries, towns, 391 landmarks, SCS events.
+- Next task: live-verify M3, then tune from drives: `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`, 13:00 unverified), recall gate (`memory/keeper.py`). Unverified: ETS2 UK projection branch, Iceland (not in gazetteer/landmarks), ETS2 auto wipers.
+- Known: LLM default is flash-lite (free-tier 3.8-flash stalls). ElevenLabs free tier 10k chars/month, then Gemini TTS. GUI sessions need the evdev (joystick) push-to-talk. Telemetry has no traffic/weather data; jams and rain are inferred.
 
 ## Rules
 - Python 3.12 via uv: `uv sync --all-packages`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
