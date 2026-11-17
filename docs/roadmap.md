@@ -4,9 +4,9 @@
 |---|---|---|
 | **M0 Foundation** | Repo, interfaces, plugin loader, config, personas, Gemini LLM, text chat | `uv run familiar chat` streams a persona reply from Gemini; tests and ruff pass |
 | **M1 Voice loop** | Push-to-talk → Gemini STT → LLM → Gemini TTS, ElevenLabs as 2nd TTS; Linux + Mac | Spoken round trip under ~2 s on both machines |
-| **M2 ATS** (built; first live drive 2026-11-15) | ATS adapter (TruckSim GPS server :31377), Director, first knowledge pack | Companion mentions a POI and low fuel during a real drive without spamming |
-| **M3 Memory** | Session summaries + embeddings, recall tool (RAG over past transcripts) | "Remember last trip to Reno?" works |
-| **M4 More games** | ETS2 (shares ATS adapter), KSP (Telemachus/kRPC), then MSFS, Elite (journal + EDSM) | Each has an adapter + knowledge pack |
+| **M2 ATS** (done 2026-11-15) | ATS adapter (TruckSim GPS server :31377), Director, first knowledge pack | Companion mentions a POI and low fuel during a real drive without spamming |
+| **M3 Memory** (in progress) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
+| **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks) | ETS2 (shares ATS adapter), KSP (Telemachus/kRPC), then MSFS, Elite (journal + EDSM) | Each has an adapter + knowledge pack |
 | **M5 Hands & languages** | uinput actions as LLM tools, Touch Portal sync, Japanese practice mode | Voice command toggles something in-game |
 
 Planned: **how the companion addresses the user.** A name or nickname the user picks (e.g.
@@ -27,3 +27,9 @@ plugin for users without the TruckSim GPS port.
 
 Before publishing to PyPI: rename the distributions (`familiar` is taken there by an unrelated
 project), e.g. `familiar-companion` and `familiar-companion-scs`.
+
+SCS events added 2026-11-16 (ATS and ETS2): tolls, inferred traffic jams, hard braking and
+trailer collisions, after-rest check-in, time of day from sun height, rain hint from wipers.
+The telemetry has no traffic, AI-vehicle or weather data; these are inferred from the player's
+own truck. Open checks: solar-noon hour (`SOLAR_NOON_HOUR`), UK projection branch, Iceland map
+(not in the gazetteer or landmarks yet), jam thresholds.
