@@ -34,6 +34,7 @@ API tier) is the first backend; others plug in via entry points.
 - `packaging/linux/`: menu launcher + icon installer (`install.sh`).
 - `packages/familiar/src/familiar/`: core voice loop, backends, Director and GUI; no imports from game packs.
 - `packages/familiar-scs/src/familiar_scs/`: ATS/ETS2 adapters, commands, data and `knowledge/<game>/` packs.
+- `packages/familiar-ksp/src/familiar_ksp/`: KSP kRPC telemetry, events, quotes and probe/record commands.
 - `docs/knowledge-packs.md`: landmark pack format and the `familiar landmarks status|add|check` workflow. Read before adding or editing landmarks.
 - `scripts/`: data builders; landmark scripts are thin wrappers around `packages/familiar-scs/src/familiar_scs/curation.py`.
-- `packages/*/tests/`: core and SCS pytest suites.
+- `packages/*/tests/`: core, SCS and KSP pytest suites.
