@@ -21,6 +21,15 @@ app) for skip, volume, pause and "something calmer" requests, and the in-game ra
 presses once M5 hands exist. Persona-flavoured picks matched to the drive (night, mountain
 pass, tight deadline) and the occasional comment on the current song.
 
+Planned, **test before building: expressive speech with ElevenLabs Eleven v3.** v3 acts out
+inline audio tags (`[excited]`, `[sighs]`, `[whispers]`, `[laughs]`), so the LLM could tag each
+line with its emotion. Today every line goes to Flash v2.5 with default voice settings, so
+emotion comes only from wording and punctuation. v3 is slower than Flash; ElevenLabs recommends
+Flash for live agents. First run a test: time tagged v3 lines against Flash on the user's
+connection and listen in en/es/ja. Only build if the delay is acceptable, and then possibly
+only for event remarks, keeping Flash for alert callouts. A build would also strip tags from
+transcripts and before the Gemini TTS fallback.
+
 Later options: Gemini Live speech-to-speech `Conversation` backend, local backends (whisper.cpp
 Vulkan, Kokoro, Ollama), Mac desk assistant / note taker to an Obsidian vault, standard SCS telemetry
 plugin for users without the TruckSim GPS port.
