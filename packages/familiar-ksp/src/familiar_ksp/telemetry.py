@@ -13,7 +13,6 @@ from typing import Protocol
 
 import krpc
 from familiar.interfaces import ConfigError
-from krpc.error import RPCError
 
 
 def positive(value: float, name: str) -> float:
@@ -60,6 +59,8 @@ class Snapshot:
     electric_charge_max: float | None = None
     liquid_fuel: float | None = None  # whole vessel; the low-fuel warning uses this
     liquid_fuel_max: float | None = None
+    stage_delta_v_ms: float | None = None
+    total_delta_v_ms: float | None = None
     stage_liquid_fuel: float | None = None
     stage_liquid_fuel_max: float | None = None
     stage_oxidizer: float | None = None
@@ -93,7 +94,9 @@ def optional(read: Callable):
         if isinstance(value, float) and not math.isfinite(value):
             return None
         return value
-    except (AttributeError, RPCError):
+    except (OSError, EOFError):
+        raise  # connection loss: let the poll reconnect
+    except Exception:  # kRPC maps server errors to ValueError, RuntimeError, RPCError...
         return None
 
 
@@ -164,16 +167,40 @@ def read_snapshot(connection) -> Snapshot:
     values.update(resource_values(vessel_resources, "electric_charge", "ElectricCharge"))
     values.update(resource_values(vessel_resources, "liquid_fuel", "LiquidFuel"))
     stage = values["current_stage"]
-    resources = (
-        optional(lambda: vessel.decouple_stage_at(stage - 1).resources(cumulative=False))
-        if stage is not None
-        else None
-    )
+    resources = optional(lambda: burning_resources(vessel, stage)) if stage is not None else None
+    values.update(delta_v(vessel, stage))
     for key, name in STAGE_RESOURCES.items():
         values.update(resource_values(resources, key, name))
     return Snapshot(**values)
 
 
+def burning_resources(vessel, current_stage: int):
+    """Tanks feeding the next burn: the highest decouple stage below the current one with
+    propellant (on the pad the engines' tanks sit two stage numbers down)."""
+    for stage in sorted(vessel.decouple_stages, key=lambda item: item.number, reverse=True):
+        if stage.number >= current_stage:
+            continue
+        resources = stage.resources(cumulative=False)
+        if any(resources.max(name) > 0 for name in PROPELLANTS):
+            return resources
+    return None
+
+
+def delta_v(vessel, current_stage: int | None) -> dict:
+    """Stock delta-v (current conditions): the next burning stage and the whole vessel."""
+    stages = optional(lambda: [(item.number, item.delta_v) for item in vessel.stages]) or []
+    burning = [
+        dv
+        for number, dv in sorted(stages, reverse=True)
+        if dv > 0 and (current_stage is None or number <= current_stage)
+    ]
+    return {
+        "stage_delta_v_ms": burning[0] if burning else None,
+        "total_delta_v_ms": sum(dv for _, dv in stages) if stages else None,
+    }
+
+
+PROPELLANTS = ("LiquidFuel", "Oxidizer", "SolidFuel")
 STAGE_RESOURCES = {
     "stage_liquid_fuel": "LiquidFuel",
     "stage_oxidizer": "Oxidizer",

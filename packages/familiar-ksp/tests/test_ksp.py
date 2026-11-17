@@ -93,12 +93,17 @@ def test_mapping():
             dynamic_pressure=123,
         )
 
-    def decouple(stage):
-        stages.append(stage)
-        return Ns(resources=lambda cumulative: resources)
+    def decouple(number, tanks):
+        def read(cumulative):
+            stages.append(number)
+            return tanks
 
+        return Ns(number=number, resources=read)
+
+    empty = Ns(amount=lambda name: 0, max=lambda name: 0)
     vessel.flight = read_flight
-    vessel.decouple_stage_at = decouple
+    vessel.decouple_stages = [decouple(-1, resources), decouple(1, resources), decouple(2, empty)]
+    vessel.stages = [Ns(number=2, delta_v=0), Ns(number=1, delta_v=900), Ns(number=0, delta_v=0)]
     connection = Ns(
         krpc=Ns(game_scene=Ns(name="flight"), paused=False),
         space_center=Ns(active_vessel=vessel, ut=123, warp_rate=1, warp_mode=Ns(name="none")),
@@ -114,7 +119,8 @@ def test_mapping():
     )
     assert s.dynamic_pressure_pa == 123 and s.crew == ("Valentina Kerman",)
     assert s.stage_monoprop == 12 and s.stage_monoprop_max == 24
-    assert frames == [()] and stages == [2]
+    assert frames == [()] and stages == [2, 1]
+    assert (s.stage_delta_v_ms, s.total_delta_v_ms) == (900, 900)
     with pytest.raises(FrozenInstanceError):
         s.altitude_m = 0
     del vessel.orbit.inclination

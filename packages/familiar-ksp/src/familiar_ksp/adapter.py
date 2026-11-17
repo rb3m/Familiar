@@ -2,7 +2,7 @@
 
 from familiar.interfaces import PLUGIN_API_VERSION
 
-from .events import EventDetector
+from .events import GROUNDED, EventDetector
 from .quotes import attach_flavor, load_quotes
 from .telemetry import STAGE_RESOURCES, KrpcTelemetry, ReplayTelemetry, Snapshot
 from .units import distance, duration, number, resource
@@ -60,15 +60,12 @@ class KspAdapter:
                 f"{s.situation or 'unknown'}",
                 f"Altitude: {distance(s.altitude_m)} mean; "
                 f"{distance(s.surface_altitude_m)} surface",
-                f"Speed: orbital {number(s.speed_orbital_ms, ' m/s')}; "
-                f"surface {number(s.speed_surface_ms, ' m/s')}; "
-                f"vertical {number(s.vertical_speed_ms, ' m/s')}",
-                f"Ap: {distance(s.apoapsis_alt_m)} in {duration(s.time_to_apoapsis_s)}; "
-                f"Pe: {distance(s.periapsis_alt_m)} in {duration(s.time_to_periapsis_s)}",
-                f"Inclination: {number(s.inclination_deg, ' degrees')}",
+                *self._motion_lines(),
                 f"Stage: {number(s.current_stage, decimals=0)}; "
                 f"parts: {number(s.part_count, decimals=0)}",
                 f"Stage resources (KSP units): {fuels}",
+                f"Delta-v: next stage {number(s.stage_delta_v_ms, ' m/s', decimals=0)}; "
+                f"whole vessel {number(s.total_delta_v_ms, ' m/s', decimals=0)}",
                 "Liquid fuel, whole vessel (KSP units): "
                 f"{resource(s.liquid_fuel, s.liquid_fuel_max)}",
                 "Electric charge (KSP units): "
@@ -79,6 +76,23 @@ class KspAdapter:
                 f"Warp: {number(s.warp_rate, 'x')} ({s.warp_mode or 'unknown'})",
             ]
         )
+
+    def _motion_lines(self) -> list[str]:
+        s = self.latest
+        if s.situation in GROUNDED:
+            return [
+                "Speed: stationary on the ground"
+                if not s.speed_surface_ms
+                else f"Speed: surface {number(s.speed_surface_ms, ' m/s')}"
+            ]
+        return [
+            f"Speed: orbital {number(s.speed_orbital_ms, ' m/s')}; "
+            f"surface {number(s.speed_surface_ms, ' m/s')}; "
+            f"vertical {number(s.vertical_speed_ms, ' m/s')}",
+            f"Ap: {distance(s.apoapsis_alt_m)} in {duration(s.time_to_apoapsis_s)}; "
+            f"Pe: {distance(s.periapsis_alt_m)} in {duration(s.time_to_periapsis_s)}",
+            f"Inclination: {number(s.inclination_deg, ' degrees')}",
+        ]
 
     def whereabouts(self) -> dict | None:
         s = self.latest
