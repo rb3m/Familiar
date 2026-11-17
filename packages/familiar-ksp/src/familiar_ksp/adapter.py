@@ -2,8 +2,9 @@
 
 from time import monotonic
 
-from familiar.interfaces import PLUGIN_API_VERSION, WatchSample, WatchSpec
+from familiar.interfaces import PLUGIN_API_VERSION, ActionSpec, WatchSample, WatchSpec
 
+from .actions import KspActionController
 from .events import GROUNDED, EventDetector
 from .quotes import attach_flavor, load_quotes
 from .telemetry import STAGE_RESOURCES, KrpcTelemetry, ReplayTelemetry, Snapshot
@@ -16,7 +17,7 @@ class KspAdapter:
     display_name = "Kerbal Space Program"
     icon = "🚀"
     api_version = PLUGIN_API_VERSION
-    capabilities = frozenset({"events", "snapshot"})
+    capabilities = frozenset({"events", "snapshot", "actions"})
 
     def __init__(self, settings: dict) -> None:
         self.latest = Snapshot()
@@ -24,6 +25,9 @@ class KspAdapter:
         self.detector = EventDetector()
         self.quotes = load_quotes(settings.get("quotes_path"))
         self.source = self._source(settings)
+        self.actions_controller = KspActionController(
+            settings, context_provider=self.action_context
+        )
 
     @staticmethod
     def _source(settings):
@@ -150,7 +154,20 @@ class KspAdapter:
     def tools(self) -> list:
         return []
 
+    def actions(self) -> dict[str, ActionSpec]:
+        return self.actions_controller.actions()
+
+    async def perform(self, name: str, arguments: dict) -> dict:
+        return await self.actions_controller.perform(name, arguments)
+
+    def action_context(self) -> str | None:
+        s = self.latest
+        if not s.in_flight or not s.vessel_name:
+            return None
+        return f"{s.vessel_name}:{s.vessel_id}"
+
     async def aclose(self) -> None:
+        await self.actions_controller.aclose()
         await self.source.aclose()
 
 

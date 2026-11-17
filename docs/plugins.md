@@ -181,6 +181,13 @@ Resources use KSP resource units; distances and speeds use SI units.
 KSP quotes live in `knowledge/quotes.yaml` (19 curated, source-checked; each entry also carries `source_url` and
 event-kind `triggers`, which the loader validates and does not attach to events).
 
+KSP hands (actions) implement `Actuator` through a dedicated kRPC connection (`"Familiar actions"`)
+on its own single-worker thread, opened lazily and bounded by `action_timeout_s` (default 3 s).
+Supported actions cover staging, abort, SAS state and mode steering, RCS, landing gear, lights,
+brakes, action groups 1–10, throttle, and on-rails time warp. Risky commands require spoken
+confirmation under ADR 0009 and refuse execution if the active vessel changes or if flight safety
+guards are unmet.
+
 
 ## Actions (hands)
 
