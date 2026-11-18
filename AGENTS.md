@@ -10,7 +10,7 @@ API tier) is the first backend; others plug in via entry points.
 
 ## Current step
 - Live 2026-11-17 (KSP, crew Frieren + Megumin): crew turns, event reactions, banter, kRPC lights/gear OK; history-trim 400 fixed. Live 2026-11-17 night (ETS2 deliveries): **M3** recall and **M6** stereo positioning OK. Still awaiting live checks: **M5** SCS key presses, **Elite** (ADR 0010: binds written; General preset to Custom, keys by hand, a flight), callbacks.
-- Next task: live checks above; then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal sync and KWin focus check; M7 Vic2 save-diff adapter (roadmap).
+- Next task: live checks above; DJ phase 1 (ADR 0012, `familiar-music`); then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal sync and KWin focus check; M7 Vic2 save-diff adapter (roadmap).
 - Known: flash-lite on the free key; 429s park a model 15 min, then `fallback_api_key_env`. ElevenLabs Pro, Gemini TTS fallback. GUI needs evdev push-to-talk. Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
 ## Rules
@@ -28,7 +28,7 @@ API tier) is the first backend; others plug in via entry points.
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
 - `docs/plugins.md`: how to add a backend, command, or game pack. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.
-- `docs/decisions/`: ADRs. 0001 structure, 0002 location/landmarks, 0003 GUI, 0004 package boundaries, 0005 trip memory, 0006 KSP/quotes, 0007 tools/alerts, 0008 API vs CLI, 0009 hands gate, 0010 Elite.
+- `docs/decisions/`: ADRs. 0001 structure, 0002 location/landmarks, 0003 GUI, 0004 package boundaries, 0005 trip memory, 0006 KSP/quotes, 0007 tools/alerts, 0008 API vs CLI, 0009 hands gate, 0010 Elite, 0011 crew, 0012 DJ/music.
 - `docs/gui-api.md`: GUI server/frontend contract (endpoints, auth, SSE). Read before changing `packages/familiar/src/familiar/gui/`.
 - `config.example.toml`: every config key with defaults.
 - `packages/familiar/src/familiar/personas/`: packaged built-in persona YAML; user personas live in `~/.config/familiar/personas/` and shadow them.
