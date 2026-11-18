@@ -10,6 +10,41 @@
 | **M5 Hands** (built 2026-11-17, ADR 0009; KSP kRPC actions live 2026-11-17, SCS key presses pending) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync (both ways, see below) | Voice command toggles something in-game |
 | **M6 Crew** (phases 1-3 built 2026-11-17, ADR 0011; crew turns and banter live in KSP 2026-11-17; Touch Portal part of phase 3 deferred) | Up to three personas at once: launcher picks game, crew, language, action-carrier and banter level into `session.toml`; one speaker at a time; banter scenes; shared memory with speaker attribution. Phases: 1 session + speaker selection, 2 banter, 3 stereo/callbacks/Touch Portal | Ask Frieren a question by name and she answers in her voice; Megumin teases her on a long quiet stretch; Mira handles the gear |
 
+| **M7 Beyond sims** (planned 2026-11-18, see below) | Two new companion roles: advisor (strategy games, from save snapshots) and commentator (RPGs, from coarse context or screen vision) | Mira briefs a real Vic3/CK3 session from autosave diffs, and riffs on an RPG scene without talking over dialogue or spoiling the plot |
+
+Planned (M7): **companion roles beyond sims** (idea discussed with the Commander 2026-11-18).
+Games sort by the job the companion does, and each job needs less precise data than the last:
+| Role | Genres | Job | Data |
+|---|---|---|---|
+| Copilot (today) | ATS/ETS2, Elite, KSP, racing, flight | Timely, useful callouts | Live telemetry |
+| Advisor | Grand strategy, colony sims | Filter the notification noise; answer questions about the world | Snapshots every few minutes |
+| Commentator | RPGs, story games | MST3K-style banter and reactions | Coarse context: place, quest, combat |
+Steps, in order:
+1. **Screen-vision adapter (spike).** A generic `GameAdapter` that grabs a screenshot every N
+   seconds (or on a hotkey), asks a vision model for a short scene description, and emits it as
+   a low-priority event. Works with any game and no mod; too slow for copilot callouts, enough
+   for commentary. Tells us cheaply whether commentator mode is fun before writing game mods.
+   Watch cost per hour on the free tier and how long a frame takes from capture to remark.
+2. **Commentator manners in the Director.** A hard-quiet flag while dialogue or a cutscene
+   plays (like the hands gate), a smaller remark budget than sims (riffs land because they're
+   sparse; crew banter carries it better than solo lines), and spoiler guarding: the persona is
+   told not to foreshadow, and the plot knowledge it gets is limited to quests the player has finished.
+   Fourth-wall gallery, not in-world NPC (Skyrim already has Mantella/CHIM for that).
+3. **Paradox save-diff adapter.** Monthly autosave → parse → diff against the previous save →
+   events ("Russia and the UK allied", "war in China", "Africa war ended in white peace").
+   Talk while the game is paused. Tools for "chat with your save" ("who might declare on me?",
+   "why is GDP flat?"). One parser could serve Victoria 3, Crusader Kings 3 (court gossip suits a
+   companion), Stellaris and EU5. First check a Python-reachable parser for the
+   compressed/binary saves (pdx.tools' `jomini` covers Paradox formats; confirm Vic3 coverage).
+   Personas: foreign minister, spymaster; crew can split diplomacy, economy and military.
+   Needs agy/codex/Copilot consensus and an ADR on parser choice.
+4. **Per-game mods where vision falls short.** Skyrim: SKSE/Papyrus mod writing location,
+   quest, combat and dialogue state to JSON. Solasta: Unity Mod Manager mod dumping the combat
+   log (dice rolls are perfect riff material). RimWorld (C#/Harmony) and Dwarf Fortress (DFHack
+   Lua) are drama generators that fit both the advisor and commentator roles.
+Also good copilot fits for M4: racing sims (F1 series and ACC UDP telemetry; race-engineer
+persona) and Factorio (Lua mod API can write files; "your iron belt has starved for 10 min").
+
 Planned: **how the companion addresses the user.** A name or nickname the user picks (e.g.
 "Skipper"), plus a formality level (casual, polite, formal) set globally in `config.toml` /
 the GUI and overridable per persona. Each language maps the level to its own register:
