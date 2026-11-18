@@ -33,3 +33,26 @@ def test_libraries_and_data_override(tmp_path, monkeypatch):
     assert find_paths({}).journal_dir == journal
     (root / "steamapps/libraryfolders.vdf").unlink()
     assert find_paths({}).journal_dir is None
+
+
+def test_control_schemes_prefers_odyssey_across_libraries(tmp_path, monkeypatch):
+    data = tmp_path / "data/familiar_elite"
+    data.mkdir(parents=True)
+    root = tmp_path / "steam"
+    external = tmp_path / "external"
+    (root / "steamapps").mkdir(parents=True)
+    (root / "steamapps/libraryfolders.vdf").write_text(f'"1" "{external}"')
+    (data / "paths.yaml").write_text(f'steam_roots: ["{root}"]\n')
+    products = Path("steamapps/common/Elite Dangerous/Products")
+    legacy = root / products / "legacy" / "ControlSchemes"
+    preferred = external / products / "elite-dangerous-odyssey-64" / "ControlSchemes"
+    legacy.mkdir(parents=True)
+    preferred.mkdir(parents=True)
+    monkeypatch.setenv("FAMILIAR_DATA_DIR", str(data.parent))
+    assert find_paths({}).control_schemes_dir == preferred
+    assert (
+        find_paths({"control_schemes_dir": "~/schemes"}).control_schemes_dir
+        == Path("~/schemes").expanduser()
+    )
+    preferred.rmdir()
+    assert find_paths({}).control_schemes_dir == legacy

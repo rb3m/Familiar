@@ -6,3 +6,5 @@ steam_roots:
   - ~/.var/app/com.valvesoftware.Steam/.local/share/Steam
 journal_dir: Saved Games/Frontier Developments/Elite Dangerous
 bindings_dir: AppData/Local/Frontier Developments/Elite Dangerous/Options/Bindings
+control_schemes_glob: "steamapps/common/Elite Dangerous/Products/*/ControlSchemes"
+preferred_product: elite-dangerous-odyssey-64

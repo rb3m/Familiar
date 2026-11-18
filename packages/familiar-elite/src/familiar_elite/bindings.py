@@ -15,10 +15,10 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET
-from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -35,11 +35,19 @@ ALREADY_BOUND = "already-bound"
 SECONDARY_OCCUPIED = "secondary-occupied"
 MISSING = "missing"
 NO_KEYS_LEFT = "no-keys-left"
+BUILTIN_PRESET = "builtin-preset"
 
 EMPTY_SECONDARY = re.compile(
     r'(?P<indent>^[ \t]*)<Secondary Device="\{NoDevice\}" Key=""[ \t]*/>[ \t]*(?P<ending>\r?)$',
     re.MULTILINE,
 )
+
+
+@dataclass(frozen=True)
+class Preset:
+    name: str
+    path: Path
+    writable: bool
 
 
 @dataclass(frozen=True)
@@ -72,7 +80,7 @@ class Assignment:
 @dataclass(frozen=True)
 class ApplyResult:
     assigned: dict[str, str]
-    backup: Path | None
+    backups: tuple[Path, ...]
     sidecar: Path | None
 
 
@@ -109,12 +117,32 @@ def _string_mapping(value: object) -> bool:
     )
 
 
-def load_wanted_controls() -> dict[str, str]:
-    """Controls Familiar wants on the keyboard, mapped to a one-line purpose."""
+def _binding_data() -> dict:
     data, source = _data("bindings")
-    _require(isinstance(data, dict) and set(data) == {"controls"}, source, "expected controls")
-    _require(_string_mapping(data["controls"]), source, "controls must map names to purposes")
-    return dict(data["controls"])
+    _require(isinstance(data, dict), source, "expected categories and controls")
+    categories = data.get("categories")
+    _require(_string_list(categories), source, "categories must be names")
+    _require(len(set(categories)) == len(categories), source, "duplicate categories")
+    controls = data.get("controls")
+    _require(isinstance(controls, dict), source, "controls must be a mapping")
+    valid = all(
+        isinstance(name, str)
+        and _string_mapping(spec)
+        and set(spec) == {"category", "purpose"}
+        and spec["category"] in categories
+        for name, spec in controls.items()
+    )
+    _require(valid, source, "controls need a category and purpose")
+    return data
+
+
+def load_wanted_controls() -> dict[str, dict[str, str]]:
+    """Wanted controls with their category and one-line purpose."""
+    return _binding_data()["controls"]
+
+
+def load_categories() -> list[str]:
+    return _binding_data()["categories"]
 
 
 def load_candidates() -> list[str]:
@@ -141,30 +169,50 @@ def load_process_names() -> list[str]:
     return list(data["names"])
 
 
-def active_preset(bindings_dir: Path) -> Path:
-    """Resolve the preset Elite loads from the newest StartPreset*.start file."""
+def active_presets(bindings_dir: Path, control_schemes_dir: Path | None) -> dict[str, Preset]:
+    """Resolve each category, preferring versioned user presets over built-ins."""
     starts = sorted(bindings_dir.glob("StartPreset*.start"))
     if not starts:
         raise ConfigError(f"No StartPreset*.start in {bindings_dir}")
     newest = max(starts, key=lambda path: path.stat().st_mtime)
     try:
-        lines = newest.read_text(encoding="utf-8-sig").splitlines()
+        names = newest.read_text(encoding="utf-8-sig").splitlines()
     except (OSError, UnicodeError) as exc:
         raise ConfigError(f"Cannot read {newest}: {exc}") from exc
-    names = [line.strip() for line in lines if line.strip() and line.strip().lower() != "default"]
-    if not names:
-        raise ConfigError(f"{newest} lists no custom preset")
-    tally = Counter(names)
-    common = tally.most_common()
-    if len(common) > 1 and common[0][1] == common[1][1]:
-        raise ConfigError(f"Ambiguous presets in {newest}: {', '.join(sorted(tally))}")
-    unresolved = [name for name in tally if not _versions(bindings_dir, name)]
-    if unresolved:
-        raise ConfigError(
-            f"Preset(s) without a .binds file in {bindings_dir}: {', '.join(sorted(unresolved))}"
-        )
-    name = common[0][0]
-    return max(_versions(bindings_dir, name).items())[1]
+    categories = load_categories()
+    if len(names) == 1:
+        names *= len(categories)
+    if len(names) != len(categories):
+        raise ConfigError(f"{newest}: expected one preset or {len(categories)} category presets")
+    return {
+        category: _resolve_preset(name.strip(), category, bindings_dir, control_schemes_dir)
+        for category, name in zip(categories, names, strict=True)
+    }
+
+
+def _resolve_preset(
+    name: str, category: str, bindings_dir: Path, control_schemes_dir: Path | None
+) -> Preset:
+    versions = _versions(bindings_dir, name)
+    if versions:
+        return Preset(name, max(versions.items())[1], True)
+    if control_schemes_dir and (control_schemes_dir / f"{name}.binds").is_file():
+        return Preset(name, control_schemes_dir / f"{name}.binds", False)
+    raise ConfigError(f"Missing preset {name!r} for category {category} in {bindings_dir}")
+
+
+def _preset_tables(presets: dict[str, Preset]) -> dict[Path, dict[str, Binding]]:
+    return {
+        path: parse_binds(_read_preset(path))
+        for path in dict.fromkeys(preset.path for preset in presets.values())
+    }
+
+
+def _read_preset(path: Path) -> str:
+    try:
+        return path.read_bytes().decode("utf-8-sig")
+    except (OSError, UnicodeError) as exc:
+        raise ConfigError(f"Cannot read {path}: {exc}") from exc
 
 
 def _versions(bindings_dir: Path, name: str) -> dict[tuple[int, int], Path]:
@@ -209,30 +257,45 @@ def keyboard_keys_in_use(bindings: dict[str, Binding]) -> set[str]:
 
 
 def plan_secondaries(
-    bindings: dict[str, Binding], wanted_controls: Iterable[str], candidates: list[str]
+    presets: dict[str, Preset],
+    wanted_controls: dict[str, dict[str, str]],
+    candidates: list[str],
 ) -> list[Assignment]:
-    """Pick a free candidate key for each wanted control with an empty Secondary."""
-    used = keyboard_keys_in_use(bindings)
-    plan = []
-    for control in wanted_controls:
-        binding = bindings.get(control)
-        if binding is None:
-            plan.append(Assignment(control, "", MISSING))
-            continue
-        existing = _existing_keyboard_key(binding)
-        if existing:
-            plan.append(Assignment(control, existing, ALREADY_BOUND))
-            continue
-        if binding.secondary.device != NO_DEVICE:
-            plan.append(Assignment(control, "", SECONDARY_OCCUPIED, binding.secondary.device))
-            continue
-        key = next((candidate for candidate in candidates if candidate not in used), "")
-        if not key:
-            plan.append(Assignment(control, "", NO_KEYS_LEFT))
-            continue
-        used.add(key)
-        plan.append(Assignment(control, key, PLANNED))
-    return plan
+    """Choose keys free across every active file, using each control's category."""
+    tables = _preset_tables(presets)
+    used = set().union(*(keyboard_keys_in_use(table) for table in tables.values()))
+    return [
+        _plan_control(
+            control, presets[spec["category"]], spec["category"], tables, candidates, used
+        )
+        for control, spec in wanted_controls.items()
+    ]
+
+
+def _plan_control(
+    control: str,
+    preset: Preset,
+    category: str,
+    tables: dict[Path, dict[str, Binding]],
+    candidates: list[str],
+    used: set[str],
+) -> Assignment:
+    binding = tables[preset.path].get(control)
+    existing = _existing_keyboard_key(binding) if binding is not None else ""
+    if existing:
+        return Assignment(control, existing, ALREADY_BOUND)
+    if not preset.writable:
+        detail = f"set {category.capitalize()} controls to Custom in Options > Controls, then rerun"
+        return Assignment(control, "", BUILTIN_PRESET, detail)
+    if binding is None:
+        return Assignment(control, "", MISSING)
+    if binding.secondary.device != NO_DEVICE:
+        return Assignment(control, "", SECONDARY_OCCUPIED, binding.secondary.device)
+    key = next((candidate for candidate in candidates if candidate not in used), "")
+    if not key:
+        return Assignment(control, "", NO_KEYS_LEFT)
+    used.add(key)
+    return Assignment(control, key, PLANNED)
 
 
 def _existing_keyboard_key(binding: Binding) -> str:
@@ -247,7 +310,7 @@ def _existing_keyboard_key(binding: Binding) -> str:
 
 
 def apply_plan(
-    binds_path: Path,
+    presets: dict[str, Preset],
     plan: list[Assignment],
     *,
     backup_dir: Path | None = None,
@@ -255,24 +318,38 @@ def apply_plan(
     proc_root: Path | None = None,
 ) -> ApplyResult:
     """Write planned Secondary keys, with backup, XML validation and a sidecar."""
-    assignments = {entry.control: entry.key for entry in plan if entry.status == PLANNED}
-    if not assignments:
-        return ApplyResult({}, None, None)
+    wanted = load_wanted_controls()
+    groups: dict[Path, dict[str, str]] = {}
+    for entry in plan:
+        preset = presets[wanted[entry.control]["category"]]
+        if entry.status != PLANNED or not preset.writable:
+            continue
+        groups.setdefault(preset.path, {})[entry.control] = entry.key
+    if not groups:
+        return ApplyResult({}, (), None)
     running = game_running(load_process_names(), proc_root)
     if running:
         raise ConfigError(f"Elite is running ({running}); close it before writing bindings")
     backup_dir = backup_dir or default_backup_dir()
     sidecar_path = sidecar_path or default_sidecar_path()
+    sidecar = _read_sidecar(sidecar_path)
+    prepared = [_prepare_file(path, assignments) for path, assignments in groups.items()]
+    backups = []
+    for path, original, data in prepared:
+        backups.append(_backup(path, backup_dir, original))
+        _atomic_write(path, data)
+        _write_sidecar(sidecar_path, path, data, groups[path], sidecar)
+    assigned = dict(chain.from_iterable(group.items() for group in groups.values()))
+    return ApplyResult(assigned, tuple(backups), sidecar_path)
+
+
+def _prepare_file(path: Path, assignments: dict[str, str]) -> tuple[Path, bytes, bytes]:
     try:
-        original = binds_path.read_bytes()
+        original = path.read_bytes()
         text = original.decode("utf-8")
     except (OSError, UnicodeError) as exc:
-        raise ConfigError(f"Cannot read {binds_path}: {exc}") from exc
-    data = _rewrite_secondaries(text, assignments, binds_path).encode("utf-8")
-    backup = _backup(binds_path, backup_dir, original)
-    _atomic_write(binds_path, data)
-    _write_sidecar(sidecar_path, binds_path, data, assignments)
-    return ApplyResult(assignments, backup, sidecar_path)
+        raise ConfigError(f"Cannot read {path}: {exc}") from exc
+    return path, original, _rewrite_secondaries(text, assignments, path).encode("utf-8")
 
 
 def _rewrite_secondaries(text: str, assignments: dict[str, str], path: Path) -> str:
@@ -318,7 +395,7 @@ def _validate(text: str, assignments: dict[str, str], path: Path) -> None:
 
 def _backup(binds_path: Path, backup_dir: Path, original: bytes) -> Path:
     backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S%f")
     backup = backup_dir / f"{binds_path.stem}.{stamp}.binds"
     backup.write_bytes(original)
     return backup
@@ -339,15 +416,36 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
 
 def _write_sidecar(
-    sidecar_path: Path, binds_path: Path, data: bytes, assignments: dict[str, str]
+    sidecar_path: Path,
+    binds_path: Path,
+    data: bytes,
+    assignments: dict[str, str],
+    payload: dict,
 ) -> None:
     sidecar_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "preset": str(binds_path),
+    previous = payload.get(str(binds_path), {}).get("owned", {})
+    payload[str(binds_path)] = {
         "sha256": hashlib.sha256(data).hexdigest(),
-        "owned": dict(assignments),
+        "owned": {**previous, **assignments},
     }
-    sidecar_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    _atomic_write(sidecar_path, (json.dumps(payload, indent=2) + "\n").encode("utf-8"))
+
+
+def _read_sidecar(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        raise ConfigError(f"Cannot read sidecar {path}: {exc}") from exc
+    valid = isinstance(payload, dict) and all(
+        isinstance(record, dict)
+        and isinstance(record.get("sha256"), str)
+        and _string_mapping(record.get("owned"))
+        for record in payload.values()
+    )
+    _require(valid, str(path), "expected per-file sha256 and owned keys")
+    return payload
 
 
 def game_running(names: list[str], proc_root: Path | None = None) -> str | None:
@@ -370,18 +468,22 @@ def _program_names(proc_root: Path) -> Iterator[str]:
         yield program.decode("utf-8", "replace").replace("\\", "/").rsplit("/", 1)[-1].lower()
 
 
-def check_sidecar(binds_path: Path, sidecar_path: Path) -> list[str]:
-    """Warnings when the preset drifted from what Familiar wrote; [] when clean."""
+def check_sidecar(presets: dict[str, Preset], sidecar_path: Path) -> list[str]:
+    """Check every recorded active preset independently."""
     try:
-        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-    except (OSError, json.JSONDecodeError) as exc:
+        sidecar = _read_sidecar(sidecar_path)
+    except ConfigError as exc:
         return [f"cannot read sidecar {sidecar_path}: {exc}"]
+    paths = dict.fromkeys(preset.path for preset in presets.values())
+    return list(
+        chain.from_iterable(
+            _check_file(path, sidecar[str(path)]) for path in paths if str(path) in sidecar
+        )
+    )
+
+
+def _check_file(binds_path: Path, sidecar: dict) -> list[str]:
     warnings = []
-    recorded = sidecar.get("preset")
-    if recorded and Path(recorded) != binds_path:
-        warnings.append(f"sidecar records {recorded}, not {binds_path}")
     try:
         data = binds_path.read_bytes()
     except OSError as exc:
@@ -390,7 +492,10 @@ def check_sidecar(binds_path: Path, sidecar_path: Path) -> list[str]:
         warnings.append(
             f"{binds_path.name} changed since Familiar wrote it; owned keys may be gone"
         )
-    parsed = parse_binds(data.decode("utf-8"))
+    try:
+        parsed = parse_binds(data.decode("utf-8-sig"))
+    except (ConfigError, UnicodeError) as exc:
+        return [*warnings, f"cannot parse {binds_path}: {exc}"]
     owned = sidecar.get("owned", {})
     return [
         *warnings,
@@ -400,6 +505,39 @@ def check_sidecar(binds_path: Path, sidecar_path: Path) -> list[str]:
             if control not in parsed or parsed[control].secondary != Slot(KEYBOARD, key)
         ),
     ]
+
+
+def active_keyboard_map(
+    bindings_dir: Path, control_schemes_dir: Path | None
+) -> dict[str, tuple[str, ...]]:
+    """Select category-specific chords; unknown controls prefer ship bindings."""
+    presets = active_presets(bindings_dir, control_schemes_dir)
+    tables = _preset_tables(presets)
+    key_names = load_key_names()
+    maps = {path: keyboard_map(table, key_names) for path, table in tables.items()}
+    controls = dict.fromkeys(chain.from_iterable(tables.values()))
+    wanted = load_wanted_controls()
+    result = {}
+    for control in controls:
+        category = wanted.get(control, {}).get("category")
+        chord = _active_chord(control, category, presets, maps)
+        if chord:
+            result[control] = chord
+    return result
+
+
+def _active_chord(
+    control: str,
+    category: str | None,
+    presets: dict[str, Preset],
+    maps: dict[Path, dict[str, tuple[str, ...]]],
+) -> tuple[str, ...] | None:
+    if category in presets:
+        return maps[presets[category].path].get(control)
+    ship = presets.get("ship")
+    if ship and control in maps[ship.path]:
+        return maps[ship.path][control]
+    return next((table[control] for table in maps.values() if control in table), None)
 
 
 def keyboard_map(

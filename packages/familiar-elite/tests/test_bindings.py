@@ -44,11 +44,18 @@ def _bindings_dir(tmp_path: Path) -> Path:
     directory.mkdir()
     for name in ("Custom.4.2.binds", "StartPreset.4.start"):
         shutil.copy(FIXTURES / name, directory / name)
+    (directory / "StartPreset.4.start").write_text("Custom\n")
     return directory
 
 
+def _presets(path: Path) -> dict[str, bindings.Preset]:
+    return {
+        category: bindings.Preset("Custom", path, True) for category in bindings.load_categories()
+    }
+
+
 def _plan() -> list[bindings.Assignment]:
-    parsed = bindings.parse_binds(_fixture_text())
+    parsed = _presets(FIXTURES / "Custom.4.2.binds")
     return bindings.plan_secondaries(
         parsed, bindings.load_wanted_controls(), bindings.load_candidates()
     )
@@ -57,7 +64,7 @@ def _plan() -> list[bindings.Assignment]:
 def _applied(tmp_path: Path) -> tuple[Path, bindings.ApplyResult]:
     preset = _bindings_dir(tmp_path) / "Custom.4.2.binds"
     result = bindings.apply_plan(
-        preset,
+        _presets(preset),
         _plan(),
         backup_dir=tmp_path / "backups",
         sidecar_path=tmp_path / "owned_binds.json",
@@ -86,24 +93,24 @@ def test_active_preset_picks_highest_version(tmp_path):
     directory = _bindings_dir(tmp_path)
     (directory / "Custom.4.10.binds").write_bytes(b"<Root />")
     (directory / "Custom.3.9.binds").write_bytes(b"<Root />")
-    assert bindings.active_preset(directory) == directory / "Custom.4.10.binds"
+    assert bindings.active_presets(directory, None)["ship"].path == directory / "Custom.4.10.binds"
 
 
 def test_active_preset_requires_start_file(tmp_path):
     with pytest.raises(ConfigError, match="StartPreset"):
-        bindings.active_preset(tmp_path)
+        bindings.active_presets(tmp_path, None)
 
 
 def test_active_preset_rejects_ambiguous(tmp_path):
     (tmp_path / "StartPreset.4.start").write_text("Alpha\nBeta\n")
-    with pytest.raises(ConfigError, match="Ambiguous"):
-        bindings.active_preset(tmp_path)
+    with pytest.raises(ConfigError, match="expected one preset"):
+        bindings.active_presets(tmp_path, None)
 
 
 def test_active_preset_requires_binds_file(tmp_path):
-    (tmp_path / "StartPreset.4.start").write_text("Custom\nCustom\n")
-    with pytest.raises(ConfigError, match="without a .binds file"):
-        bindings.active_preset(tmp_path)
+    (tmp_path / "StartPreset.4.start").write_text("Custom\n")
+    with pytest.raises(ConfigError, match="Missing preset.*general"):
+        bindings.active_presets(tmp_path, None)
 
 
 def test_parse_binds_reads_slots_and_skips_axes():
@@ -143,8 +150,10 @@ def test_plan_secondaries_assigns_free_keys_without_duplicates():
 
 
 def test_plan_secondaries_reports_missing_controls():
-    parsed = bindings.parse_binds(_fixture_text())
-    plan = bindings.plan_secondaries(parsed, {"NoSuchControl": "?"}, ["Key_A"])
+    parsed = _presets(FIXTURES / "Custom.4.2.binds")
+    plan = bindings.plan_secondaries(
+        parsed, {"NoSuchControl": {"category": "ship", "purpose": "?"}}, ["Key_A"]
+    )
     assert plan == [bindings.Assignment("NoSuchControl", "", bindings.MISSING)]
 
 
@@ -175,24 +184,23 @@ def test_apply_plan_writes_backup_and_sidecar(tmp_path):
     assert len(backups) == 1
     assert backups[0].read_bytes() == original
     sidecar = json.loads((tmp_path / "owned_binds.json").read_text(encoding="utf-8"))
-    assert sidecar["preset"] == str(preset)
-    assert sidecar["sha256"] == hashlib.sha256(preset.read_bytes()).hexdigest()
-    assert sidecar["owned"] == EXPECTED_PLAN
-    assert result.backup == backups[0]
+    assert set(sidecar) == {str(preset)}
+    assert sidecar[str(preset)]["sha256"] == hashlib.sha256(preset.read_bytes()).hexdigest()
+    assert sidecar[str(preset)]["owned"] == EXPECTED_PLAN
+    assert result.backups == (backups[0],)
     assert result.sidecar == tmp_path / "owned_binds.json"
 
 
 def test_apply_plan_is_idempotent_and_leaves_existing_keyboard_bindings(tmp_path):
     preset, first = _applied(tmp_path)
     assert first.assigned == EXPECTED_PLAN
-    reparsed = bindings.parse_binds(preset.read_bytes().decode("utf-8"))
     plan = bindings.plan_secondaries(
-        reparsed, bindings.load_wanted_controls(), bindings.load_candidates()
+        _presets(preset), bindings.load_wanted_controls(), bindings.load_candidates()
     )
     assert not [entry for entry in plan if entry.status == bindings.PLANNED]
     written = preset.read_bytes()
     second = bindings.apply_plan(
-        preset,
+        _presets(preset),
         plan,
         backup_dir=tmp_path / "backups",
         sidecar_path=tmp_path / "owned_binds.json",
@@ -210,7 +218,10 @@ def test_apply_plan_refuses_while_game_runs(tmp_path, monkeypatch):
     )
     with pytest.raises(ConfigError, match="running"):
         bindings.apply_plan(
-            preset, _plan(), backup_dir=tmp_path / "backups", sidecar_path=tmp_path / "sidecar"
+            _presets(preset),
+            _plan(),
+            backup_dir=tmp_path / "backups",
+            sidecar_path=tmp_path / "sidecar",
         )
     assert preset.read_bytes() == original
     assert not (tmp_path / "backups").exists()
@@ -220,7 +231,7 @@ def test_apply_plan_preserves_lf_endings(tmp_path):
     preset = _bindings_dir(tmp_path) / "Custom.4.2.binds"
     preset.write_bytes(_fixture_text().replace("\r\n", "\n").encode("utf-8"))
     bindings.apply_plan(
-        preset,
+        _presets(preset),
         _plan(),
         backup_dir=tmp_path / "backups",
         sidecar_path=tmp_path / "sidecar",
@@ -240,19 +251,19 @@ def test_game_running_scans_proc(tmp_path):
 
 def test_check_sidecar_clean_after_apply(tmp_path):
     preset, _ = _applied(tmp_path)
-    assert bindings.check_sidecar(preset, tmp_path / "owned_binds.json") == []
+    assert bindings.check_sidecar(_presets(preset), tmp_path / "owned_binds.json") == []
 
 
 def test_check_sidecar_missing_sidecar_is_quiet(tmp_path):
     preset = _bindings_dir(tmp_path) / "Custom.4.2.binds"
-    assert bindings.check_sidecar(preset, tmp_path / "nope.json") == []
+    assert bindings.check_sidecar(_presets(preset), tmp_path / "nope.json") == []
 
 
 def test_check_sidecar_detects_edits(tmp_path):
     preset, _ = _applied(tmp_path)
     edited = preset.read_bytes().decode("utf-8").replace('Key="Key_A"', 'Key="Key_Q"', 1)
     preset.write_bytes(edited.encode("utf-8"))
-    warnings = bindings.check_sidecar(preset, tmp_path / "owned_binds.json")
+    warnings = bindings.check_sidecar(_presets(preset), tmp_path / "owned_binds.json")
     assert any("changed since Familiar wrote it" in warning for warning in warnings)
     assert any("LandingGearToggle" in warning and "Key_A" in warning for warning in warnings)
 
@@ -285,7 +296,9 @@ def test_command_dry_run_prints_plan_without_writing(tmp_path, capsys):
     code = command.run(_cli_args(command, "--bindings-dir", str(directory)), None)
     out = capsys.readouterr().out
     assert code == 0
-    assert f"Preset: {preset}" in out
+    assert "Category" in out
+    assert "ship" in out
+    assert "Custom" in out
     assert "LandingGearToggle: Key_A (will bind)" in out
     assert "ShipSpotLightToggle: Key_L (already bound)" in out
     assert "NightVisionToggle: secondary occupied by HOTASOne; skipped" in out
@@ -332,3 +345,196 @@ def test_chord_with_unknown_modifier_is_skipped():
     slot = bindings.Slot("Keyboard", "Key_K", (("Keyboard", "Key_Mystery"),))
     binding = bindings.Binding(slot, bindings.Slot(bindings.NO_DEVICE, ""))
     assert bindings.keyboard_map({"Thing": binding}, {"Key_K": "k"}) == {}
+
+
+@pytest.fixture
+def category_presets(tmp_path):
+    directory = _bindings_dir(tmp_path)
+    builtin = tmp_path / "ControlSchemes"
+    builtin.mkdir()
+    text = _fixture_text().replace('Key="Key_UpArrow"', 'Key="Key_W"')
+    text = text.replace('Key="Key_V"', 'Key="Key_A"')
+    (builtin / "TFlightHotasOne.binds").write_bytes(text.encode("utf-8"))
+    (directory / "StartPreset.4.start").write_text(
+        "TFlightHotasOne\nCustom\nTFlightHotasOne\nTFlightHotasOne\n"
+    )
+    return directory, builtin, bindings.active_presets(directory, builtin)
+
+
+def test_category_presets_resolve_user_and_builtin(category_presets):
+    directory, builtin, presets = category_presets
+    assert presets["ship"] == bindings.Preset("Custom", directory / "Custom.4.2.binds", True)
+    assert presets["general"] == bindings.Preset(
+        "TFlightHotasOne", builtin / "TFlightHotasOne.binds", False
+    )
+    assert presets["srv"] == presets["on_foot"] == presets["general"]
+    (directory / "TFlightHotasOne.4.3.binds").write_text("<Root />")
+    assert bindings.active_presets(directory, builtin)["general"].writable
+
+
+def test_one_line_start_applies_to_every_category(tmp_path):
+    directory = _bindings_dir(tmp_path)
+    presets = bindings.active_presets(directory, None)
+    assert len(presets) == 4
+    assert set(presets.values()) == {
+        bindings.Preset("Custom", directory / "Custom.4.2.binds", True)
+    }
+
+
+def test_missing_preset_names_category(category_presets):
+    directory, builtin, _ = category_presets
+    (directory / "StartPreset.4.start").write_text(
+        "TFlightHotasOne\nCustom\nGone\nTFlightHotasOne\n"
+    )
+    with pytest.raises(ConfigError, match="Gone.*category srv"):
+        bindings.active_presets(directory, builtin)
+
+
+def test_builtin_advice_and_global_key_conflicts(category_presets):
+    _, _, presets = category_presets
+    plan = bindings.plan_secondaries(
+        presets, bindings.load_wanted_controls(), ["Key_A", "Key_W", "Key_B", "Key_C"]
+    )
+    table = {entry.control: entry for entry in plan}
+    assert table["UI_Up"].status == bindings.ALREADY_BOUND
+    assert table["UI_Up"].key == "Key_W"
+    assert table["CycleNextPanel"].status == bindings.BUILTIN_PRESET
+    assert table["CycleNextPanel"].detail == (
+        "set General controls to Custom in Options > Controls, then rerun"
+    )
+    assert table["LandingGearToggle"].key == "Key_B"
+    assert all(
+        entry.key not in {"Key_A", "Key_W"} for entry in plan if entry.status == bindings.PLANNED
+    )
+
+
+def test_apply_only_writable_file(category_presets, tmp_path):
+    _, builtin, presets = category_presets
+    builtin_path = builtin / "TFlightHotasOne.binds"
+    original = builtin_path.read_bytes()
+    plan = bindings.plan_secondaries(
+        presets, bindings.load_wanted_controls(), bindings.load_candidates()
+    )
+    # Even a manually constructed assignment cannot write a built-in preset.
+    plan.append(bindings.Assignment("CycleNextPanel", "Key_Z", bindings.PLANNED))
+    sidecar = tmp_path / "sidecar.json"
+    result = bindings.apply_plan(
+        presets,
+        plan,
+        backup_dir=tmp_path / "backups",
+        sidecar_path=sidecar,
+        proc_root=tmp_path / "proc",
+    )
+    assert len(result.backups) == 1
+    assert builtin_path.read_bytes() == original
+    assert set(json.loads(sidecar.read_text())) == {str(presets["ship"].path)}
+    assert "CycleNextPanel" not in result.assigned
+    assert bindings.check_sidecar(presets, sidecar) == []
+
+
+def test_multi_file_sidecar_and_backups(category_presets, tmp_path):
+    directory, _, presets = category_presets
+    general_path = directory / "General.4.2.binds"
+    general_path.write_bytes(_fixture_text().encode("utf-8"))
+    presets["general"] = bindings.Preset("General", general_path, True)
+    sidecar = tmp_path / "sidecar.json"
+    plan = bindings.plan_secondaries(
+        presets, bindings.load_wanted_controls(), bindings.load_candidates()
+    )
+    result = bindings.apply_plan(
+        presets,
+        plan,
+        backup_dir=tmp_path / "backups",
+        sidecar_path=sidecar,
+        proc_root=tmp_path / "proc",
+    )
+    assert len(result.backups) == 2
+    payload = json.loads(sidecar.read_text())
+    assert set(payload) == {str(general_path), str(presets["ship"].path)}
+    assert payload[str(general_path)]["owned"] == {
+        "CycleNextPanel": "Key_F",
+        "CyclePreviousPanel": "Key_G",
+    }
+    assert bindings.check_sidecar(presets, sidecar) == []
+    for path in (general_path, presets["ship"].path):
+        path.write_bytes(path.read_bytes().replace(b'Device="Keyboard"', b'Device="Gone"'))
+    warnings = bindings.check_sidecar(presets, sidecar)
+    assert sum("changed since" in warning for warning in warnings) == 2
+    assert any("CycleNextPanel" in warning for warning in warnings)
+    assert any("LandingGearToggle" in warning for warning in warnings)
+
+
+def test_active_keyboard_map_follows_categories(category_presets):
+    directory, builtin, _ = category_presets
+    mapping = bindings.active_keyboard_map(directory, builtin)
+    assert mapping["UI_Up"] == ("w",)
+    assert mapping["ShipSpotLightToggle"] == ("l",)
+    assert mapping["DeployHeatSink"] == ("v",)  # unknown control prefers ship
+    assert "CycleNextPanel" not in mapping
+    ship = directory / "Custom.4.2.binds"
+    text = ship.read_bytes().decode("utf-8")
+    text = text.replace('Key="Key_V"', 'Key=""')
+    text = text.replace('Key="Key_L"', 'Key=""')
+    ship.write_bytes(text.encode("utf-8"))
+    mapping = bindings.active_keyboard_map(directory, builtin)
+    assert mapping["DeployHeatSink"] == ("a",)  # fallback to first preset binding it
+    assert "ShipSpotLightToggle" not in mapping  # known category never falls through
+
+
+def test_command_reports_category_table_and_builtin_advice(category_presets, capsys):
+    directory, builtin, _ = category_presets
+    command = EliteBindings()
+    code = command.run(
+        _cli_args(command, "--bindings-dir", str(directory), "--control-schemes-dir", str(builtin)),
+        None,
+    )
+    output = capsys.readouterr().out
+    assert code == 0
+    assert "TFlightHotasOne" in output
+    assert "False" in output
+    assert "UI_Up: Key_W (already bound)" in output
+    assert "set General controls to Custom in Options > Controls, then rerun" in output
+
+
+def test_command_write_keeps_builtin_advice(category_presets, tmp_path, monkeypatch, capsys):
+    directory, builtin, _ = category_presets
+    _state_dirs(monkeypatch, tmp_path)
+    command = EliteBindings()
+    assert (
+        command.run(
+            _cli_args(
+                command,
+                "--bindings-dir",
+                str(directory),
+                "--control-schemes-dir",
+                str(builtin),
+                "--write",
+            ),
+            None,
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "Wrote 4 Secondary key(s)" in output
+    assert "set General controls to Custom in Options > Controls, then rerun" in output
+
+
+def test_invalid_sidecar_refuses_before_writing(category_presets, tmp_path):
+    _, _, presets = category_presets
+    path = presets["ship"].path
+    original = path.read_bytes()
+    sidecar = tmp_path / "sidecar.json"
+    sidecar.write_text("broken json")
+    plan = bindings.plan_secondaries(
+        presets, bindings.load_wanted_controls(), bindings.load_candidates()
+    )
+    with pytest.raises(ConfigError, match="sidecar"):
+        bindings.apply_plan(
+            presets,
+            plan,
+            backup_dir=tmp_path / "backups",
+            sidecar_path=sidecar,
+            proc_root=tmp_path / "proc",
+        )
+    assert path.read_bytes() == original
+    assert not (tmp_path / "backups").exists()
