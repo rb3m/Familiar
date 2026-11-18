@@ -36,6 +36,8 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   requests use a configurable Contacts sequence and report the journal outcome without retries.
 - **Elite Dangerous exploration**: on request, two or three interesting systems within jump
   range and the least-reported directions to explore, from EDSM's public data (cached, read-only).
+  Crew know ship health, shields, fuel and cargo; `system_info` adds current-system bodies,
+  stations and services to local scans. Nearby searches can filter by market or rescue services.
 
 Status: early and personal, but working. Linux (KDE Wayland) is the daily driver; macOS on Apple
 Silicon is the next target. See `docs/roadmap.md`.

@@ -8,3 +8,5 @@ journal_dir: Saved Games/Frontier Developments/Elite Dangerous
 bindings_dir: AppData/Local/Frontier Developments/Elite Dangerous/Options/Bindings
 control_schemes_glob: "steamapps/common/Elite Dangerous/Products/*/ControlSchemes"
 preferred_product: elite-dangerous-odyssey-64
+
+snapshot_files: {Status: Status.json, NavRoute: NavRoute.json, Cargo: Cargo.json}

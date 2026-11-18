@@ -22,6 +22,19 @@ def query_specs():
                     },
                     "count": {"type": "integer", "minimum": 1, "maximum": 3},
                     "radius_ly": {"type": "number", "exclusiveMinimum": 0},
+                    "service": {"type": "string", "minLength": 1},
+                },
+                "additionalProperties": False,
+            },
+            timeout_s=20,
+            read_only=True,
+        ),
+        "system_info": ActionSpec(
+            "Read current system bodies, stations and services; EDSM reports plus our own scans",
+            {
+                "type": "object",
+                "properties": {
+                    "focus": {"type": "string", "enum": ["any", "bodies", "stations", "services"]},
                 },
                 "additionalProperties": False,
             },
@@ -95,7 +108,56 @@ def scoopable(system, interest):
 
 def station_summary(station, interest):
     pad = station.get("maxLandingPadSize") or interest["station_pads"].get(station.get("type"))
-    return {"name": station.get("name"), "type": station.get("type"), "largest_pad": pad}
+    return {
+        "name": station.get("name"),
+        "type": station.get("type"),
+        "largest_pad": pad,
+        "distance_ls": station.get("distanceToArrival"),
+        "economy": station.get("economy"),
+        "body": station.get("body"),
+        **{key: station[key] for key in interest["service_flags"].values() if key in station},
+        "otherServices": station.get("otherServices", []),
+    }
+
+
+def service_matches(station, service, interest):
+    if service is None:
+        return True
+    needle = service.strip().casefold()
+    flag = interest["service_flags"].get(needle)
+    return bool(flag and station.get(flag)) or any(
+        needle in name.casefold() for name in station.get("otherServices", [])
+    )
+
+
+def body_summary(body, interest):
+    return {
+        "name": body.get("name"),
+        "kind": body.get("subType"),
+        "notable": notable(body, interest),
+        "landable": body.get("isLandable"),
+        "rings": body.get("rings", []),
+        "distance_ls": body.get("distanceToArrival"),
+    }
+
+
+def local_body(scan, interest):
+    kind = scan.get("PlanetClass", scan.get("StarType"))
+    return {
+        **body_summary(
+            {
+                "name": scan.get("BodyName"),
+                "subType": interest["journal_body_classes"].get(kind, kind),
+                "isLandable": scan.get("Landable"),
+                "rings": scan.get("Rings", []),
+                "atmosphereType": scan.get("Atmosphere"),
+            },
+            interest,
+        ),
+        **{key: scan[key] for key in ("WasDiscovered", "WasMapped") if key in scan},
+        "first_discovery": scan.get("WasDiscovered") is False,
+        "source": "our scans",
+    }
 
 
 def summarize(system, bodies, stations, position, interest):
@@ -126,6 +188,7 @@ def summarize(system, bodies, stations, position, interest):
         "station_count": len(stations),
         "fleet_carriers": len(carriers),
         "best_station": best,
+        "stations": pads,
         "notable_bodies": featured[:3],
         "body_count": len(bodies),
         "few_reports": not bodies and not info,
@@ -205,19 +268,99 @@ class Explorer:
         )
 
     async def perform(self, name, arguments, state):
-        if not state.system or not valid_position(state.star_pos):
-            return {
-                "status": "unavailable",
-                "detail": "A known system and position from Location/FSDJump are required",
-            }
-        position, system, jump_range = list(state.star_pos), state.system, state.max_jump_range
         deadline = self.client.clock() + ACTION_BUDGET_S
         try:
+            if name == "system_info":
+                return await self.system_info(arguments, state, deadline)
+            if not state.system or not valid_position(state.star_pos):
+                return {
+                    "status": "unavailable",
+                    "detail": "A known system and position from Location/FSDJump are required",
+                }
+            position = list(state.star_pos)
             if name == "nearby_systems":
-                return await self.nearby(arguments, position, system, jump_range, deadline)
+                return await self.nearby(
+                    arguments, position, state.system, state.max_jump_range, deadline
+                )
             return await self.hint(arguments, position, deadline)
         except (ConfigError, TypeError, ValueError, KeyError) as exc:
             return {"status": "error", "detail": str(exc)}
+
+    async def system_info(self, arguments, state, deadline):
+        focus = arguments.get("focus", "any")
+        if arguments.keys() - {"focus"} or focus not in {"any", "bodies", "stations", "services"}:
+            raise ValueError("focus must be any/bodies/stations/services")
+        if not state.system:
+            return {"status": "unavailable", "detail": "Current system is unknown"}
+        interest = load_data("familiar_elite", "interest").value
+        result = {
+            "status": "done",
+            "system": state.system,
+            "offline": False,
+            "local": self._local_system(state, interest),
+            "edsm": {},
+        }
+        if focus in {"any", "bodies"}:
+            reply = await self.client.fetch("bodies", {"systemName": state.system}, deadline)
+            bodies = items(reply.data, "bodies")
+            result["offline"] |= reply.offline
+            result["edsm"].update(
+                body_count=len(bodies),
+                bodies=[body_summary(body, interest) for body in bodies],
+                bodies_available=reply.data is not None,
+            )
+        if focus in {"any", "stations", "services"}:
+            reply = await self.client.fetch("stations", {"systemName": state.system}, deadline)
+            stations = items(reply.data, "stations")
+            result["offline"] |= reply.offline
+            transient = interest["transient_station_types"]
+            result["edsm"].update(
+                stations=[
+                    station_summary(station, interest)
+                    for station in stations
+                    if station.get("type") not in transient
+                ],
+                station_count=sum(station.get("type") not in transient for station in stations),
+                fleet_carriers=sum(station.get("type") in transient for station in stations),
+                stations_available=reply.data is not None,
+            )
+        result["detail"] = (
+            "EDSM reports are incomplete; local facts are our own journal/scans. "
+            "Stations on a body indicate habitation; a body scan alone does not."
+            + offline_suffix(result["offline"])
+        )
+        return result
+
+    def _local_system(self, state, interest):
+        local = {
+            "source": "our journal/scans",
+            "bodies": [local_body(scan, interest) for scan in state.scans.values()],
+        }
+        local.update(
+            {
+                key: getattr(state, key)
+                for key in (
+                    "population",
+                    "government",
+                    "allegiance",
+                    "economy",
+                    "security",
+                    "faction",
+                    "star_class",
+                )
+                if getattr(state, key) is not None
+            }
+        )
+        # Keep the FSS total separate from the list of bodies actually scanned.
+        local["fss_body_count"] = state.bodies
+        if state.docked and state.station:
+            local["station"] = {
+                "name": state.station,
+                "type": state.station_type,
+                "economy": state.station_economy,
+                "services": state.station_services,
+            }
+        return local
 
     def _radius(self, arguments, jump_range, limit):
         if arguments.get("radius_ly") is not None:
@@ -227,8 +370,11 @@ class Explorer:
         return min(self.default_range, limit), "default_jump_range_ly"
 
     async def nearby(self, arguments, position, current, jump_range, deadline):
-        if arguments.keys() - {"focus", "count", "radius_ly"}:
+        if arguments.keys() - {"focus", "count", "radius_ly", "service"}:
             raise ValueError("Unknown nearby_systems arguments")
+        service = arguments.get("service")
+        if service is not None and (not isinstance(service, str) or not service.strip()):
+            raise ValueError("service must be a non-empty string")
         focus, count = arguments.get("focus", "any"), arguments.get("count", 3)
         interest = load_data("familiar_elite", "interest").value
         if focus not in interest["weights"] or type(count) is not int or not 1 <= count <= 3:
@@ -260,9 +406,11 @@ class Explorer:
                 s["name"],
             )
         )
-        enriched = [await self._enrich(s, position, interest, deadline) for s in candidates[:6]]
+        enriched = [
+            await self._enrich(s, position, interest, deadline, service) for s in candidates[:6]
+        ]
         ranked = sorted(
-            [s for s, _ in enriched],
+            [s for s, _ in enriched if service is None or s["stations"]],
             key=lambda s: (-score(s, weights), s["distance_ly"], s["name"]),
         )
         offline = reply.offline or any(failed for _, failed in enriched)
@@ -276,14 +424,17 @@ class Explorer:
             "radius_source": source,
             "offline": offline,
             "systems": [dict(s, reasons=reasons(s)) for s in ranked[:count]],
+            "service": service,
+            "coverage": "At most six shortlisted systems; missing reports do not exclude services.",
         }
 
-    async def _enrich(self, system, position, interest, deadline):
+    async def _enrich(self, system, position, interest, deadline, service=None):
         bodies = await self.client.fetch("bodies", {"systemName": system["name"]}, deadline)
         stations, failed = [], bodies.offline
         if (system.get("information") or {}).get("population", 0):
             reply = await self.client.fetch("stations", {"systemName": system["name"]}, deadline)
             stations, failed = items(reply.data, "stations"), failed or reply.offline
+        stations = [station for station in stations if service_matches(station, service, interest)]
         summary = summarize(system, items(bodies.data, "bodies"), stations, position, interest)
         return summary, failed
 

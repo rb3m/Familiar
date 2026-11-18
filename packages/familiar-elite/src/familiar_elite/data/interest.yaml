@@ -25,3 +25,11 @@ station_pads:
   # Odyssey settlement pads vary; leave unknown unless the API supplies a size.
   Fleet Carrier: L
   Outpost: M
+
+shield_generator_pattern: shieldgenerator
+# Frontier scan classes differ from EDSM for some bodies.
+journal_body_classes:
+  Earthlike body: Earthlike body
+  Water world: Water world
+  Ammonia world: Ammonia world
+service_flags: {market: haveMarket, shipyard: haveShipyard, outfitting: haveOutfitting}
