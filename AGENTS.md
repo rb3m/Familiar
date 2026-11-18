@@ -9,9 +9,10 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Milestone: **M5 Hands** built 2026-11-17 (ADR 0009, `familiar/hands.py`, `keyboard/uinput.py`, SCS `bindings.py`, KSP `actions.py`); gate verified live with flash-lite in en/es/ja. Needs in-game checks: SCS key presses land (hold times, toggles, state read-back), kRPC actions in flight. M3 Memory still needs its live check (second drive past a known place, "have we been here before?", summary row).
+- Milestone: **M5 Hands** built 2026-11-17 (ADR 0009); gate verified live in en/es/ja. Needs in-game checks: SCS key presses (hold times, toggles, read-back), kRPC actions. M3 Memory needs its live check (second drive past a known place, recall, summary row).
+- **Elite** pack built 2026-11-17 (ADR 0010): journal/status events, keys written to Ship preset, hands. Needs: General preset set to Custom + `familiar elite-bindings --write` (docking keys), keys checked by hand, a live flight. Then EDSM "least reported" exploration hints.
 - Next task: live-verify M5 and M3, then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`). Then Touch Portal sync (both ways) and a KWin window-focus check for key presses (roadmap).
-- Known: LLM is flash-lite on the free key; quota 429s park a model 15 min and fall back to `fallback_api_key_env`. ElevenLabs Pro; Gemini TTS fallback. GUI sessions need evdev push-to-talk. Key presses go to whatever window has focus (guard: fresh, unpaused telemetry only). Radio power is unbound in SCS by default.
+- Known: LLM is flash-lite on the free key; quota 429s park a model 15 min and fall back to `fallback_api_key_env`. ElevenLabs Pro; Gemini TTS fallback. GUI sessions need evdev push-to-talk. Key presses go to the focused window (guard: fresh, unpaused telemetry). SCS radio power is unbound by default.
 
 ## Rules
 - Python 3.12 via uv: `uv sync --all-packages`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
@@ -28,7 +29,7 @@ API tier) is the first backend; others plug in via entry points.
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
 - `docs/plugins.md`: how to add a backend, command, or game pack. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.
-- `docs/decisions/`: ADRs. Read 0001 for structure, 0002 for location/landmarks, 0003 for GUI, 0004 for package boundaries, 0005 for trip memory, 0006 KSP/flavor quotes, 0007 tools/alerts, 0008 API vs subscription CLI (latency), 0009 hands/confirmation gate.
+- `docs/decisions/`: ADRs. 0001 structure, 0002 location/landmarks, 0003 GUI, 0004 package boundaries, 0005 trip memory, 0006 KSP/quotes, 0007 tools/alerts, 0008 API vs CLI, 0009 hands gate, 0010 Elite.
 - `docs/gui-api.md`: GUI server/frontend contract (endpoints, auth, SSE). Read before changing `packages/familiar/src/familiar/gui/`.
 - `config.example.toml`: every config key with defaults.
 - `packages/familiar/src/familiar/personas/`: packaged built-in persona YAML; user personas live in `~/.config/familiar/personas/` and shadow them.
@@ -36,6 +37,7 @@ API tier) is the first backend; others plug in via entry points.
 - `packages/familiar/src/familiar/`: core voice loop, backends, Director and GUI; no imports from game packs.
 - `packages/familiar-scs/src/familiar_scs/`: ATS/ETS2 adapters, commands, data and `knowledge/<game>/` packs.
 - `packages/familiar-ksp/src/familiar_ksp/`: KSP kRPC telemetry, events, quotes and probe/record commands.
+- `packages/familiar-elite/src/familiar_elite/`: Elite journal/status, events, `.binds` writer (`elite-bindings`), hands.
 - `docs/knowledge-packs.md`: landmark pack format and the `familiar landmarks status|add|check` workflow. Read before adding or editing landmarks.
 - `scripts/`: data builders; landmark scripts are thin wrappers around `packages/familiar-scs/src/familiar_scs/curation.py`.
 - `packages/*/tests/`: core, SCS and KSP pytest suites.
