@@ -28,7 +28,7 @@ class TranscriptLog:
             handle.write(json.dumps(event, ensure_ascii=False) + "\n")
             handle.flush()
 
-    def dialogue(self) -> list[Message]:
+    def dialogue(self, *, factual: bool = False) -> list[Message]:
         """Read actual user/assistant lines, excluding event prompts and diagnostics."""
         if not self.path.exists():
             return []
@@ -38,5 +38,12 @@ class TranscriptLog:
                 event = json.loads(line)
                 if event["kind"] not in {"user", "assistant"} or not event.get("text"):
                     continue
-                messages.append(Message(event["kind"], event["text"]))
+                text = event["text"]
+                if factual and (
+                    event.get("source") == "persona_claim"
+                    or event.get("heard") is False
+                    or event.get("interrupted")
+                ):
+                    text = "[Persona claim or interrupted line omitted from factual memory]"
+                messages.append(Message(event["kind"], text))
         return messages

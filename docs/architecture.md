@@ -29,6 +29,9 @@ the core works without any game pack. The commands are in `README.md`.
 | Plugins | `packages/familiar/src/familiar/plugins.py` | Discovers backends via entry points, checks `PLUGIN_API_VERSION`. |
 | Config | `packages/familiar/src/familiar/config.py` | Loads `config.toml` (see `config.example.toml`). Secrets come from env vars. |
 | Persona | `packages/familiar/src/familiar/persona.py` | Loads user, configured and packaged persona YAML; builds the system prompt for the active language. |
+| Session settings | `packages/familiar/src/familiar/session_settings.py` | Validates and atomically saves versioned launcher selections; CLI/env choices override them. |
+| Crew | `packages/familiar/src/familiar/crew.py` | Ordered roster, carrier, alias/follow-up addressing and event interests. |
+| History | `packages/familiar/src/familiar/history.py` | Attributed shared records and a swappable renderer for each speaker. |
 | Conversation | `packages/familiar/src/familiar/conversation.py` | Owns history; streams LLM output, splits sentences, hands them to TTS. |
 | Sentences | `packages/familiar/src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
 | Transcript | `packages/familiar/src/familiar/transcript.py` | Append-only JSONL log, the raw material for future memory. |
@@ -77,6 +80,15 @@ next response. Execution is bounded to three tool rounds followed by a tool-free
 interjections offer no tools. History trimming keeps each assistant call/results group intact,
 and the transcript records calls and results, including errors and interruptions.
 
+Voice sessions can select one to three personas from `session.toml` (ADR 0011, phase 1).
+Each turn has one speaker and uses that persona's voices, including speech fallbacks. The
+shared history stores speaker IDs and whether text was heard; voice acknowledges a sentence
+after audio drains. Each speaker sees her own model/tool turns and other members in a labelled
+transcript preface with compact tool outcomes. Single-persona prompts retain their existing
+form. Mutating action tools, including confirmation, are offered and dispatched only on the
+carrier's turns; core tools and `read_only` actions are available to everyone. Banter is stored
+in the session selection but has no behavior until phase 2.
+
 Adapters optionally implement `Watchable`, describing quantities in SI and returning cached
 samples with monotonic acquisition times, validity, prediction safety and a context identity.
 Core `AlertKeeper` supplies `set_alert`, `list_alerts` and `cancel_alert` only for those adapters
@@ -99,6 +111,9 @@ recall requires an arrival, salience ≥ 0.5, a 45-minute global cooldown, a sev
 cooldown and a 25% probability gate; history updates when the reply is consumed (after audio in
 voice mode). Clean shutdown summarizes transcript utterances with the configured LLM, bounded
 to 15 seconds, before closing it. Desk sessions retain summaries without game episodes.
+Schema 3 attributes rows to speakers and separates game/player observations from persona claims.
+Claims are excluded from factual retrieval and new factual summaries. Both the global recall
+gate and the seven-day episode gate apply across the active roster.
 
 ## Grounding
 

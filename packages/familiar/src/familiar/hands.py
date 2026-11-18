@@ -134,6 +134,7 @@ class ActionKeeper:
             registry.register(
                 ToolSpec("act_" + name, f"{spec.description}. {risk}.", spec.parameters),
                 partial(self.request, name, spec),
+                carrier_only=not spec.read_only,
             )
         registry.register(
             ToolSpec(
@@ -147,6 +148,7 @@ class ActionKeeper:
                 },
             ),
             self.confirm_action,
+            carrier_only=True,
         )
         registry.register(
             ToolSpec(
@@ -155,6 +157,7 @@ class ActionKeeper:
                 {"type": "object", "properties": {}, "additionalProperties": False},
             ),
             self.cancel_action,
+            carrier_only=True,
         )
 
     async def request(self, name: str, spec: ActionSpec, /, **arguments) -> dict:

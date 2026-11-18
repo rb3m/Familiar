@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .text import words
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (
@@ -65,11 +65,12 @@ class MemoryStore:
             self.db.execute("PRAGMA foreign_keys=ON")
             self.db.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
             version = self.db.execute("SELECT version FROM schema_version").fetchone()
-            if version is not None and version[0] not in {1, SCHEMA_VERSION}:
+            if version is not None and version[0] not in {1, 2, SCHEMA_VERSION}:
                 raise ValueError(f"Unsupported memory schema version: {version[0]}")
             with self.db:
                 self.db.executescript(_SCHEMA)
                 self.db.executescript(_FLAVOR_SCHEMA)
+                self._migrate_attribution()
                 if version is None:
                     self.db.execute("INSERT INTO schema_version VALUES (?)", (SCHEMA_VERSION,))
                 if version is not None and version[0] < SCHEMA_VERSION:
@@ -78,14 +79,38 @@ class MemoryStore:
             self.close()
             raise
 
+    def _migrate_attribution(self) -> None:
+        """Older rows inherit the session's single persona; game facts stay grounded."""
+        for table in ("sessions", "episodes", "recalls"):
+            self._add_speaker(table)
+        columns = {row[1] for row in self.db.execute("PRAGMA table_info(episodes)")}
+        if "source" not in columns:
+            self.db.execute(
+                "ALTER TABLE episodes ADD COLUMN source TEXT NOT NULL DEFAULT 'game' "
+                "CHECK (source IN ('player_observed', 'game', 'persona_claim'))"
+            )
+
+    def _add_speaker(self, table: str) -> None:
+        columns = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
+        if "speaker" in columns:
+            return
+        self.db.execute(f"ALTER TABLE {table} ADD COLUMN speaker TEXT")
+        if table == "episodes":
+            self.db.execute(
+                "UPDATE episodes SET speaker = "
+                "(SELECT persona FROM sessions WHERE id = episodes.session_id)"
+            )
+            return
+        self.db.execute(f"UPDATE {table} SET speaker = persona")
+
     def close(self) -> None:
         self.db.close()
 
     def start_session(self, game: str, persona: str, now: datetime | None = None) -> int:
         with self.db:
             cursor = self.db.execute(
-                "INSERT INTO sessions(game, persona, started_utc) VALUES (?, ?, ?)",
-                (game, persona, utc_text(now)),
+                "INSERT INTO sessions(game, persona, started_utc, speaker) VALUES (?, ?, ?, ?)",
+                (game, persona, utc_text(now), persona),
             )
         return cursor.lastrowid
 
@@ -108,12 +133,25 @@ class MemoryStore:
         text: str,
         salience: float,
         now: datetime | None = None,
+        *,
+        speaker: str | None = None,
+        source: str = "game",
     ) -> int | None:
+        if source not in {"player_observed", "game", "persona_claim"}:
+            raise ValueError(f"Invalid memory source: {source}")
         with self.db:
             cursor = self.db.execute(
-                """INSERT OR IGNORE INTO episodes
-                (session_id, game, ts_utc, kind, place_key, place, region, activity, text, salience)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO episodes
+                (session_id, game, ts_utc, kind, place_key, place, region, activity, text, salience,
+                 speaker, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id, kind, place_key) DO UPDATE SET
+                text = excluded.text, source = excluded.source, speaker = excluded.speaker,
+                salience = excluded.salience, ts_utc = excluded.ts_utc,
+                place = excluded.place, region = excluded.region, activity = excluded.activity
+                WHERE episodes.source = 'persona_claim' AND excluded.source != 'persona_claim'
+                RETURNING id
+                """,
                 (
                     session_id,
                     game,
@@ -125,18 +163,22 @@ class MemoryStore:
                     activity,
                     text,
                     salience,
+                    speaker,
+                    source,
                 ),
             )
-        if not cursor.rowcount:
+            row = cursor.fetchone()
+        if row is None:
             return None
         self.revision += 1
-        return cursor.lastrowid
+        return row[0]
 
     def _episodes(
         self, game: str, session_id: int, condition: str, parameters: tuple, limit: int
     ) -> list[dict]:
         rows = self.db.execute(
             f"""SELECT * FROM episodes WHERE game = ? AND session_id < ? AND {condition}
+            AND source != 'persona_claim'
             ORDER BY salience DESC, ts_utc DESC, id DESC LIMIT ?""",
             (game, session_id, *parameters, limit),
         )
@@ -166,7 +208,9 @@ class MemoryStore:
 
     def known_terms(self, game: str) -> set[str]:
         rows = self.db.execute(
-            "SELECT DISTINCT place, region, activity FROM episodes WHERE game = ?", (game,)
+            "SELECT DISTINCT place, region, activity FROM episodes WHERE game = ? "
+            "AND source != 'persona_claim'",
+            (game,),
         )
         terms = set()
         for row in rows:
@@ -189,8 +233,8 @@ class MemoryStore:
     def record_recall(self, episode_id: int, persona: str, now: datetime | None = None) -> None:
         with self.db:
             self.db.execute(
-                "INSERT INTO recalls(episode_id, persona, ts_utc) VALUES (?, ?, ?)",
-                (episode_id, persona, utc_text(now)),
+                "INSERT INTO recalls(episode_id, persona, ts_utc, speaker) VALUES (?, ?, ?, ?)",
+                (episode_id, persona, utc_text(now), persona),
             )
 
     def last_recall(self, episode_id: int, persona: str) -> datetime | None:
@@ -203,6 +247,16 @@ class MemoryStore:
     def latest_recall(self) -> datetime | None:
         row = self.db.execute("SELECT MAX(ts_utc) FROM recalls").fetchone()
         return datetime.fromisoformat(row[0]) if row[0] else None
+
+    def crew_last_recall(self, episode_id: int, crew: tuple[str, ...]) -> datetime | None:
+        placeholders = ", ".join("?" for _ in crew)
+        row = self.db.execute(
+            f"SELECT MAX(ts_utc) FROM recalls WHERE episode_id = ? AND persona IN ({placeholders})",
+            (episode_id, *crew),
+        ).fetchone()
+        if row[0]:
+            return datetime.fromisoformat(row[0])
+        return None
 
     def record_flavor_use(self, game: str, item_id: str, now: datetime | None = None) -> None:
         with self.db:

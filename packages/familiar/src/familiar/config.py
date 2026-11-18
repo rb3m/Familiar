@@ -12,6 +12,9 @@ from familiar.flavor import (
     FLAVOR_PROBABILITY,
 )
 from familiar.interfaces import ConfigError
+from familiar.session_settings import SessionSettings
+from familiar.session_settings import default_path as default_session_path
+from familiar.session_settings import load as load_session
 
 MEMORY_DEFAULTS = {
     "enabled": True,
@@ -66,6 +69,44 @@ class AppConfig:
     flavor: dict = field(default_factory=lambda: FLAVOR_DEFAULTS.copy())
     alerts: dict = field(default_factory=lambda: ALERT_DEFAULTS.copy())
     hands: dict = field(default_factory=lambda: HANDS_DEFAULTS.copy())
+
+
+def session_settings(
+    config: AppConfig,
+    *,
+    path: str | Path | None = None,
+    persona: str | None = None,
+    game: str | None = None,
+    language: str | None = None,
+    use_session: bool = True,
+) -> SessionSettings:
+    """CLI/env selections override a saved session, then ordinary config defaults."""
+    overrides = {}
+    if persona:
+        overrides.update(crew=(persona,), carrier=persona)
+    if game:
+        overrides["game"] = game
+    if language:
+        overrides["language"] = language
+    selected = default_session_path()
+    if path is not None:
+        selected = Path(path).expanduser()
+    if use_session and (path is not None or selected.exists()):
+        return load_session(
+            selected,
+            personas_dir=config.personas_dir,
+            user_personas_dir=config.user_personas_dir,
+            overrides=overrides,
+        )
+    return SessionSettings(
+        **{
+            "crew": (config.persona,),
+            "carrier": config.persona,
+            "game": config.game,
+            "language": config.language,
+            **overrides,
+        }
+    )
 
 
 def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig | None:

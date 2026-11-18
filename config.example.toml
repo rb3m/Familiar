@@ -2,6 +2,16 @@
 # Secrets never go here: settings name the environment variable that holds them.
 
 language = "en"            # catalog code; add languages in the GUI or data override (persona must support it)
+# Voice reads ~/.config/familiar/session.toml when present (XDG_CONFIG_HOME respected).
+# --session PATH selects another file; CLI flags / FAMILIAR_PERSONA, FAMILIAR_GAME,
+# FAMILIAR_LANGUAGE override its choices. FAMILIAR_SESSION selects a session path.
+# Session schema: version = 1, crew = ["mira"], language = "en", carrier = "mira",
+# banter = 0 (0-10; stored for phase 2). Optional game = "ats"; omit for desk mode.
+# No session file: persona below is a crew of one, its own carrier, with banter off.
+# --persona selects a crew of one, also overriding the session's carrier.
+# Persona YAML may include aliases: {es: [Mira]}, interests: {landmark_: 2.0}.
+# display_name is always an alias; interest uses exact then longest prefix, scaled by
+# chattiness. User personas may add relationships: {persona_id: "One line"}.
 persona = "mira"        # file name in personas_dir, without .yaml
 # personas_dir = "my-personas"  # Optional extra personas; packaged Mira is always available.
 # GUI-created personas live here and take precedence over personas_dir.

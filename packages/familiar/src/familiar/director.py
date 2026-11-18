@@ -2,12 +2,14 @@
 
 import asyncio
 import logging
+import random
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
+from familiar.crew import Crew, persona_id
 from familiar.interfaces import GameAdapter, GameEvent
 from familiar.memory import MemoryKeeper
 
@@ -35,9 +37,17 @@ def preempts(event: GameEvent) -> bool:
 
 class Director:
     def __init__(
-        self, chattiness: float, settings: dict, clock: Callable[[], float] = time.monotonic
+        self,
+        chattiness: float,
+        settings: dict,
+        clock: Callable[[], float] = time.monotonic,
+        *,
+        crew: Crew | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self.clock = clock
+        self.crew = crew
+        self.rng = rng or random.Random()
         self.enabled = settings.get("enabled", True)
         scale = 1.5 - chattiness
         self._cooldowns = {
@@ -144,8 +154,16 @@ class Director:
                 if item.event.kind == "idle":
                     self._idle_emitted = True
                 self._kinds[item.event.kind] = now
-                return item.event
+                return self._assign(item.event)
         return None
+
+    def _assign(self, event: GameEvent) -> GameEvent:
+        if self.crew is None:
+            return event
+        speaker = self.crew.pick_for_event(event)
+        if event.kind == "idle" and event.priority != "critical":
+            speaker = self.crew.pick_idle(self.rng)
+        return replace(event, data={**event.data, "speaker_id": persona_id(speaker)})
 
     async def next(self) -> GameEvent:
         while True:

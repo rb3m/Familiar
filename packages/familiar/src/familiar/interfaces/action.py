@@ -14,6 +14,7 @@ class ActionSpec:
     risky: bool = False
     risky_when: Callable[[dict], bool] | None = None
     timeout_s: float | None = None
+    read_only: bool = False
 
 
 @runtime_checkable

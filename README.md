@@ -8,6 +8,9 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
 - **Personas as YAML**: prompt, style rules, chattiness, voices per language, and a truthfulness
   mode (`strict` never invents facts; `playful` may exaggerate in character). The core ships one
   original persona, **Mira**, a small lantern-spirit familiar.
+- **Voice crews** of one to three personas share a conversation and memory. Address a member
+  by name or a configured alias; follow-ups stay with the last speaker for 30 seconds.
+  One selected carrier handles game actions; everyone can use read-only queries.
 - **Plugins for everything**: LLM, speech-to-text, text-to-speech, push-to-talk devices, game
   adapters and CLI commands are discovered through Python entry points. Gemini and ElevenLabs
   are built in; adding another provider is a small class (see `docs/plugins.md`).
@@ -79,11 +82,29 @@ Without ElevenLabs, point `[stt]` and `[tts]` at `gemini` in `config.toml`.
 uv run familiar gui                                # launcher window
 uv run familiar chat                               # text chat in the terminal
 uv run familiar voice --game ats --persona mira    # voice, with ATS telemetry
+uv run familiar voice --session path/to/session.toml  # saved crew selection
 uv run familiar ptt-setup                          # bind a joystick/HOTAS button to push-to-talk
 uv run familiar plugins                            # list installed backends and game packs
 ```
 
 On Linux, `packaging/linux/install.sh` adds Familiar to the applications menu.
+
+Voice loads `~/.config/familiar/session.toml` when present (`XDG_CONFIG_HOME` is respected).
+For example, after creating a user persona named `copilot` with voices for English:
+
+```toml
+version = 1
+crew = ["mira", "copilot"]
+language = "en"
+carrier = "mira"
+banter = 0
+game = "elite"  # omit for desk use
+```
+
+CLI flags override the saved selection; `--persona` selects a crew of one. Without a session
+file, the existing config defaults apply. Banter is stored for a future phase. Persona YAML
+supports language-specific `aliases`, event-kind/prefix `interests`, and optional one-line
+`relationships` in your own persona files; see Mira's YAML for examples.
 
 ATS/ETS2 telemetry comes from a local TruckSim GPS telemetry server (default
 `http://localhost:31377`); see `[games.ats]` in `config.example.toml`.

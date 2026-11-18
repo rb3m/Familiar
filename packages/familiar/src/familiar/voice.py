@@ -46,6 +46,8 @@ class VoiceSession:
         self.stt = stt
         self.tts = tts
         self.conversation = conversation
+        self.conversation.playback_ack_required = True
+        self._sentence_audio = False
         self.persona = persona
         self.language = language
         self.transcript = transcript
@@ -114,9 +116,10 @@ class VoiceSession:
     async def _audio(
         self, sentence: str, released: float, timings: dict[str, float | None]
     ) -> AsyncIterator[AudioChunk]:
-        voice = self.persona.voice(self.tts.name, self.language)
+        voice = self.conversation.speaker.voice(self.tts.name, self.language)
         async with aclosing(self.tts.synthesize(sentence, voice, self.language)) as chunks:
             async for chunk in chunks:
+                self._sentence_audio = True
                 if timings["first_audio_ms"] is None:
                     timings["first_audio_ms"] = (monotonic() - released) * 1000
                 yield chunk
@@ -151,20 +154,21 @@ class VoiceSession:
     ) -> None:
         self._busy("critical", event is not None and event.priority == "critical")
         self._busy("speaking", True)
-        label = self.persona.display_name
-        if event is not None:
-            label += f" (event: {event.kind})"
         try:
             async with aclosing(sentences):
                 async for sentence in sentences:
                     if timings["first_sentence_ms"] is None:
                         timings["first_sentence_ms"] = (monotonic() - released) * 1000
+                    label = self.conversation.speaker.display_name
+                    if event is not None:
+                        label += f" (event: {event.kind})"
                     print(f"{label}: {sentence}", flush=True)
+                    self._sentence_audio = False
                     await self.player.play(self._audio(sentence, released, timings))
-                    if event is not None and (
-                        "memory_episode_id" in event.data or event.data.get("flavor")
-                    ):
-                        await self.player.wait_idle()
+                    # Resuming the sentence generator acknowledges actual playback.
+                    await self.player.wait_idle()
+                    if self._sentence_audio:
+                        self.conversation.acknowledge_playback()
             await self.player.wait_idle()
         finally:
             if timings["first_audio_ms"] is not None and self.director is not None:

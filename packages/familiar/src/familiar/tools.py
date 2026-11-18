@@ -40,14 +40,21 @@ def _validate(value: object, schema: dict, path: str = "arguments") -> None:
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, tuple[ToolSpec, ToolHandler]] = {}
+        self._carrier_only: set[str] = set()
 
-    def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
+    def register(self, spec: ToolSpec, handler: ToolHandler, *, carrier_only: bool = False) -> None:
         if spec.name in self._tools:
             raise ValueError(f"Duplicate tool: {spec.name}")
         self._tools[spec.name] = spec, handler
+        if carrier_only:
+            self._carrier_only.add(spec.name)
 
-    def specs(self) -> list[ToolSpec]:
-        return [spec for spec, _ in self._tools.values()]
+    def specs(self, *, carrier: bool = True) -> list[ToolSpec]:
+        return [
+            spec
+            for spec, _ in self._tools.values()
+            if carrier or spec.name not in self._carrier_only
+        ]
 
     async def execute(self, call: ToolCall) -> dict:
         try:

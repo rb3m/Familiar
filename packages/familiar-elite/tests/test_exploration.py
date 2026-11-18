@@ -344,6 +344,8 @@ async def test_adapter_queries_no_keyboard_or_status_and_no_position(monkeypatch
     assert (await adapter.perform("exploration_hint", {}))["status"] == "done"
     assert adapter.actions()["request_docking"].timeout_s == 15
     assert all(s.timeout_s == 20 for s in query_specs().values())
+    assert all(spec.read_only for spec in query_specs().values())
+    assert not adapter.actions()["request_docking"].read_only
     await adapter.aclose()
 
 

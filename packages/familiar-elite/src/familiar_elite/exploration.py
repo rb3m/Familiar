@@ -26,6 +26,7 @@ def query_specs():
                 "additionalProperties": False,
             },
             timeout_s=20,
+            read_only=True,
         ),
         "exploration_hint": ActionSpec(
             "Suggest least reported directions, not guaranteed unexplored, using EDSM on request",
@@ -37,6 +38,7 @@ def query_specs():
                 "additionalProperties": False,
             },
             timeout_s=20,
+            read_only=True,
         ),
     }
 

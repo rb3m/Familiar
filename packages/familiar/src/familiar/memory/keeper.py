@@ -60,10 +60,12 @@ class MemoryKeeper:
         clock: Callable[[], datetime] = _now,
         rng: random.Random | None = None,
         settings: dict | None = None,
+        crew: tuple[str, ...] | None = None,
     ) -> None:
         self.store = store
         self.game = game
         self.persona = persona
+        self.crew = crew or (persona,)
         self.whereabouts = whereabouts
         self.clock = clock
         self.rng = rng if rng is not None else random.Random()
@@ -102,6 +104,8 @@ class MemoryKeeper:
             event.data["summary"],
             salience,
             self.clock(),
+            speaker=event.data.get("speaker_id"),
+            source="game",
         )
 
     def _episode_text(self, episode: dict, limit: int = 39) -> str:
@@ -152,13 +156,15 @@ class MemoryKeeper:
         last = self.store.latest_recall()
         if last is not None and now - last < self.cooldown:
             return False
-        last = self.store.last_recall(episode_id, self.persona)
+        last = self.store.crew_last_recall(episode_id, self.crew)
         return last is None or now - last >= RECALL_EPISODE_COOLDOWN
 
     @_never_fatal(None)
-    def recalled(self, event: GameEvent) -> None:
+    def recalled(self, event: GameEvent, speaker: str | None = None) -> None:
         """Called only after a memory interjection has been voiced/consumed."""
-        self.store.record_recall(event.data["memory_episode_id"], self.persona, self.clock())
+        self.store.record_recall(
+            event.data["memory_episode_id"], speaker or self.persona, self.clock()
+        )
 
     def _matches(self, user_text: str) -> list[dict]:
         if self._terms_revision != self.store.revision:

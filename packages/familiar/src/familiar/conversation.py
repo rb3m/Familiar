@@ -1,15 +1,25 @@
 """Coordinate streamed replies, bounded history, and transcript events."""
 
-import asyncio
 import json
+import random
+from collections import deque
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import asdict
 
 from familiar.alerts import AlertKeeper
+from familiar.crew import Crew, persona_id
 from familiar.flavor import FlavorKeeper, flavor_hint
 from familiar.hands import ActionKeeper
-from familiar.interfaces import GameEvent, LLMProvider, Message, TextToSpeech
+from familiar.history import DefaultHistoryRenderer, HistoryRecord, HistoryRenderer
+from familiar.interfaces import (
+    GameEvent,
+    LLMProvider,
+    Message,
+    TextToSpeech,
+    ToolCall,
+    ToolSpec,
+)
 from familiar.memory import MemoryKeeper
 from familiar.persona import Persona
 from familiar.pipeline.sentences import SentenceSplitter
@@ -50,11 +60,17 @@ class Conversation:
         tools: ToolRegistry | None = None,
         alerts: AlertKeeper | None = None,
         actions: ActionKeeper | None = None,
+        crew: Crew | None = None,
+        renderer: HistoryRenderer | None = None,
     ) -> None:
         if history_limit < 1:
             raise ValueError("history_limit must be positive")
         self.llm = llm
         self.persona = persona
+        self.crew = crew or Crew([persona], persona_id(persona))
+        self.speaker = self.crew.carrier
+        self.renderer = renderer or DefaultHistoryRenderer()
+        self.rng = random.Random()
         self.language = language
         self.transcript = transcript
         self.tts = tts
@@ -66,24 +82,60 @@ class Conversation:
         self.alerts = alerts
         self.actions = actions
         self.history_limit = history_limit
-        self.history: list[Message] = []
+        self.records: list[HistoryRecord] = []
+        self.playback_ack_required = False
+        self._playback_acks = 0
+
+    def acknowledge_playback(self) -> None:
+        """The voice consumer calls this only after a sentence's audio drains."""
+        self._playback_acks += 1
+
+    def _was_heard(self, before: int) -> bool:
+        return not self.playback_ack_required or self._playback_acks > before
+
+    @property
+    def history(self) -> list[Message]:
+        """Unrendered protocol view retained for callers inspecting history."""
+        return [record.message() for record in self.records]
+
+    def _record_message(
+        self, message: Message, *, heard: bool = True, kind: str | None = None
+    ) -> None:
+        speaker = persona_id(self.speaker)
+        if message.role == "user":
+            speaker = "player"
+        kinds = {"user": "player", "assistant": "assistant", "tool": "tool_result"}
+        self.records.append(
+            HistoryRecord(
+                speaker,
+                kind or kinds[message.role],
+                message.text,
+                heard,
+                message.tool_calls,
+                message.tool_call_id,
+            )
+        )
 
     def _remember(self, message: Message) -> None:
         self._remember_many([message])
 
     def _remember_many(self, messages: list[Message]) -> None:
-        self.history.extend(messages)
-        start = max(0, len(self.history) - self.history_limit)
+        for message in messages:
+            self._record_message(message)
+        start = max(0, len(self.records) - self.history_limit)
         # The history limit is soft for an indivisible call/results group.
-        while start > 0 and self.history[start].role == "tool":
+        while start > 0 and self.records[start].kind == "tool_result":
             start -= 1
-        del self.history[:start]
+        del self.records[:start]
 
     async def ask(self, user_text: str) -> AsyncIterator[str]:
         """Yield reply sentences and retain partial replies on cancellation."""
         if self.actions is not None:
             self.actions.begin_turn(user_text)
-        self.transcript.record("user", text=user_text)
+        self.speaker = self.crew.pick_for_utterance(user_text, self.language)
+        self.transcript.record(
+            "user", text=user_text, speaker_id="player", source="player_observed"
+        )
         async with aclosing(self._turn(user_text, player_turn=True)) as sentences:
             async for sentence in sentences:
                 yield sentence
@@ -99,17 +151,25 @@ class Conversation:
         ):
             return
         summary = event.data["summary"]
+        self.speaker = self._event_speaker(event)
         self.transcript.record(
             "event", event_kind=event.kind, priority=event.priority, summary=summary
         )
         speak = event.data.get("speak")
         if speak:
             # Pre-written line (e.g. an alert): no LLM round trip, so it lands on time.
-            self.transcript.record("assistant", text=speak)
-            self._remember_many(
-                [Message("user", "[Game event] " + summary), Message("assistant", speak)]
-            )
-            yield speak
+            speak = self.crew.strip_prefix(speak, self.language)
+            self._record_message(Message("user", "[Game event] " + summary), kind="game_event")
+            heard = False
+            before = self._playback_acks
+            try:
+                yield speak
+                heard = self._was_heard(before) and (spoken is None or spoken())
+                self._note_heard(heard)
+            finally:
+                self._record_message(Message("assistant", speak), heard=heard)
+                self._remember_many([])
+                self._log_line(speak, heard)
             return
         text = (
             "[Game event, not said by the player. React briefly and in character; "
@@ -130,18 +190,55 @@ class Conversation:
                 self._record_interjection(event, candidate)
                 recorded = True
 
+    def _event_speaker(self, event: GameEvent) -> Persona:
+        if event.priority == "critical":
+            return self.crew.carrier
+        assigned = event.data.get("speaker_id")
+        member = next(
+            (member for member in self.crew.members if persona_id(member) == assigned), None
+        )
+        if member is not None:
+            return member
+        if event.kind == "idle":
+            return self.crew.pick_idle(self.rng)
+        return self.crew.pick_for_event(event)
+
+    def _log_line(self, text: str, heard: bool) -> None:
+        fields = {}
+        if not heard:
+            fields["interrupted"] = True
+        self.transcript.record(
+            "assistant",
+            text=text,
+            speaker_id=persona_id(self.speaker),
+            heard=heard,
+            source="persona_claim",
+            **fields,
+        )
+
     def _record_interjection(self, event: GameEvent, candidate: dict | None) -> None:
         if self.memory is not None and "memory_episode_id" in event.data:
-            self.memory.recalled(event)
+            self._recall_memory(event)
         if self.flavor is not None and candidate is not None:
             self.flavor.used(self.game or "", candidate)
+
+    def _recall_memory(self, event: GameEvent) -> None:
+        if self.memory is None:
+            return
+        if len(self.crew.members) == 1:
+            self.memory.recalled(event)
+            return
+        self.memory.recalled(event, speaker=persona_id(self.speaker))
 
     async def aclose(self) -> None:
         if self.memory is not None:
             await self.memory.finish(self.llm, self.transcript)
 
     async def _turn(self, text: str, player_turn: bool = False) -> AsyncIterator[str]:
-        system = self.persona.system_prompt(self.language, self.game)
+        kinds = {True: "player", False: "game_event"}
+        self._record_message(Message("user", text), kind=kinds[player_turn])
+        self._remember_many([])
+        system = ""
         context = self.context() if self.context is not None else ""
         if context:
             system += "\n\nCurrent situation (exact, from live telemetry):\n" + context
@@ -150,75 +247,135 @@ class Conversation:
             memories = self.memory.context(text)
         if memories:
             system += "\n\n" + memories
-        specs = self.tools.specs() if player_turn else []
+        specs = []
+        if player_turn:
+            specs = self.tools.specs(carrier=self.speaker == self.crew.carrier)
         if any(spec.name == "set_alert" for spec in specs):
             system += ALERT_RULE
         if any(spec.name.startswith("act_") for spec in specs):
             system += ACTION_RULE
-        self._remember(Message("user", text))
-        for round_index in range(4):
-            calls = []
-            offered = specs if round_index < 3 else []
-            async with aclosing(self._stream_round(system, offered, calls)) as sentences:
-                async for sentence in sentences:
-                    yield sentence
-            if not calls:
-                return
-            results = []
-            try:
-                for call in calls:
-                    result = {"error": "Tools are unavailable for this response"}
-                    if offered:
-                        result = await self.tools.execute(call)
-                    payload = json.dumps(result, separators=(",", ":"), ensure_ascii=False)
-                    self.transcript.record("tool_result", tool_call_id=call.id, text=payload)
-                    results.append(Message("tool", payload, tool_call_id=call.id))
-            finally:
-                # Cancellation still leaves a complete protocol group for the next turn.
-                for call in calls[len(results) :]:
-                    payload = '{"error":"Tool execution interrupted"}'
-                    self.transcript.record("tool_result", tool_call_id=call.id, text=payload)
-                    results.append(Message("tool", payload, tool_call_id=call.id))
-                self._remember_many(results)
-            if not offered:
-                return
+        async with aclosing(self._reply_round(system, specs)) as sentences:
+            async for sentence in sentences:
+                yield sentence
+
+    async def _reply_round(
+        self, system: str, specs: list[ToolSpec], round_index: int = 0
+    ) -> AsyncIterator[str]:
+        calls: list[ToolCall] = []
+        offered = []
+        if round_index < 3:
+            offered = specs
+        async with aclosing(self._stream_round(system, offered, calls)) as sentences:
+            async for sentence in sentences:
+                yield sentence
+        if not calls:
+            return
+        await self._execute_calls(calls, offered)
+        if not offered:
+            return
+        async with aclosing(self._reply_round(system, specs, round_index + 1)) as sentences:
+            async for sentence in sentences:
+                yield sentence
+
+    async def _execute_calls(self, calls: list[ToolCall], offered: list[ToolSpec]) -> None:
+        results = []
+        allowed = {spec.name for spec in offered}
+        try:
+            for call in calls:
+                result = await self._dispatch(call, allowed)
+                results.append(self._tool_result(call, result))
+        finally:
+            # Cancellation still leaves a complete protocol group for the next turn.
+            results.extend(
+                self._tool_result(call, {"error": "Tool execution interrupted"})
+                for call in calls[len(results) :]
+            )
+            self._remember_many(results)
+
+    async def _dispatch(self, call: ToolCall, allowed: set[str]) -> dict:
+        if call.name not in allowed:
+            return {"error": "Tools are unavailable for this response"}
+        return await self.tools.execute(call)
+
+    def _tool_result(self, call: ToolCall, result: dict) -> Message:
+        payload = json.dumps(result, separators=(",", ":"), ensure_ascii=False)
+        self.transcript.record(
+            "tool_result", tool_call_id=call.id, text=payload, speaker_id=persona_id(self.speaker)
+        )
+        return Message("tool", payload, tool_call_id=call.id)
+
+    async def _read_sentences(self, chunks, splitter, fragments, calls) -> tuple[bool, list[str]]:
+        chunk = await anext(chunks, None)
+        if chunk is None:
+            return False, list(filter(None, [splitter.flush()]))
+        if chunk.tool_call is not None:
+            self.transcript.record(
+                "tool_call", speaker_id=persona_id(self.speaker), **asdict(chunk.tool_call)
+            )
+            calls.append(chunk.tool_call)
+        fragments.append(chunk.text)
+        return True, splitter.feed(chunk.text)
+
+    def _clean_sentence(self, sentence: str, first: bool) -> str:
+        if first:
+            return self.crew.strip_prefix(sentence, self.language)
+        return sentence
+
+    async def _stream_sentences(self, system, tools, calls, fragments) -> AsyncIterator[str]:
+        prompt, messages = self.renderer.render(
+            self.records, self.speaker, self.crew, self.language, self.game
+        )
+        pending: deque[str] = deque()
+        splitter = SentenceSplitter()
+        reading = True
+        first = True
+        async with aclosing(self.llm.stream(messages, prompt + system, tools)) as chunks:
+            # Drain complete sentences before requesting another backend chunk.
+            while reading or pending:
+                if not pending:
+                    reading, batch = await self._read_sentences(chunks, splitter, fragments, calls)
+                    pending.extend(batch)
+                    continue
+                sentence = self._clean_sentence(pending.popleft(), first)
+                first = False
+                if not sentence:
+                    continue
+                yield sentence
 
     async def _stream_round(self, system: str, tools: list, calls: list) -> AsyncIterator[str]:
-        splitter = SentenceSplitter()
         fragments: list[str] = []
-        interrupted = False
         completed = False
+        heard = True
         try:
-            async for chunk in self.llm.stream(list(self.history), system, tools):
-                if chunk.tool_call is not None:
-                    self.transcript.record("tool_call", **asdict(chunk.tool_call))
-                    calls.append(chunk.tool_call)
-                fragments.append(chunk.text)
-                for sentence in splitter.feed(chunk.text):
+            source = self._stream_sentences(system, tools, calls, fragments)
+            async with aclosing(source) as sentences:
+                async for sentence in sentences:
+                    before = self._playback_acks
                     yield sentence
-            remainder = splitter.flush()
-            if remainder:
-                yield remainder
+                    sentence_heard = self._was_heard(before)
+                    heard = heard and sentence_heard
+                    self._note_heard(sentence_heard)
             completed = True
-        except (asyncio.CancelledError, GeneratorExit):
-            interrupted = True
-            raise
         finally:
-            text = "".join(fragments)
-            fields = {"interrupted": True} if interrupted else {}
-            self.transcript.record("assistant", text=text, **fields)
-            if text or calls:
-                # Defer trimming until results have been attached to their calls.
-                self.history.append(Message("assistant", text, tool_calls=tuple(calls)))
-            if not calls:
-                self._remember_many([])
-            if not completed and calls:
-                results = [
-                    Message("tool", '{"error":"Response interrupted"}', tool_call_id=call.id)
-                    for call in calls
-                ]
-                for result in results:
-                    self.transcript.record(
-                        "tool_result", tool_call_id=result.tool_call_id, text=result.text
-                    )
-                self._remember_many(results)
+            self._finish_round(fragments, calls, completed, heard)
+
+    def _finish_round(self, fragments, calls, completed: bool, heard: bool) -> None:
+        text = self.crew.strip_prefix("".join(fragments), self.language)
+        self._log_line(text, completed and heard)
+        if text or calls:
+            # Defer trimming until results have been attached to their calls.
+            self._record_message(
+                Message("assistant", text, tool_calls=tuple(calls)), heard=completed and heard
+            )
+        if not calls:
+            self._remember_many([])
+            return
+        if completed:
+            return
+        self._remember_many(
+            [self._tool_result(call, {"error": "Response interrupted"}) for call in calls]
+        )
+
+    def _note_heard(self, heard: bool) -> None:
+        if heard:
+            self.crew.note_spoke(self.speaker)

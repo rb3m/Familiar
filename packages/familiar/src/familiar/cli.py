@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import inspect
 import logging
+import os
 import signal
 import sys
 from collections.abc import AsyncIterator
@@ -14,8 +15,9 @@ from typing import Any
 from familiar.alerts import AlertKeeper
 from familiar.audio.player import Player
 from familiar.audio.recorder import Recorder
-from familiar.config import AppConfig, BackendConfig, load_config
+from familiar.config import AppConfig, BackendConfig, load_config, session_settings
 from familiar.conversation import Conversation
+from familiar.crew import Crew, persona_id
 from familiar.director import Director, feed_events
 from familiar.fallback import FallbackSTT, FallbackTTS, close_backend
 from familiar.flavor import FlavorKeeper
@@ -33,6 +35,7 @@ from familiar.interfaces import (
 from familiar.memory import MemoryKeeper, MemoryStore
 from familiar.persona import Persona, load_persona
 from familiar.plugins import GROUPS, available, command_plugins, load
+from familiar.session_settings import SessionSettings
 from familiar.transcript import TranscriptLog
 from familiar.voice import VoiceSession
 
@@ -45,9 +48,6 @@ async def _reply(
     director: Director | None = None,
     event: GameEvent | None = None,
 ) -> None:
-    label = conversation.persona.display_name
-    if event is not None:
-        label += f" (event: {event.kind})"
     source = conversation.ask(text) if event is None else conversation.interject(event)
     said = False
     if director is not None:
@@ -55,6 +55,9 @@ async def _reply(
     try:
         async with aclosing(source) as sentences:
             async for sentence in sentences:
+                label = conversation.speaker.display_name
+                if event is not None:
+                    label += f" (event: {event.kind})"
                 print(f"{label}: {sentence}", flush=True)
                 said = True
     finally:
@@ -87,6 +90,15 @@ class _Runtime:
     persona: Persona
     language: str
     stack: AsyncExitStack
+    crew: Crew | None = None
+    active_conversation: Conversation | None = None
+    session: SessionSettings | None = None
+
+    def voice_for(self, name: str) -> str | None:
+        persona = self.persona
+        if self.active_conversation is not None:
+            persona = self.active_conversation.speaker
+        return persona.voice(name, self.language)
 
     def backend(self, kind: str, spec: BackendConfig) -> Any:
         primary = load(kind, spec.backend, spec.settings)
@@ -96,7 +108,7 @@ class _Runtime:
         secondary = self.backend(kind, spec.fallback)
         if kind == "stt":
             return FallbackSTT(primary, secondary)
-        return FallbackTTS(primary, secondary, lambda name: self.persona.voice(name, self.language))
+        return FallbackTTS(primary, secondary, self.voice_for)
 
     def conversation(
         self, args: argparse.Namespace
@@ -107,7 +119,7 @@ class _Runtime:
         if name:
             adapter = load("games", name, self.config.games.get(name, {}))
             self.stack.push_async_callback(close_backend, adapter)
-            director = Director(self.persona.chattiness, self.config.director)
+            director = Director(self.persona.chattiness, self.config.director, crew=self.crew)
         conversation = Conversation(
             self.backend("llm", self.config.llm),
             self.persona,
@@ -115,7 +127,9 @@ class _Runtime:
             TranscriptLog(self.config.transcript_dir),
             context=adapter.describe if adapter is not None else None,
             game=adapter.game if adapter is not None else None,
+            crew=self.crew,
         )
+        self.active_conversation = conversation
         if self.config.memory.get("enabled", True):
             conversation.memory = MemoryKeeper(
                 MemoryStore(self.config.memory.get("path")),
@@ -123,6 +137,7 @@ class _Runtime:
                 self.persona.id,
                 getattr(adapter, "whereabouts", None),
                 settings=self.config.memory,
+                crew=tuple(persona_id(member) for member in conversation.crew.members),
             )
             self.stack.push_async_callback(conversation.aclose)
         if self.config.flavor.get("enabled", True):
@@ -159,13 +174,29 @@ class _Runtime:
 @asynccontextmanager
 async def _runtime(args: argparse.Namespace) -> AsyncIterator[_Runtime]:
     config = load_config(args.config)
-    persona = load_persona(
-        config.personas_dir, args.persona or config.persona, config.user_personas_dir
+    voice_command = getattr(args, "command", None) == "voice"
+    session_path = getattr(args, "session", None)
+    if voice_command:
+        session_path = session_path or os.environ.get("FAMILIAR_SESSION")
+    selection = session_settings(
+        config,
+        path=session_path,
+        persona=args.persona or os.environ.get("FAMILIAR_PERSONA"),
+        game=getattr(args, "game", None) or os.environ.get("FAMILIAR_GAME"),
+        language=args.language or os.environ.get("FAMILIAR_LANGUAGE"),
+        use_session=voice_command,
     )
-    language = args.language or config.language
-    persona.system_prompt(language)
+    members = [
+        load_persona(config.personas_dir, identifier, config.user_personas_dir)
+        for identifier in selection.crew
+    ]
+    crew = Crew(members, selection.carrier)
+    language = selection.language
+    for member in members:
+        member.system_prompt(language)
+    config.game = selection.game
     async with AsyncExitStack() as stack:
-        yield _Runtime(config, persona, language, stack)
+        yield _Runtime(config, crew.carrier, language, stack, crew, session=selection)
 
 
 async def _chat(args: argparse.Namespace) -> None:
@@ -371,6 +402,8 @@ def main() -> None:
             command.add_argument("text")
         if name in {"chat", "voice"}:
             command.add_argument("--game", metavar="NAME")
+        if name == "voice":
+            command.add_argument("--session", metavar="PATH")
     commands.add_parser("plugins", help="List installed backends")
     gui = commands.add_parser("gui", help="Open the Familiar launcher")
     gui.add_argument("--port", type=int, default=8765)

@@ -271,6 +271,15 @@ def test_interjection_cancellation_keeps_partial_reply() -> None:
         with pytest.raises(asyncio.CancelledError):
             await task
         assert conversation.history[-1].text == "First sentence. "
-        assert log.records[-1] == ("assistant", {"text": "First sentence. ", "interrupted": True})
+        assert log.records[-1] == (
+            "assistant",
+            {
+                "text": "First sentence. ",
+                "interrupted": True,
+                "speaker_id": "test",
+                "heard": False,
+                "source": "persona_claim",
+            },
+        )
 
     asyncio.run(scenario())

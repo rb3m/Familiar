@@ -16,7 +16,7 @@ SUMMARY_SENTENCE_LIMIT = 2
 
 async def summarize(llm: LLMProvider, transcript: TranscriptLog) -> str:
     try:
-        dialogue = transcript.dialogue()
+        dialogue = transcript.dialogue(factual=True)
         if len(dialogue) < MIN_SUMMARY_TURNS:
             return ""
         text = "\n".join(f"{message.role}: {message.text}" for message in dialogue)

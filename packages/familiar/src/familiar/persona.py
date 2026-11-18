@@ -2,7 +2,7 @@
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -81,6 +81,14 @@ class Persona:
     languages: dict
     game_hooks: dict[str, str]
     truthfulness: str = "strict"
+    aliases: dict[str, list[str]] = field(default_factory=dict)
+    interests: dict[str, float] = field(default_factory=dict)
+    relationships: dict[str, str] = field(default_factory=dict)
+    roles: dict[str, str] = field(default_factory=dict)
+
+    def names(self, language: str) -> list[str]:
+        """The display name is an alias in every language."""
+        return list(dict.fromkeys([self.display_name, *self.aliases.get(language, [])]))
 
     def system_prompt(self, language: str, game: str | None = None) -> str:
         """Combine character, style, game context, and response language."""
@@ -146,7 +154,58 @@ def validate_persona(data: object) -> dict:
     if not isinstance(truthfulness, str) or truthfulness not in TRUTHFULNESS_RULES:
         allowed = ", ".join(TRUTHFULNESS_RULES)
         raise ConfigError(f"Persona truthfulness must be one of: {allowed}")
-    return {**data, "style_rules": rules, "game_hooks": hooks, "truthfulness": truthfulness}
+    aliases = data.get("aliases", {})
+    if not isinstance(aliases, dict) or any(
+        not isinstance(lang, str)
+        or not isinstance(names, list)
+        or any(not isinstance(name, str) or not name.strip() for name in names)
+        for lang, names in aliases.items()
+    ):
+        raise ConfigError("Persona aliases must map languages to lists of non-empty names")
+    interests = data.get("interests", {})
+    if not isinstance(interests, dict) or any(
+        not isinstance(kind, str)
+        or not kind
+        or type(weight) not in {int, float}
+        or not math.isfinite(weight)
+        or weight < 0
+        for kind, weight in interests.items()
+    ):
+        raise ConfigError("Persona interests must map event kinds/prefixes to nonnegative weights")
+    relationships = _one_line_mapping(data, "relationships", "persona ids")
+    for identifier in relationships:
+        validate_id(identifier)
+    roles = _one_line_mapping(data, "roles", "game ids")
+    return {
+        **data,
+        "style_rules": rules,
+        "game_hooks": hooks,
+        "truthfulness": truthfulness,
+        "aliases": aliases,
+        "interests": interests,
+        "relationships": relationships,
+        "roles": roles,
+    }
+
+
+def _one_line_mapping(data: dict, field_name: str, keys: str) -> dict[str, str]:
+    """Validate an optional {key: one-line text} mapping such as relationships or roles."""
+    value = data.get(field_name, {})
+    message = f"Persona {field_name} must map {keys} to non-empty one-line strings"
+    if not isinstance(value, dict):
+        raise ConfigError(message)
+    invalid = [
+        key
+        for key, text in value.items()
+        if not isinstance(key, str)
+        or not key
+        or not isinstance(text, str)
+        or not text.strip()
+        or any(char in text for char in "\r\n")
+    ]
+    if invalid:
+        raise ConfigError(message)
+    return value
 
 
 _validate = validate_persona
@@ -172,6 +231,10 @@ def load_persona(
         data = _validate(yaml.safe_load(path.read_text(encoding="utf-8")))
     except (OSError, yaml.YAMLError) as exc:
         raise ConfigError(f"Cannot read persona {path}: {exc}") from exc
+    if data["id"] != persona_id:
+        raise ConfigError(
+            f"Persona id {data['id']!r} does not match file id {persona_id!r}: {path}"
+        )
     return Persona(**{key: data[key] for key in Persona.__dataclass_fields__})
 
 

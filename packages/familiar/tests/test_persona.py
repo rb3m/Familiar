@@ -103,3 +103,43 @@ def test_packaged_persona_and_search_precedence(tmp_path, persona):
     user.mkdir()
     (user / "mira.yaml").write_text(yaml.safe_dump({**data, "display_name": "User"}))
     assert load_persona(configured, "mira", user).display_name == "User"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"aliases": []},
+        {"aliases": {"es": "Mira"}},
+        {"aliases": {"ja": [""]}},
+        {"aliases": {"en": [2]}},
+        {"interests": []},
+        {"interests": {"combat": True}},
+        {"interests": {"combat": -1}},
+        {"interests": {"combat": float("inf")}},
+        {"interests": {"": 1}},
+        {"relationships": []},
+        {"relationships": {"bad/id": "Hello"}},
+        {"relationships": {"mira": "two\nlines"}},
+        {"relationships": {"mira": ""}},
+    ],
+)
+def test_invalid_crew_persona_fields(tmp_path, persona, change):
+    (tmp_path / "test.yaml").write_text(yaml.safe_dump({**asdict(persona), **change}))
+    with pytest.raises(ConfigError):
+        load_persona(tmp_path, "test", tmp_path)
+
+
+def test_optional_crew_fields_roundtrip(tmp_path, persona):
+    from dataclasses import replace
+
+    updated = replace(
+        persona,
+        aliases={"es": ["Prueba"], "ja": ["フリーレン"]},
+        interests={"landmark_": 2.0},
+        relationships={"mira": "A trusted friend."},
+    )
+    (tmp_path / "test.yaml").write_text(yaml.safe_dump(asdict(updated)))
+    loaded = load_persona(tmp_path, "test", tmp_path)
+    assert loaded == updated
+    assert loaded.names("es") == ["Test", "Prueba"]
+    assert loaded.names("en") == ["Test"]
