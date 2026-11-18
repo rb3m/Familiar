@@ -5,10 +5,10 @@
 | **M0 Foundation** | Repo, interfaces, plugin loader, config, personas, Gemini LLM, text chat | `uv run familiar chat` streams a persona reply from Gemini; tests and ruff pass |
 | **M1 Voice loop** | Push-to-talk → Gemini STT → LLM → Gemini TTS, ElevenLabs as 2nd TTS; Linux + Mac | Spoken round trip under ~2 s on both machines |
 | **M2 ATS** (done 2026-11-15) | ATS adapter (TruckSim GPS server :31377), Director, first knowledge pack | Companion mentions a POI and low fuel during a real drive without spamming |
-| **M3 Memory** (in progress) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
+| **M3 Memory** (in progress; recall live in ETS2 2026-11-17) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
 | **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP live 2026-11-17, ADR 0006: flight events, navball/target speed, quotes; voice-set alerts ADR 0007; Elite built 2026-11-17, ADR 0010: journal events, written binds, hands; live check and EDSM exploration hints pending) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM), Minecraft (see below) | Each has an adapter + knowledge pack |
 | **M5 Hands** (built 2026-11-17, ADR 0009; KSP kRPC actions live 2026-11-17, SCS key presses pending) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync (both ways, see below) | Voice command toggles something in-game |
-| **M6 Crew** (phases 1-3 built 2026-11-17, ADR 0011; crew turns and banter live in KSP 2026-11-17; Touch Portal part of phase 3 deferred) | Up to three personas at once: launcher picks game, crew, language, action-carrier and banter level into `session.toml`; one speaker at a time; banter scenes; shared memory with speaker attribution. Phases: 1 session + speaker selection, 2 banter, 3 stereo/callbacks/Touch Portal | Ask Frieren a question by name and she answers in her voice; Megumin teases her on a long quiet stretch; Mira handles the gear |
+| **M6 Crew** (phases 1-3 built 2026-11-17, ADR 0011; crew turns and banter live in KSP 2026-11-17; stereo positioning live in ETS2 2026-11-17; Touch Portal part of phase 3 deferred) | Up to three personas at once: launcher picks game, crew, language, action-carrier and banter level into `session.toml`; one speaker at a time; banter scenes; shared memory with speaker attribution. Phases: 1 session + speaker selection, 2 banter, 3 stereo/callbacks/Touch Portal | Ask Frieren a question by name and she answers in her voice; Megumin teases her on a long quiet stretch; Mira handles the gear |
 
 | **M7 Beyond sims** (planned 2026-11-18, see below) | Two new companion roles: advisor (strategy games, from save snapshots) and commentator (RPGs, from coarse context or screen vision) | Mira briefs a real Vic3/CK3 session from autosave diffs, and riffs on an RPG scene without talking over dialogue or spoiling the plot |
 
@@ -30,14 +30,25 @@ Steps, in order:
    sparse; crew banter carries it better than solo lines), and spoiler guarding: the persona is
    told not to foreshadow, and the plot knowledge it gets is limited to quests the player has finished.
    Fourth-wall gallery, not in-world NPC (Skyrim already has Mantella/CHIM for that).
-3. **Paradox save-diff adapter.** Monthly autosave → parse → diff against the previous save →
-   events ("Russia and the UK allied", "war in China", "Africa war ended in white peace").
-   Talk while the game is paused. Tools for "chat with your save" ("who might declare on me?",
-   "why is GDP flat?"). One parser could serve Victoria 3, Crusader Kings 3 (court gossip suits a
-   companion), Stellaris and EU5. First check a Python-reachable parser for the
-   compressed/binary saves (pdx.tools' `jomini` covers Paradox formats; confirm Vic3 coverage).
-   Personas: foreign minister, spymaster; crew can split diplomacy, economy and military.
-   Needs agy/codex/Copilot consensus and an ADR on parser choice.
+3. **Paradox save-diff adapter, Victoria 2 first** (the Commander's pick 2026-11-18). Vic2
+   saves are plain-text Clausewitz (Windows-1252, CRLF, ~20-30 MB), so no binary parser is
+   needed. Autosave → parse → diff against the previous save → events ("Russia and the UK
+   allied", "war in China", "Africa war ended in white peace"). Talk while the game is paused.
+   Tools for "chat with your save" ("who might declare on me?", "why is my industry flat?").
+   The Commander's setup: Steam + Proton, mod California Destiny; saves in the Proton prefix
+   under `Documents/Paradox Interactive/Victoria II/<mod user_dir>/save games/`, rotating
+   `autosave.v2` → `oldautosave.v2` → `olderautosave.v2`; autosave is `YEARLY` in the mod's
+   `settings.txt` (use a shorter interval if the game offers one, or diff manual saves).
+   Paths, mod and save folder go in config with a rescan; country and province names come from
+   the game's and the active mod's `localisation/*.csv` (mod overrides base), never from code.
+   First diff targets: alliances (`alliance=`), wars started/ended (`active_war=`,
+   `previous_war=`), great-power ranking, crises, rebellions, elections, the player's own
+   date/government changes. Check parse time on a 30 MB save (pure Python vs targeted scan).
+   Later the same pipeline serves Victoria 3, Crusader Kings 3 (court gossip suits a
+   companion), Stellaris and EU5, which have compressed/binary saves (pdx.tools' `jomini`
+   covers Paradox formats). Personas: foreign minister, spymaster; crew can split diplomacy,
+   economy and military. Needs agy/codex/Copilot consensus and an ADR on the parser and the
+   `familiar-paradox` package shape.
 4. **Per-game mods where vision falls short.** Skyrim: SKSE/Papyrus mod writing location,
    quest, combat and dialogue state to JSON. Solasta: Unity Mod Manager mod dumping the combat
    log (dice rolls are perfect riff material). RimWorld (C#/Harmony) and Dwarf Fortress (DFHack
