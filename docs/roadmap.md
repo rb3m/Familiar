@@ -16,11 +16,28 @@ the GUI and overridable per persona. Each language maps the level to its own reg
 Japanese plain form vs です/ます vs 敬語 and honorifics (さん, 様), Spanish tú vs usted, German
 du vs Sie. English mostly changes tone.
 
-Nice to have: **the companion as DJ.** Whoever rides shotgun runs the music. A `familiar.music`
-plugin group controls the user's player (Linux: MPRIS, e.g. Spotify, via D-Bus; macOS: Music
-app) for skip, volume, pause and "something calmer" requests, and the in-game radio through key
-presses once M5 hands exist. Persona-flavoured picks matched to the drive (night, mountain
-pass, tight deadline) and the occasional comment on the current song.
+Nice to have: **the companion as DJ** (in every game; design agreed with the Commander
+2026-11-18, ADR pending). The action-carrier is the DJ: picks music for the moment and comments
+on it; the rest of the crew react through banter. Play, skip and queue are carrier-only actions.
+- **Sources:** a local library on this PC (~4000 tracks: MP3, some FLAC, Apple-bought AAC; some
+  old CD rips lack tags) through a local player such as MPD; YouTube Music for discovery, in the
+  browser if MPRIS plus opening a track link covers playing a chosen song, else a desktop
+  YouTube Music app (YouTube Music only). No Spotify. Apple Music: now-playing only.
+- **Now playing:** MPRIS over D-Bus for any player; a track change is an event.
+- **Choosing:** about 70% the Commander's library, 20% where the DJ persona's taste (new
+  persona field) overlaps, 10% discovery from similar artists (ListenBrainz/MusicBrainz).
+  Taste comes from the library, play counts and YouTube Music likes/history (read-only).
+  "Occasional" genres (e.g. cumbia, salsa) get a low weight and a cooldown. The game moment
+  (night drive, launch, supercruise) sets the mood.
+- **Voice feedback:** "skip it, I don't like this one" (dislike stored in memory; a repeat
+  dislike of the same artist counts against the artist), "more like this", "who sings this?",
+  "something calmer", volume.
+- **Audio:** same speakers as the game. Duck the music while anyone speaks; talk over intros or
+  between tracks, never over vocals. Stop the music on alerts and urgent events (e.g. an Elite
+  interdiction).
+- **Tags:** a scan that identifies untagged tracks by audio fingerprint (AcoustID/MusicBrainz)
+  and proposes tags for approval, never rewriting files silently.
+- Facts about songs (artist, year, album) come from tags and MusicBrainz, never from the model.
 
 Planned (M5, after the first hands): **Touch Portal sync, both directions.** Familiar's actions and
 state (alerts, fuel, last action) update panel buttons, and panel buttons trigger Familiar (talk,
