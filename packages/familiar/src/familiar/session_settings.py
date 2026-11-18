@@ -26,7 +26,7 @@ class SessionError(ConfigError):
 
 
 def default_seats(crew: object, carrier: object) -> dict[str, float]:
-    """Carrier sits centre; other members alternate +0.7 (right), -0.7 (left), matching the GUI presets."""
+    """Carrier sits centre; others alternate +0.7 (right), -0.7 (left), as in the GUI."""
     seats: dict[str, float] = {}
     others = 0
     for member in _safe_crew(crew):
