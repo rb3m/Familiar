@@ -12,6 +12,9 @@ familiar = { workspace = true }
 [project.entry-points."familiar.games"]
 elite = "familiar_elite.adapter:EliteAdapter"
 
+[project.entry-points."familiar.commands"]
+elite-bindings = "familiar_elite.bind_command:EliteBindings"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

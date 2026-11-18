@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Root PresetName="Custom" MajorVersion="4" MinorVersion="2">
+	<KeyboardLayout>es-LA</KeyboardLayout>
+	<MouseXMode>Bindings_GamepadMouseX</MouseXMode>
+	<MouseYMode>Bindings_GamepadMouseY</MouseYMode>
+	<YawAxisRaw>
+		<Binding Device="HOTASOne" Key="Joy_XAxis" />
+		<Inverted Value="0" />
+		<Deadzone Value="0.05000000" />
+	</YawAxisRaw>
+	<PitchAxisRaw>
+		<Binding Device="HOTASOne" Key="Joy_YAxis" />
+		<Inverted Value="0" />
+		<Deadzone Value="0.05000000" />
+	</PitchAxisRaw>
+	<RollAxisRaw>
+		<Binding Device="HOTASOne" Key="Joy_ZAxis" />
+		<Inverted Value="0" />
+		<Deadzone Value="0.05000000" />
+	</RollAxisRaw>
+	<LandingGearToggle>
+		<Primary Device="HOTASOne" Key="Joy_5" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</LandingGearToggle>
+	<ShipSpotLightToggle>
+		<Primary Device="HOTASOne" Key="Joy_11" />
+		<Secondary Device="Keyboard" Key="Key_L" />
+	</ShipSpotLightToggle>
+	<ToggleCargoScoop BuggyToggle="1">
+		<Primary Device="{NoDevice}" Key="" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</ToggleCargoScoop>
+	<NightVisionToggle>
+		<Primary Device="{NoDevice}" Key="" />
+		<Secondary Device="HOTASOne" Key="Joy_7" />
+	</NightVisionToggle>
+	<ResetPowerDistribution>
+		<Primary Device="{NoDevice}" Key="" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</ResetPowerDistribution>
+	<IncreaseSystemsPower>
+		<Primary Device="{NoDevice}" Key="" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</IncreaseSystemsPower>
+	<FocusLeftPanel>
+		<Primary Device="Keyboard" Key="Key_1">
+			<Modifier Device="Keyboard" Key="Key_LeftShift" />
+		</Primary>
+		<Secondary Device="{NoDevice}" Key="" />
+	</FocusLeftPanel>
+	<UI_Select>
+		<Primary Device="Keyboard" Key="Key_Enter" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</UI_Select>
+	<UI_Back>
+		<Primary Device="Keyboard" Key="Key_Escape" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</UI_Back>
+	<UI_Up>
+		<Primary Device="Keyboard" Key="Key_UpArrow" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</UI_Up>
+	<UI_Down>
+		<Primary Device="Keyboard" Key="Key_DownArrow" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</UI_Down>
+	<UI_Left>
+		<Primary Device="Keyboard" Key="Key_LeftArrow" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</UI_Left>
+	<UI_Right>
+		<Primary Device="Keyboard" Key="Key_RightArrow" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</UI_Right>
+	<CycleNextPanel>
+		<Primary Device="{NoDevice}" Key="" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</CycleNextPanel>
+	<CyclePreviousPanel>
+		<Primary Device="{NoDevice}" Key="" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</CyclePreviousPanel>
+	<DeployHeatSink>
+		<Primary Device="Keyboard" Key="Key_V" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</DeployHeatSink>
+	<GalaxyMapOpen>
+		<Primary Device="HOTASOne" Key="Joy_9" />
+		<Secondary Device="{NoDevice}" Key="" />
+	</GalaxyMapOpen>
+</Root>

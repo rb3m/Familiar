@@ -1,0 +1,19 @@
+# Elite controls Familiar drives from the keyboard, in the order keys are assigned.
+# Secondary slots that still read {NoDevice} get the first free candidate key.
+# Override: ~/.config/familiar/data/familiar_elite/bindings.yaml
+controls:
+  LandingGearToggle: raise or lower the landing gear
+  ShipSpotLightToggle: ship spotlights on or off
+  ToggleCargoScoop: open or close the cargo scoop
+  NightVisionToggle: night vision on or off
+  ResetPowerDistribution: balance power pips 2/2/2
+  IncreaseSystemsPower: one pip to systems (stack for shields priority)
+  FocusLeftPanel: open the left-side UI panel (contacts, navigation)
+  UI_Select: confirm the highlighted UI entry
+  UI_Back: leave the current UI panel
+  UI_Up: move the UI cursor up
+  UI_Down: move the UI cursor down
+  UI_Left: move the UI cursor left
+  UI_Right: move the UI cursor right
+  CycleNextPanel: next UI panel tab
+  CyclePreviousPanel: previous UI panel tab
