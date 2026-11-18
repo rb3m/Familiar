@@ -28,6 +28,9 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
 - **Trip memory**: remembers earlier places and trip events across personas, answers questions
   about previous visits, and occasionally recalls a distinctive moment when you return.
   Facts stay in a local SQLite database; `[memory]` controls storage and recall frequency.
+- **Elite Dangerous hands**: gear, lights, cargo scoop, ship/suit night vision and power
+  distribution use your active keyboard bindings with status read-back; experimental docking
+  requests use a configurable Contacts sequence and report the journal outcome without retries.
 
 Status: early and personal, but working. Linux (KDE Wayland) is the daily driver; macOS on Apple
 Silicon is the next target. See `docs/roadmap.md`.

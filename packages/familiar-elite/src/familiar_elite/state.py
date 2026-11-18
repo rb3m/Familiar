@@ -26,6 +26,8 @@ class EliteState:
     docking: str | None = None
     docking_reason: str | None = None
     landing_pad: int | None = None
+    docking_event_count: int = 0
+    last_docking_event: dict = field(default_factory=dict)
     interdicted: bool = False
     hull: float | None = None
     shields_up: bool | None = None
@@ -99,7 +101,15 @@ class EliteState:
                 self.docked = kind == "Docked"
                 self.station = event.get("StationName")
                 self.docking = kind
-            case "DockingRequested" | "DockingGranted" | "DockingDenied":
+            case (
+                "DockingRequested"
+                | "DockingGranted"
+                | "DockingDenied"
+                | "DockingTimeout"
+                | "DockingCancelled"
+            ):
+                self.last_docking_event = dict(event)
+                self.docking_event_count += 1
                 self.docking = kind
                 self.docking_reason = event.get("Reason")
                 self.station = event.get("StationName", self.station)

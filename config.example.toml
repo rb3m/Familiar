@@ -100,6 +100,8 @@ knowledge_paths = []      # curated landmark/lore packs
 # journal_dir = "~/path/to/Elite Dangerous"  # auto-discovered in Steam/Proton libraries
 # bindings_dir = "~/path/to/Options/Bindings"
 # poll_interval_s = 0.5
+# [games.elite.hold_s]
+# landing_gear = 0.08       # per-action key hold duration in seconds
 
 [director]
 enabled = true

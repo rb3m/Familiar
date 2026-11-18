@@ -1,0 +1,48 @@
+landing_gear:
+  description: Raise or lower landing gear.
+  control: LandingGearToggle
+  flag: landing_gear_down
+  states: {up: false, down: true}
+lights:
+  description: Turn ship lights on or off.
+  control: ShipSpotLightToggle
+  flag: lights_on
+  states: {'on': true, 'off': false}
+cargo_scoop:
+  description: Open or close the cargo scoop.
+  control: ToggleCargoScoop
+  flag: cargo_scoop_deployed
+  states: {open: true, closed: false}
+night_vision:
+  description: Turn ship or suit night vision on or off.
+  control: NightVisionToggle
+  on_foot_control: HumanoidToggleNightVisionButton
+  flag: night_vision
+  states: {'on': true, 'off': false}
+balance_power:
+  description: Balance power equally between systems, engines and weapons.
+  steps:
+    - {control: ResetPowerDistribution}
+  pips: [4, 4, 4]
+shields_priority:
+  description: Power to shields; set shields priority (4/1/1).
+  steps:
+    - {control: ResetPowerDistribution, wait_s: 0.1}
+    - {control: IncreaseSystemsPower, wait_s: 0.1}
+    - {control: IncreaseSystemsPower}
+  pips: [8, 2, 2]
+request_docking:
+  description: Request docking via the Contacts panel (experimental).
+  # Default sequence is unverified, check in game. Never repeat automatically.
+  steps:
+    - {control: FocusLeftPanel, wait_s: 0.3}
+    - {control: CyclePreviousPanel, wait_s: 0.1}
+    - {control: CyclePreviousPanel, wait_s: 0.1}
+    - {control: CyclePreviousPanel, wait_s: 0.1}
+    - {control: CyclePreviousPanel, wait_s: 0.1}
+    - {control: CycleNextPanel, wait_s: 0.1}
+    - {control: CycleNextPanel, wait_s: 0.1}
+    - {control: UI_Select, wait_s: 0.2}
+    - {control: UI_Right, wait_s: 0.1}
+    - {control: UI_Select, wait_s: 0.2}
+    - {control: FocusLeftPanel}
