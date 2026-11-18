@@ -9,6 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
+from familiar.banter import TUNING, Budget
 from familiar.crew import Crew, persona_id
 from familiar.interfaces import GameAdapter, GameEvent
 from familiar.memory import MemoryKeeper
@@ -44,10 +45,19 @@ class Director:
         *,
         crew: Crew | None = None,
         rng: random.Random | None = None,
+        banter: int = 0,
+        banter_blocked: Callable[[], str | None] | None = None,
+        desk: bool = False,
     ) -> None:
         self.clock = clock
         self.crew = crew
         self.rng = rng or random.Random()
+        self.banter = None
+        if crew is not None and len(crew.members) > 1 and banter > 0:
+            self.banter = Budget(banter, crew)
+        self.banter_blocked = banter_blocked or (lambda: None)
+        self._banter_retry = clock()
+        self._last_banter_skip: str | None = None
         self.enabled = settings.get("enabled", True)
         scale = 1.5 - chattiness
         self._cooldowns = {
@@ -61,7 +71,7 @@ class Director:
         self._kinds: dict[str, float] = {}
         self._queue: list[_Pending] = []
         self._busy: set[str] = set()
-        self._connected = False
+        self._connected = desk
         self._paused = False
         self._changed = asyncio.Event()
 
@@ -83,6 +93,10 @@ class Director:
 
     def submit(self, event: GameEvent) -> None:
         _LOG.debug("Game event %s/%s: %s", event.priority, event.kind, event.data.get("summary"))
+        if self.banter is not None and event.kind in {"idle", "banter"}:
+            self._reset_quiet()
+            _LOG.debug("Dropping idle/banter item: scene admission changed")
+            return
         ttl = float(event.data.get("ttl_s", _TTL[event.priority]))
         now = self.clock()
         timestamp = event.timestamp
@@ -98,6 +112,7 @@ class Director:
             for item in self._queue
             if item.deadline > now and self._key(item.event) != self._key(event)
         ]
+        self._reset_quiet()
         self._queue.append(_Pending(event, now, now + ttl - age))
         self._queue.sort(key=lambda item: (_RANK[item.event.priority], item.received))
         del self._queue[8:]
@@ -108,7 +123,13 @@ class Director:
             self._busy.add(reason)
         if not busy:
             self._busy.discard(reason)
+        if busy or reason in {"user", "speaking", "reply"}:
+            self._reset_quiet()
         self._changed.set()
+
+    def _reset_quiet(self) -> None:
+        if self.banter is not None:
+            self._idle_since = self.clock()
 
     def set_game_state(self, connected: bool, paused: bool) -> None:
         self._connected, self._paused = connected, paused
@@ -119,7 +140,7 @@ class Director:
     def notify_spoke(self) -> None:
         self._idle_emitted = False
         self._last_spoke = self._idle_since = self.clock()
-        self._queue = [item for item in self._queue if item.event.kind != "idle"]
+        self._queue = [item for item in self._queue if item.event.kind not in {"idle", "banter"}]
         self._changed.set()
 
     def _ready(self, event: GameEvent, now: float) -> bool:
@@ -138,9 +159,16 @@ class Director:
 
     def _take(self) -> GameEvent | None:
         now = self.clock()
+        if self.banter is not None and self._queue:
+            last_queued = max(min(now, item.deadline) for item in self._queue)
+            self._idle_since = max(self._idle_since, last_queued)
         self._queue = [item for item in self._queue if item.deadline > now]
+        scene = self._take_banter(now)
+        if scene is not None:
+            return scene
         if (
-            self._connected
+            self.banter is None
+            and self._connected
             and not self._paused
             and not self._queue
             and not self._idle_emitted
@@ -156,6 +184,44 @@ class Director:
                 self._kinds[item.event.kind] = now
                 return self._assign(item.event)
         return None
+
+    def _take_banter(self, now: float) -> GameEvent | None:
+        if self.banter is None:
+            return None
+        reason = self._banter_skip(now)
+        if reason:
+            self._log_banter_skip(reason)
+            return None
+        self._last_banter_skip = None
+        self._banter_retry = now + TUNING["retry_s"]
+        return GameEvent("banter", "ambient", {"summary": "Crew banter"}, datetime.now(UTC))
+
+    def _log_banter_skip(self, reason: str) -> None:
+        if reason == self._last_banter_skip:
+            return
+        self._last_banter_skip = reason
+        _LOG.debug("Skipping banter: %s", reason)
+
+    def _banter_skip(self, now: float) -> str | None:
+        assert self.banter is not None
+        if not self._connected or self._paused:
+            return "game paused or disconnected"
+        if self._queue:
+            self._idle_since = now
+            return "queued event"
+        if self._busy:
+            self._idle_since = now
+            return "push-to-talk, speech or reply active"
+        if now < self._banter_retry or now - self._idle_since < self.banter.gap:
+            return "quiet gap"
+        if not self.banter.available(now):
+            return "rolling-hour cap"
+        return self.banter_blocked()
+
+    def banter_started(self) -> None:
+        """Charge only validated scenes, immediately before playback starts."""
+        if self.banter is not None:
+            self.banter.consume(self.clock())
 
     def _assign(self, event: GameEvent) -> GameEvent:
         if self.crew is None:

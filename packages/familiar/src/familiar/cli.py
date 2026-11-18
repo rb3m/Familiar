@@ -119,7 +119,6 @@ class _Runtime:
         if name:
             adapter = load("games", name, self.config.games.get(name, {}))
             self.stack.push_async_callback(close_backend, adapter)
-            director = Director(self.persona.chattiness, self.config.director, crew=self.crew)
         conversation = Conversation(
             self.backend("llm", self.config.llm),
             self.persona,
@@ -129,6 +128,19 @@ class _Runtime:
             game=adapter.game if adapter is not None else None,
             crew=self.crew,
         )
+        banter = 0
+        if self.session is not None:
+            banter = self.session.banter
+        if adapter is not None or (banter > 0 and len(conversation.crew.members) > 1):
+            director = Director(
+                self.persona.chattiness,
+                self.config.director,
+                crew=conversation.crew,
+                banter=banter,
+                banter_blocked=conversation.banter_blocked,
+                desk=adapter is None,
+            )
+            conversation.banter_started = director.banter_started
         self.active_conversation = conversation
         if self.config.memory.get("enabled", True):
             conversation.memory = MemoryKeeper(
@@ -241,10 +253,9 @@ async def _chat(args: argparse.Namespace) -> None:
                     interjection = asyncio.create_task(speak_event(event))
 
         if adapter is not None and director is not None:
-            tasks = [
-                asyncio.create_task(feed_events(adapter, director, conversation.memory)),
-                asyncio.create_task(events()),
-            ]
+            tasks.append(asyncio.create_task(feed_events(adapter, director, conversation.memory)))
+        if director is not None:
+            tasks.append(asyncio.create_task(events()))
         if director is not None and conversation.alerts is not None:
             tasks.append(asyncio.create_task(conversation.alerts.run(director.submit)))
         print(f"Chatting with {runtime.persona.display_name}. Type /quit to exit.")

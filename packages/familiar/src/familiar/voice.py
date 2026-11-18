@@ -212,12 +212,13 @@ class VoiceSession:
         tasks: list[asyncio.Task] = []
         try:
             if self.adapter is not None and self.director is not None:
-                tasks = [
+                tasks.append(
                     asyncio.create_task(
                         feed_events(self.adapter, self.director, self.conversation.memory)
-                    ),
-                    asyncio.create_task(self._game_replies()),
-                ]
+                    )
+                )
+            if self.director is not None:
+                tasks.append(asyncio.create_task(self._game_replies()))
             if self.director is not None and self.conversation.alerts is not None:
                 tasks.append(
                     asyncio.create_task(self.conversation.alerts.run(self.director.submit))

@@ -88,16 +88,39 @@ class DefaultHistoryRenderer:
         cut_off = [
             record.text
             for record in records
-            if record.kind == "assistant" and not record.heard and record.text
+            if record.kind in {"assistant", "banter"} and not record.heard and record.text
         ]
         if cut_off:
             system += "\n\nCut-off generations (not said in full):\n" + "\n".join(cut_off)
         messages = [
             self._message(record)
             for record in records
-            if record.heard or record.kind != "assistant" or record.tool_calls
+            if record.heard or record.kind not in {"assistant", "banter"} or record.tool_calls
         ]
         return system, messages
+
+    def chronological(self, records: list[HistoryRecord], crew: Crew) -> str:
+        """Reuse the same labelled, compact-outcome transcript for scene prompts."""
+        lines = [self._line(record, None, crew) for record in records]
+        return "\n".join(line for line in lines if line)
+
+    def roster(self, crew: Crew, game: str | None) -> str:
+        return "\n".join(self._scene_member(member, game) for member in crew.members)
+
+    def _scene_member(self, member: Persona, game: str | None) -> str:
+        relationships = "; ".join(
+            f"toward {key}: {value}" for key, value in member.relationships.items()
+        )
+        return (
+            self._roster_line(member, member, game)
+            + f" Truthfulness: {member.truthfulness}. {relationships}\n"
+            + f'Character notes for {member.display_name} (written to her as "you"):\n'
+            + member.prompt
+            + "\n"
+            + "\n".join(member.style_rules)
+            + "\n"
+            + member.game_hooks.get(game, "")
+        )
 
     @staticmethod
     def _roster_line(member: Persona, speaker: Persona, game: str | None) -> str:
@@ -108,7 +131,7 @@ class DefaultHistoryRenderer:
     @staticmethod
     def _message(record: HistoryRecord) -> Message:
         message = record.message()
-        if record.heard or record.kind != "assistant":
+        if record.heard or record.kind not in {"assistant", "banter"}:
             return message
         return Message(
             message.role,
@@ -118,13 +141,13 @@ class DefaultHistoryRenderer:
         )
 
     @staticmethod
-    def _line(record: HistoryRecord, speaker: Persona, crew: Crew) -> str:
+    def _line(record: HistoryRecord, speaker: Persona | None, crew: Crew) -> str:
         names = {persona_id(member): member.display_name for member in crew.members}
         names["player"] = "Player"
         if record.speaker_id not in names or record.kind == "game_event":
             return ""
         name = names[record.speaker_id]
-        if record.speaker_id == persona_id(speaker):
+        if speaker is not None and record.speaker_id == persona_id(speaker):
             name = f"{name} (you)"
         if record.kind == "tool_result":
             return f"{name}: [Tool outcome] {outcome(record.text)}"

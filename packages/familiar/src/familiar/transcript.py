@@ -36,14 +36,17 @@ class TranscriptLog:
         with self.path.open(encoding="utf-8") as handle:
             for line in handle:
                 event = json.loads(line)
-                if event["kind"] not in {"user", "assistant"} or not event.get("text"):
+                if event["kind"] not in {"user", "assistant", "banter"} or not event.get("text"):
                     continue
                 text = event["text"]
                 if factual and (
-                    event.get("source") == "persona_claim"
+                    event["kind"] == "banter"
+                    or event.get("source") == "persona_claim"
                     or event.get("heard") is False
                     or event.get("interrupted")
                 ):
                     text = "[Persona claim or interrupted line omitted from factual memory]"
-                messages.append(Message(event["kind"], text))
+                messages.append(
+                    Message({"banter": "assistant"}.get(event["kind"], event["kind"]), text)
+                )
         return messages

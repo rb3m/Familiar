@@ -86,8 +86,27 @@ shared history stores speaker IDs and whether text was heard; voice acknowledges
 after audio drains. Each speaker sees her own model/tool turns and other members in a labelled
 transcript preface with compact tool outcomes. Single-persona prompts retain their existing
 form. Mutating action tools, including confirmation, are offered and dispatched only on the
-carrier's turns; core tools and `read_only` actions are available to everyone. Banter is stored
-in the session selection but has no behavior until phase 2.
+carrier's turns; core tools and `read_only` actions are available to everyone. For crews of two or three, session banter levels 1-10 replace idle remarks with one tool-free
+call for a validated 2-4-line scene. `banter.py` owns the gap/cap anchors (1: 1200 s, 2/h;
+5: 420 s, 5/h; 10: 120 s, 10/h), linear interpolation with caps rounded down, and a rolling
+hour budget. Only the quiet gap scales by `1.5 - mean chattiness`. Queued items and all speech
+reset quiet time. Level 0 and single-member crews retain idle chatter.
+
+Scene initiators are weighted by chattiness; partners with a relationship in either direction
+have triple weight. Consecutive ordered pairs rotate. Both cast members must speak; a third
+may contribute one line. Each line uses the ordinary serial playback path in its own voice.
+Barge-in and critical preemption discard the remainder, retaining every validated line with
+its speaker, `kind=banter`, heard status and `persona_claim` provenance. Unheard banter never
+appears as a spoken model turn or factual memory. Malformed scenes consume no scene budget;
+a 30-second admission retry delay bounds repeated invalid generations.
+
+Pending hands confirmations and backend budget pressure suppress scenes. Backends may expose
+a read-only `banter_blocked()` hook, consumed through `fallback.llm_budget_blocked`, without
+changing the plugin protocol. Gemini reports any live model park and estimates request usage
+against optional configured per-model `quota_limits` (`minute`/`day`). The near-limit threshold
+is 90%; retries and fallback attempts count conservatively across keys, over rolling windows.
+These are process-local estimates, not an account-wide quota API. Without configured limits,
+Gemini still suppresses scenes on parking. Desk sessions run the Director without a game feed.
 
 Adapters optionally implement `Watchable`, describing quantities in SI and returning cached
 samples with monotonic acquisition times, validity, prediction safety and a context identity.

@@ -1,6 +1,7 @@
 """Coordinate streamed replies, bounded history, and transcript events."""
 
 import json
+import logging
 import random
 from collections import deque
 from collections.abc import AsyncIterator, Callable
@@ -8,7 +9,9 @@ from contextlib import aclosing
 from dataclasses import asdict
 
 from familiar.alerts import AlertKeeper
+from familiar.banter import Casting, parse_scene
 from familiar.crew import Crew, persona_id
+from familiar.fallback import llm_budget_blocked
 from familiar.flavor import FlavorKeeper, flavor_hint
 from familiar.hands import ActionKeeper
 from familiar.history import DefaultHistoryRenderer, HistoryRecord, HistoryRenderer
@@ -85,6 +88,8 @@ class Conversation:
         self.records: list[HistoryRecord] = []
         self.playback_ack_required = False
         self._playback_acks = 0
+        self.casting = Casting()
+        self.banter_started: Callable[[], None] = lambda: None
 
     def acknowledge_playback(self) -> None:
         """The voice consumer calls this only after a sentence's audio drains."""
@@ -144,6 +149,11 @@ class Conversation:
         self, event: GameEvent, spoken: Callable[[], bool] | None = None
     ) -> AsyncIterator[str]:
         """React to a grounded game event using the ordinary reply pipeline."""
+        if event.kind == "banter":
+            async with aclosing(self.banter_scene()) as lines:
+                async for line in lines:
+                    yield line
+            return
         if (
             self.memory is not None
             and "memory_episode_id" in event.data
@@ -189,6 +199,73 @@ class Conversation:
                     continue
                 self._record_interjection(event, candidate)
                 recorded = True
+
+    def banter_blocked(self) -> str | None:
+        if self.actions is not None and self.actions.pending is not None:
+            return "pending action confirmation"
+        return llm_budget_blocked(self.llm)
+
+    async def banter_scene(self) -> AsyncIterator[str]:
+        reason = self.banter_blocked()
+        if reason:
+            logging.getLogger(__name__).debug("Skipping banter: %s", reason)
+            return
+        pair = self.casting.pick(self.crew, self.rng)
+        renderer = DefaultHistoryRenderer()
+        situation = "desk mode"
+        if self.context is not None:
+            situation = self.context()
+        prompt = (
+            f"Write a short crew banter scene in session language {self.language}.\n"
+            f"Initiator: {pair[0]}; partner: {pair[1]}. Both must speak. "
+            "A third crew member may join for at most one line.\n"
+            "Output ONLY 2-4 short spoken lines, aiming for 2-3, each as "
+            "<persona_id>: <text>, with actual IDs and no angle brackets. "
+            "No stage directions, player lines or claims to take game actions. "
+            "Strict members use only supplied facts. Playful members may joke but must "
+            "never misreport game state. Practical information must always be exact.\n"
+            "Crew roster (third-person roles and relationships):\n"
+            + renderer.roster(self.crew, self.game)
+            + "\nCurrent situation: "
+            + situation
+            + "\nRecent chronological transcript (unheard lines were NOT said):\n"
+            + renderer.chronological(self.records, self.crew)
+        )
+        async with aclosing(
+            self.llm.stream([Message("user", "Write the scene.")], prompt, [])
+        ) as source:
+            chunks = [chunk async for chunk in source]
+        if any(chunk.tool_call is not None for chunk in chunks):
+            logging.getLogger(__name__).debug("Dropping banter: unexpected tool call")
+            return
+        lines = parse_scene("".join(chunk.text for chunk in chunks), self.crew, self.language)
+        speakers = {speaker for speaker, _ in lines}
+        extras = [speaker for speaker, _ in lines if speaker not in pair]
+        if not lines or not set(pair).issubset(speakers) or len(extras) > 1:
+            logging.getLogger(__name__).debug("Dropping malformed banter scene")
+            return
+        self.banter_started()
+        records = [HistoryRecord(key, "banter", text, False) for key, text in lines]
+        members = {persona_id(member): member for member in self.crew.members}
+        try:
+            for index, record in enumerate(records):
+                self.speaker = members[record.speaker_id]
+                before = self._playback_acks
+                yield record.text
+                heard = self._was_heard(before)
+                records[index] = HistoryRecord(record.speaker_id, "banter", record.text, heard)
+                self._note_heard(heard)
+        finally:
+            self.records.extend(records)
+            self._remember_many([])
+            for record in records:
+                self.transcript.record(
+                    "banter",
+                    text=record.text,
+                    speaker_id=record.speaker_id,
+                    heard=record.heard,
+                    source="persona_claim",
+                )
 
     def _event_speaker(self, event: GameEvent) -> Persona:
         if event.priority == "critical":

@@ -102,7 +102,13 @@ game = "elite"  # omit for desk use
 ```
 
 CLI flags override the saved selection; `--persona` selects a crew of one. Without a session
-file, the existing config defaults apply. Banter is stored for a future phase. Persona YAML
+file, the existing config defaults apply. With two or more members, `banter = 1` through `10`
+replaces idle remarks with occasional short crew scenes, also in desk mode. Level 1 allows
+at most two scenes per rolling hour after 20 quiet minutes; level 5 allows five after seven
+minutes; level 10 allows ten after two minutes. Mean crew chattiness scales the quiet gap.
+Level 0 or a crew of one keeps ordinary idle remarks. Push-to-talk and critical alerts cut
+scenes short; pending confirmations, busy game events, paused/disconnected games and LLM
+budget pressure suppress them. Persona YAML
 supports language-specific `aliases`, event-kind/prefix `interests`, and optional one-line
 `relationships` in your own persona files; see Mira's YAML for examples.
 

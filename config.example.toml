@@ -32,6 +32,13 @@ fallback_models = ["gemini-3.5-flash-lite", "gemini-3.8-flash"]   # tried after 
 fallback_api_key_env = "GEMINI_PAID_KEY"   # optional: separate key for fallback models (e.g. capped paid key)
 first_chunk_timeout_seconds = 8.0   # an overloaded model may stall silently; give up and fall back
 timeout_seconds = 30.0
+# Optional quota guard for banter: fill in current limits for your model/key tier.
+# Estimates count this process's attempts (including retries), across keys; no quota API call.
+# Banter stops at 90% of a configured minute/day limit, or whenever any model is parked.
+# Use model IDs from your [llm.gemini] configuration; restart to refresh these settings.
+# [llm.gemini.quota_limits."your-model-id"]
+# minute = 10
+# day = 1000
 
 # Speech settings are scoped by backend, including the optional fallback.
 [stt]

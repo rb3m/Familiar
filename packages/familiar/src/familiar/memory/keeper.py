@@ -87,6 +87,8 @@ class MemoryKeeper:
 
     @_never_fatal(None)
     def observe(self, event: GameEvent) -> None:
+        if event.kind == "banter":
+            return
         salience = event.data.get("memory_salience", 0)
         if salience <= 0:
             return

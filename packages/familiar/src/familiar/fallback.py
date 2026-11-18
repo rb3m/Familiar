@@ -100,3 +100,11 @@ class FallbackTTS(_Fallback):
                 raise
         async for chunk in self._synthesize(self.secondary, text, language):
             yield chunk
+
+
+def llm_budget_blocked(backend: Any) -> str | None:
+    """Optional, read-only backend hook; never spend a request checking quota."""
+    status = getattr(backend, "banter_blocked", None)
+    if status is None:
+        return None
+    return status()

@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+from collections import deque
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from google import genai
 from google.genai import errors, types
 
 from familiar.backends.models import model_defaults
+from familiar.banter import TUNING
 from familiar.interfaces import (
     PLUGIN_API_VERSION,
     BackendError,
@@ -132,7 +134,29 @@ class GeminiLLM:
         self._client: genai.Client | None = None
         self._fallback_client: genai.Client | None = None
         self._fallback_settings = self._fallback_key_settings(settings)
+        self._requests: deque[tuple[str, float]] = deque()
         self._parked: dict[tuple[str, bool], float] = {}  # (model, fallback) -> retry after
+
+    def banter_blocked(self) -> str | None:
+        """Local request estimates against user-supplied limits; no quota API call."""
+        if any(until > time.monotonic() for until in self._parked.values()):
+            return "LLM model parked"
+        now = time.monotonic()
+        limits = self.settings.get("quota_limits", {})
+        near = any(self._model_near_limit(model, windows, now) for model, windows in limits.items())
+        if near:
+            return "LLM quota near limit"
+        return None
+
+    def _model_near_limit(self, model: str, windows: dict, now: float) -> bool:
+        return any(self._near_limit(model, window, limit, now) for window, limit in windows.items())
+
+    def _near_limit(self, model: str, window: str, limit: int, now: float) -> bool:
+        seconds = {"minute": 60, "day": 86400}.get(window)
+        if seconds is None or limit <= 0:
+            return False
+        used = sum(key == model and timestamp > now - seconds for key, timestamp in self._requests)
+        return used >= limit * TUNING["quota_fraction"]
 
     def _fallback_key_settings(self, settings: dict) -> dict | None:
         """Fallback models may use their own key (e.g. a capped paid key behind a free one)."""
@@ -204,6 +228,10 @@ class GeminiLLM:
         config: types.GenerateContentConfig,
         fallback: bool = False,
     ) -> AsyncIterator[LLMChunk]:
+        now = time.monotonic()
+        while self._requests and self._requests[0][1] <= now - 86400:
+            self._requests.popleft()
+        self._requests.append((model, now))
         try:
             responses = await self._open_stream(model, contents, config, fallback)
             async for response in responses:
