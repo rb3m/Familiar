@@ -254,7 +254,7 @@ async def test_voice_interrupts_scene_and_marks_remainder(tmp_path, crew, interr
         def stop(self):
             pass
 
-        async def play(self, chunks):
+        async def play(self, chunks, pan=0.0):
             async for _ in chunks:
                 pass
 

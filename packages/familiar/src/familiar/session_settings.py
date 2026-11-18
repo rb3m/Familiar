@@ -1,4 +1,9 @@
-"""Version-one launcher selections; no backend, secret or device settings."""
+"""Versioned launcher selections; no backend, secret or device settings.
+
+Schema 2 adds optional stereo voice placement: ``stereo`` (off by default) and ``seats``
+mapping persona ids to a pan from -1.0 (left) to 1.0 (right). Version 1 files still load
+with stereo off and default seats; saves always write version 2.
+"""
 
 import json
 import os
@@ -10,12 +15,27 @@ from pathlib import Path
 from familiar.interfaces import ConfigError
 from familiar.persona import load_persona, validate_id
 
-VERSION = 1
-_KEYS = {"version", "game", "crew", "language", "carrier", "banter"}
+VERSION = 2
+_KEYS = {"version", "game", "crew", "language", "carrier", "banter", "stereo", "seats"}
+_REQUIRED = {"version", "crew", "language", "carrier", "banter"}
+SIDE_PAN = 0.6  # default seat for non-carrier members, alternating right then left
 
 
 class SessionError(ConfigError):
     """All invalid selections in a session, reported together at Start."""
+
+
+def default_seats(crew: object, carrier: object) -> dict[str, float]:
+    """Carrier sits centre; other members alternate +0.6 (right), -0.6 (left)."""
+    seats: dict[str, float] = {}
+    others = 0
+    for member in _safe_crew(crew):
+        if member == carrier:
+            seats[member] = 0.0
+            continue
+        seats[member] = SIDE_PAN if others % 2 == 0 else -SIDE_PAN
+        others += 1
+    return seats
 
 
 @dataclass(frozen=True)
@@ -25,7 +45,17 @@ class SessionSettings:
     carrier: str
     game: str | None = None
     banter: int = 0
+    stereo: bool = False
+    seats: dict[str, float] | None = None
     version: int = VERSION
+
+    def __post_init__(self) -> None:
+        if self.stereo is None:
+            object.__setattr__(self, "stereo", False)
+        seats = default_seats(self.crew, self.carrier)
+        if isinstance(self.seats, dict):
+            seats.update(self.seats)
+        object.__setattr__(self, "seats", seats)
 
 
 def default_path() -> Path:
@@ -35,9 +65,9 @@ def default_path() -> Path:
 
 def _problems(data: dict) -> list[str]:
     problems = [f"Unknown session key: {key}" for key in sorted(data.keys() - _KEYS)]
-    problems += [f"Missing session key: {key}" for key in sorted(_KEYS - {"game"} - data.keys())]
-    if type(data.get("version")) is not int or data["version"] != VERSION:
-        problems.append("Session version must be 1")
+    problems += [f"Missing session key: {key}" for key in sorted(_REQUIRED - data.keys())]
+    if type(data.get("version")) is not int or data["version"] not in (1, VERSION):
+        problems.append("Session version must be 1 or 2")
     game = data.get("game")
     if game is not None and (not isinstance(game, str) or not game.strip()):
         problems.append("game must be a non-empty string or absent (desk mode)")
@@ -45,8 +75,32 @@ def _problems(data: dict) -> list[str]:
         problems.append("language must be a non-empty string")
     if type(data.get("banter")) is not int or not 0 <= data["banter"] <= 10:
         problems.append("banter must be an integer from 0 to 10")
+    problems.extend(_stereo_problems(data))
     crew = data.get("crew")
     problems.extend(_crew_problems(crew, data.get("carrier")))
+    return problems
+
+
+def _stereo_problems(data: dict) -> list[str]:
+    problems = []
+    stereo = data.get("stereo")
+    if stereo is not None and type(stereo) is not bool:
+        problems.append("stereo must be true or false")
+    seats = data.get("seats")
+    if seats is not None and not isinstance(seats, dict):
+        problems.append("seats must map persona ids to pan values")
+    if not isinstance(seats, dict):
+        return problems
+    members = set(_safe_crew(data.get("crew")))
+    for key, pan in seats.items():
+        if not isinstance(key, str) or key not in members:
+            problems.append(f"seats key {key!r} is not a crew member")
+            continue
+        if isinstance(pan, bool) or not isinstance(pan, (int, float)):
+            problems.append(f"seats pan for {key!r} must be a number from -1.0 to 1.0")
+            continue
+        if not -1.0 <= pan <= 1.0:
+            problems.append(f"seats pan for {key!r} must be a number from -1.0 to 1.0")
     return problems
 
 
@@ -114,13 +168,20 @@ def load(
     effective = {**data, **(overrides or {})}
     # Collect persona errors even when other fields are malformed.
     crew = effective.get("crew", [])
+    # Overrides may shrink the crew; drop seats of members no longer aboard (raw file
+    # problems were already reported against the file's own crew).
+    seats = effective.get("seats")
+    if isinstance(seats, dict):
+        seats = {key: pan for key, pan in seats.items() if key in _safe_crew(crew)}
     settings = SessionSettings(
         crew=_safe_crew(crew),
         language=effective.get("language", ""),
         carrier=effective.get("carrier", ""),
         game=effective.get("game"),
         banter=effective.get("banter", 0),
-        version=effective.get("version", 0),
+        stereo=effective.get("stereo", False),
+        seats=seats,
+        version=VERSION,
     )
     try:
         validate(settings, personas_dir, user_personas_dir)
@@ -131,18 +192,24 @@ def load(
     return settings
 
 
+def _toml_value(key: str, value: object) -> str:
+    if key == "seats" and isinstance(value, dict):
+        items = ", ".join(f"{seat} = {json.dumps(pan)}" for seat, pan in value.items())
+        return "{ " + items + " }" if items else "{}"
+    return json.dumps(value, ensure_ascii=False)
+
+
 def save(path: str | Path, settings: SessionSettings) -> None:
     """Replace the last selection atomically; TOML represents null game by omission."""
     data = asdict(settings)
+    data["version"] = VERSION  # saves always write the current schema
     problems = _problems(data)
     if problems:
         raise SessionError("Invalid session:\n- " + "\n- ".join(problems))
     destination = Path(path).expanduser()
     destination.parent.mkdir(parents=True, exist_ok=True)
     lines = [
-        f"{key} = {json.dumps(value, ensure_ascii=False)}"
-        for key, value in data.items()
-        if value is not None
+        f"{key} = {_toml_value(key, value)}" for key, value in data.items() if value is not None
     ]
     temporary = None
     try:

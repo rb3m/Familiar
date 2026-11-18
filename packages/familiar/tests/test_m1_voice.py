@@ -51,7 +51,7 @@ class Player:
     def stop(self):
         self.stops += 1
 
-    async def play(self, chunks):
+    async def play(self, chunks, pan=0.0):
         async for chunk in chunks:
             self.audio.append(chunk.pcm.decode())
 

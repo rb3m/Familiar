@@ -10,7 +10,7 @@ const samples = {
 };
 const criticalEvents = new Set(['fuel_low', 'air_pressure', 'engine_warning', 'fined', 'job_cancelled']);
 let state;
-let choices = { game: null, crew: [], carrier: '', language: '', banter: 2 };
+let choices = { game: null, crew: [], carrier: '', language: '', banter: 2, stereo: false, seats: {} };
 let saveTimer;
 let saveFailed = false;
 let voices = null;
@@ -122,6 +122,31 @@ function personaName(id) {
   return personaById(id)?.display_name || id;
 }
 
+const SEATS = [
+  ['Left (-0.7)', -0.7],
+  ['Centre-left (-0.35)', -0.35],
+  ['Centre (0)', 0],
+  ['Centre-right (0.35)', 0.35],
+  ['Right (0.7)', 0.7],
+];
+
+function defaultSeats(crew, carrier) {
+  const seats = {};
+  let others = 0;
+  for (const id of crew) {
+    if (id === carrier) { seats[id] = 0; continue; }
+    seats[id] = others % 2 === 0 ? 0.6 : -0.6;
+    others += 1;
+  }
+  return seats;
+}
+
+function seatOf(id) {
+  const pan = choices.seats[id];
+  if (Number.isFinite(pan) && pan >= -1 && pan <= 1) return pan;
+  return defaultSeats(choices.crew, choices.carrier)[id] ?? 0;
+}
+
 function normalizeChoices(preferred = choices) {
   const defaults = state.defaults;
   const validGame = (id) => id === null || state.games.some((game) => game.id === id);
@@ -139,7 +164,14 @@ function normalizeChoices(preferred = choices) {
   const language = validLanguage(preferred.language) ? preferred.language
     : (validLanguage(defaults.language) ? defaults.language : state.languages[0]?.id || '');
   const banter = Number.isInteger(preferred.banter) && preferred.banter >= 0 && preferred.banter <= 10 ? preferred.banter : 2;
-  choices = { game, crew, carrier, language, banter };
+  const stereo = typeof preferred.stereo === 'boolean' ? preferred.stereo : choices.stereo;
+  const source = preferred.seats && typeof preferred.seats === 'object' ? preferred.seats : choices.seats;
+  const seats = defaultSeats(crew, carrier);
+  for (const id of crew) {
+    const pan = Number(source[id]);
+    if (Number.isFinite(pan) && pan >= -1 && pan <= 1) seats[id] = pan;
+  }
+  choices = { game, crew, carrier, language, banter, stereo, seats };
 }
 
 function settingsToChoices(settings) {
@@ -149,6 +181,8 @@ function settingsToChoices(settings) {
     carrier: typeof settings.carrier === 'string' ? settings.carrier : '',
     language: typeof settings.language === 'string' ? settings.language : '',
     banter: settings.banter,
+    stereo: settings.stereo === true,
+    seats: settings.seats && typeof settings.seats === 'object' ? { ...settings.seats } : {},
   };
 }
 
@@ -172,7 +206,8 @@ function showSaveStatus(message) {
 }
 
 async function saveSettings() {
-  const payload = { version: 1, ...choices };
+  const seats = Object.fromEntries(choices.crew.map((id) => [id, seatOf(id)]));
+  const payload = { version: 2, ...choices, seats };
   try {
     await put('/api/session/settings', payload);
     saveFailed = false;
@@ -219,6 +254,22 @@ function renderGames() {
   }
 }
 
+function seatSelect(id) {
+  const select = element('select', 'crew-seat');
+  select.setAttribute('aria-label', `Stereo seat for ${personaName(id)}`);
+  const pan = seatOf(id);
+  for (const [label, value] of SEATS) select.add(new Option(label, String(value)));
+  if (!SEATS.some(([, value]) => value === pan)) select.add(new Option('Custom', String(pan)));
+  select.value = String(pan);
+  select.disabled = state.session.running || sessionBusy;
+  select.addEventListener('change', (event) => {
+    choices.seats[id] = Number(event.target.value);
+    renderCrew();
+    scheduleSave();
+  });
+  return select;
+}
+
 function crewSlot(id, index) {
   const row = element('div', 'crew-slot');
   const label = element('label', 'crew-member', `Crew member ${index + 1}`);
@@ -236,6 +287,7 @@ function crewSlot(id, index) {
     scheduleSave();
   });
   label.append(select);
+  if (choices.stereo) label.append(seatSelect(id));
   const actions = element('div', 'crew-actions');
   const locked = state.session.running || sessionBusy;
   const up = button('↑', () => moveCrew(index, -1), 'subtle');
@@ -300,6 +352,12 @@ function renderBanter() {
   $('#banter-label').textContent = banterLabel(choices.banter);
 }
 
+function renderStereo() {
+  const toggle = $('#stereo');
+  toggle.checked = choices.stereo;
+  toggle.disabled = state.session.running || sessionBusy;
+}
+
 function renderCrew() {
   const root = $('#crew-slots');
   root.replaceChildren();
@@ -309,6 +367,7 @@ function renderCrew() {
     || choices.crew.length >= 3 || choices.crew.length >= state.personas.length;
   renderCarrier();
   renderBanter();
+  renderStereo();
 }
 
 function renderLibrary() {
@@ -380,6 +439,7 @@ function lockSetupControls(locked) {
   $('#crew-add').disabled = true;
   $('#carrier').disabled = true;
   $('#banter').disabled = true;
+  $('#stereo').disabled = true;
   $('#language').disabled = true;
 }
 
@@ -944,6 +1004,11 @@ function bindControls() {
   $('#banter').addEventListener('input', (event) => {
     choices.banter = Number(event.target.value);
     $('#banter-label').textContent = banterLabel(choices.banter);
+    scheduleSave();
+  });
+  $('#stereo').addEventListener('change', (event) => {
+    choices.stereo = event.target.checked;
+    renderCrew();
     scheduleSave();
   });
   $('#session-toggle').addEventListener('click', toggleSession);

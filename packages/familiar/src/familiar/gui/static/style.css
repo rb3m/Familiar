@@ -321,6 +321,10 @@ p {
   min-width:0;
 }
 
+.crew-seat {
+  margin-top:2px;
+}
+
 .crew-actions {
   display:flex;
   gap:6px;

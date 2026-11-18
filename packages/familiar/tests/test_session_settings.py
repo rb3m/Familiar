@@ -19,7 +19,8 @@ def roster(tmp_path, persona):
 
 
 def settings(**changes):
-    return replace(session.SessionSettings(("test", "other"), "en", "other", banter=7), **changes)
+    base: dict = {"crew": ("test", "other"), "language": "en", "carrier": "other", "banter": 7}
+    return session.SessionSettings(**(base | changes))
 
 
 def read(path, roster, **kwargs):
@@ -59,7 +60,7 @@ def test_atomic_failure_keeps_original_and_removes_temp(roster, monkeypatch):
 def test_every_error_reported_together(roster):
     path = roster / "session.toml"
     path.write_text(
-        'version = 2\ncrew = ["test", "missing", "third"]\n'
+        'version = 3\ncrew = ["test", "missing", "third"]\n'
         'carrier = "outsider"\nlanguage = "ja"\nbanter = 11\napi_key = "bad"\n'
     )
     with pytest.raises(session.SessionError) as raised:
@@ -85,6 +86,13 @@ def test_every_error_reported_together(roster):
         "banter = 0.5",
         "game = 42",
         "version = true",
+        "stereo = 1",
+        "seats = 4",
+        "seats = {ghost = 0.5}",
+        "seats = {test = 2.0}",
+        "seats = {test = -1.5}",
+        "seats = {test = true}",
+        'seats = {test = "left"}',
         'secret = "never allowed"',
     ],
 )
@@ -136,8 +144,8 @@ def test_precedence_and_single_persona_override(roster, monkeypatch):
     session.save(session.default_path(), settings())
     assert session_settings(config) == settings()
     assert session_settings(config, persona="test", game="ksp", language="en") == settings(
-        crew=("test",), carrier="test", game="ksp"
-    )
+        crew=("test",), carrier="test", game="ksp", seats={"test": 0.6}
+    )  # an overridden crew keeps each member's saved seat
     assert session_settings(config, use_session=False).crew == ("third",)
 
 
@@ -172,3 +180,62 @@ def test_persona_file_cannot_substitute_another_identity(roster, persona):
     (roster / "other.yaml").write_text(yaml.safe_dump(asdict(persona)))
     with pytest.raises(session.SessionError, match="does not match file id"):
         read(path, roster)
+
+
+def test_version_one_file_loads_with_stereo_defaults(roster):
+    path = roster / "session.toml"
+    path.write_text(
+        'version = 1\ncrew = ["test", "other"]\ncarrier = "other"\nlanguage = "en"\nbanter = 7\n'
+    )
+    loaded = read(path, roster)
+    assert loaded == settings()
+    assert loaded.version == 2
+    assert loaded.stereo is False
+    assert loaded.seats == {"test": 0.6, "other": 0.0}
+
+
+def test_default_seats_alternate_around_the_carrier(roster):
+    assert session.default_seats(("test", "other", "third"), "test") == {
+        "test": 0.0,
+        "other": 0.6,
+        "third": -0.6,
+    }
+    assert session.default_seats(("test", "other"), "other") == {"test": 0.6, "other": 0.0}
+    assert session.default_seats("not-a-list", None) == {}
+
+
+def test_save_always_writes_version_two_with_seats(roster):
+    path = roster / "session.toml"
+    session.save(path, replace(settings(stereo=True), version=1))
+    text = path.read_text()
+    assert "version = 2" in text
+    assert "stereo = true" in text
+    loaded = read(path, roster)
+    assert loaded.stereo is True
+    assert loaded.seats == {"test": 0.6, "other": 0.0}
+
+
+def test_custom_seats_roundtrip_and_missing_members_default(roster):
+    path = roster / "session.toml"
+    session.save(path, settings(stereo=True, seats={"other": -0.35}))
+    loaded = read(path, roster)
+    assert loaded.seats == {"test": 0.6, "other": -0.35}
+    path.write_text(
+        'version = 2\ncrew = ["test", "other"]\ncarrier = "other"\nlanguage = "en"\n'
+        "banter = 7\nstereo = true\nseats = {test = 0.35}\n"
+    )
+    assert read(path, roster).seats == {"test": 0.35, "other": 0.0}
+
+
+def test_seat_problems_reported_together(roster):
+    path = roster / "session.toml"
+    path.write_text(
+        'version = 2\ncrew = ["test", "other"]\ncarrier = "other"\nlanguage = "en"\n'
+        'banter = 7\nstereo = "yes"\nseats = {ghost = 0.5, test = 3.0}\n'
+    )
+    with pytest.raises(session.SessionError) as raised:
+        read(path, roster)
+    message = str(raised.value)
+    assert "stereo must be true or false" in message
+    assert "seats key 'ghost' is not a crew member" in message
+    assert "seats pan for 'test' must be a number from -1.0 to 1.0" in message

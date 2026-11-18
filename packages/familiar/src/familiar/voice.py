@@ -9,6 +9,7 @@ from time import monotonic
 from familiar.audio.player import Player
 from familiar.audio.recorder import Recorder
 from familiar.conversation import Conversation
+from familiar.crew import persona_id
 from familiar.director import Director, feed_events
 from familiar.fallback import close_backend
 from familiar.interfaces import (
@@ -39,6 +40,7 @@ class VoiceSession:
         transcript: TranscriptLog,
         adapter: GameAdapter | None = None,
         director: Director | None = None,
+        seats: dict[str, float] | None = None,
     ) -> None:
         self.ptt = ptt
         self.recorder = recorder
@@ -53,6 +55,7 @@ class VoiceSession:
         self.transcript = transcript
         self.adapter = adapter
         self.director = director
+        self.seats = seats
         self._interjection: GameEvent | None = None
         self._reply_task: asyncio.Task | None = None
         self._recording = False
@@ -113,6 +116,12 @@ class VoiceSession:
         self._interjection = None
         self._reply_task = asyncio.create_task(self._reply(clip, released))
 
+    def _pan(self) -> float:
+        """The current speaker's stereo seat; centre when stereo placement is off."""
+        if self.seats is None:
+            return 0.0
+        return self.seats.get(persona_id(self.conversation.speaker), 0.0)
+
     async def _audio(
         self, sentence: str, released: float, timings: dict[str, float | None]
     ) -> AsyncIterator[AudioChunk]:
@@ -164,7 +173,9 @@ class VoiceSession:
                         label += f" (event: {event.kind})"
                     print(f"{label}: {sentence}", flush=True)
                     self._sentence_audio = False
-                    await self.player.play(self._audio(sentence, released, timings))
+                    await self.player.play(
+                        self._audio(sentence, released, timings), pan=self._pan()
+                    )
                     # Resuming the sentence generator acknowledges actual playback.
                     await self.player.wait_idle()
                     if self._sentence_audio:

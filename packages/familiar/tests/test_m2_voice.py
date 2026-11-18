@@ -132,15 +132,17 @@ class TTS:
 class Player:
     def __init__(self) -> None:
         self.audio: list[str] = []
+        self.pans: list[float] = []
         self.played = asyncio.Event()
         self.stops = 0
 
     def stop(self) -> None:
         self.stops += 1
 
-    async def play(self, chunks) -> None:
+    async def play(self, chunks, pan: float = 0.0) -> None:
         async for chunk in chunks:
             self.audio.append(chunk.pcm.decode())
+        self.pans.append(pan)
         self.played.set()
 
     async def wait_idle(self) -> None:
@@ -169,6 +171,42 @@ async def until(predicate) -> None:
     async with asyncio.timeout(2):
         while not predicate():
             await asyncio.sleep(0.001)
+
+
+def test_each_speaker_plays_at_their_seat() -> None:
+    class NamingSTT(STT):
+        async def transcribe(self, audio, language) -> str:
+            return "Other, what do you think?"
+
+    async def scenario() -> None:
+        from dataclasses import replace
+
+        from familiar.crew import Crew
+
+        log = Log()
+        carrier = persona()
+        other = replace(carrier, id="other", display_name="Other")
+        voice = VoiceSession(
+            PTT(),
+            Recorder(),
+            Player(),
+            NamingSTT(),
+            TTS(),
+            Conversation(LLM(), carrier, "en", log, crew=Crew([carrier, other], "test")),
+            carrier,
+            "en",
+            log,
+            seats={"test": 0.0, "other": -0.6},
+        )
+        task = asyncio.create_task(voice.run())
+        await voice.ptt.queue.put(True)
+        await until(lambda: voice._recording)
+        await voice.ptt.queue.put(False)
+        await until(lambda: voice.player.audio == ["Answer."])
+        assert voice.player.pans == [-0.6]
+        await finish(voice, task)
+
+    run(scenario())
 
 
 async def finish(voice: VoiceSession, task: asyncio.Task) -> None:

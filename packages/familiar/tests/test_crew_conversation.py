@@ -255,7 +255,7 @@ async def test_voice_uses_speaker_voice_and_only_acknowledges_drained_audio(
             yield AudioChunk(b"00", 16000)
 
     class Player:
-        async def play(self, chunks):
+        async def play(self, chunks, pan=0.0):
             async for _ in chunks:
                 pass
 

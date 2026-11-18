@@ -488,12 +488,14 @@ async def test_session_settings_defaults_without_file(client, tmp_path):
     response = await client.get("/api/session/settings")
     assert response.status == 200
     assert await response.json() == {
-        "version": 1,
+        "version": 2,
         "game": None,
         "crew": ["mira"],
         "language": "en",
         "carrier": "mira",
         "banter": 2,
+        "stereo": False,
+        "seats": {"mira": 0.0},
         "problems": [],
     }
     assert not path.exists()
@@ -566,6 +568,46 @@ async def test_put_session_settings(client, tmp_path):
         ).banter
         == 5
     )
+
+
+@pytest.mark.asyncio
+async def test_put_session_settings_stereo_seats_round_trip(client, tmp_path):
+    api = client.server.app[server.API]
+    path = tmp_path / "session.toml"
+    save_persona(api.config.personas_dir, persona("frieren"))
+    good = {
+        "version": 2,
+        "game": None,
+        "crew": ["mira", "frieren"],
+        "language": "en",
+        "carrier": "mira",
+        "banter": 5,
+        "stereo": True,
+        "seats": {"mira": 0.0, "frieren": -0.7},
+    }
+    response = await client.put("/api/session/settings", json=good)
+    assert response.status == 200
+    saved = await response.json()
+    assert saved["stereo"] is True
+    assert saved["seats"] == {"mira": 0.0, "frieren": -0.7}
+    loaded = session_settings.load(
+        path,
+        personas_dir=api.config.personas_dir,
+        user_personas_dir=api.config.user_personas_dir,
+    )
+    assert loaded.stereo is True
+    assert loaded.seats == {"mira": 0.0, "frieren": -0.7}
+    response = await client.get("/api/session/settings")
+    assert response.status == 200
+    echoed = await response.json()
+    assert echoed["version"] == 2
+    assert echoed["stereo"] is True
+    assert echoed["seats"] == {"mira": 0.0, "frieren": -0.7}
+    assert echoed["problems"] == []
+    for seats in ({"ghost": 0.5}, {"mira": 1.5}, {"mira": True}):
+        response = await client.put("/api/session/settings", json={**good, "seats": seats})
+        assert response.status == 400
+        assert any("seats" in problem for problem in (await response.json())["problems"])
 
 
 @pytest.mark.asyncio

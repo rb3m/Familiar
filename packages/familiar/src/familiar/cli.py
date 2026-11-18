@@ -317,12 +317,14 @@ async def _voice(args: argparse.Namespace) -> None:
         conversation, adapter, director = runtime.conversation(args)
         transcript = conversation.transcript
         ptt = runtime.backend("ptt", runtime.config.ptt)
+        session = runtime.session
+        stereo = bool(session and session.stereo)
         # VoiceSession owns cleanup once started; remove the setup cleanup callbacks.
         runtime.stack.pop_all()
         await VoiceSession(
             ptt,
             Recorder(),
-            Player(),
+            Player(stereo=stereo),
             stt,
             tts,
             conversation,
@@ -331,6 +333,7 @@ async def _voice(args: argparse.Namespace) -> None:
             transcript,
             adapter=adapter,
             director=director,
+            seats=dict(session.seats) if stereo and session else None,
         ).run()
 
 

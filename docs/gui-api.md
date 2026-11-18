@@ -61,15 +61,21 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   "language": "en", "text": "optional sample"}` → speaks the sample on this machine;
   `200 {"ok": true}`.
 - `GET /api/session/settings` → the launcher's saved selections. With no session file: derived
-  defaults (`200 {"version": 1, "game", "crew": [config persona], "language", "carrier",
-  "banter": 2, "problems": []}`). With a valid file: its values plus `"problems": []`. With an
+  defaults (`200 {"version": 2, "game", "crew": [config persona], "language", "carrier",
+  "banter": 2, "stereo": false, "seats": {"<carrier>": 0.0}, "problems": []}`). With a valid
+  file: its values plus `"problems": []` (version 1 files load with `"stereo": false` and
+  default seats). With an
   invalid file: `200` with the raw values that parsed plus `"problems": [...]` (schema and
   persona problems, reported together) so the UI can show and repair them. Never writes.
-- `PUT /api/session/settings` body `{"version": 1, "game": "ats" | null, "crew": ["mira", ...1-3
-  unique persona ids], "language": "en", "carrier": "<a crew member>", "banter": 0-10}` →
+- `PUT /api/session/settings` body `{"version": 2, "game": "ats" | null, "crew": ["mira", ...1-3
+  unique persona ids], "language": "en", "carrier": "<a crew member>", "banter": 0-10,
+  "stereo": bool, "seats": {"<crew id>": pan}}` — `stereo` (optional, default `false`) turns on
+  spatial placement; `seats` (optional) maps crew ids to a pan from -1.0 (left) to 1.0 (right),
+  with missing members defaulted (carrier 0.0, others alternating +0.6, -0.6 in roster order) and
+  non-crew keys rejected →
   validated with the session-settings rules (all problems at once, including personas without a
-  voice for the language) → `400 {"error", "problems": [...]}` or an atomic save → `200` with
-  the saved settings.
+  voice for the language) → `400 {"error", "problems": [...]}` or an atomic save (always written
+  as version 2) → `200` with the saved settings.
 - `POST /api/session/start` with no body (or `{}`): load and validate the session file; `400
   {"error", "problems": [...]}` if missing or invalid; otherwise spawn `familiar voice
   --session PATH [--config ...]` — the file is the single source, so no `--persona`/`--game`/

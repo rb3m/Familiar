@@ -278,7 +278,7 @@ async def test_voice_records_only_after_audio_is_drained(store, tmp_path, person
                 yield AudioChunk(b"00", 16000)
 
     class Player:
-        async def play(self, chunks):
+        async def play(self, chunks, pan=0.0):
             async for _ in chunks:
                 pass
 

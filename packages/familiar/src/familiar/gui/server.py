@@ -34,6 +34,7 @@ from familiar.session_settings import (
 from familiar.session_settings import (
     SessionError,
     SessionSettings,
+    default_seats,
 )
 from familiar.session_settings import default_path as default_session_path
 from familiar.session_settings import load as load_session
@@ -403,6 +404,8 @@ class APIService:
             "language": self.config.language,
             "carrier": self.config.persona,
             "banter": 2,
+            "stereo": False,
+            "seats": default_seats([self.config.persona], self.config.persona),
         }
 
     def session_options(self) -> dict:
@@ -427,7 +430,16 @@ class APIService:
         except SessionError as exc:
             values = {
                 key: raw.get(key)
-                for key in ("version", "game", "crew", "language", "carrier", "banter")
+                for key in (
+                    "version",
+                    "game",
+                    "crew",
+                    "language",
+                    "carrier",
+                    "banter",
+                    "stereo",
+                    "seats",
+                )
             }
             return web.json_response({**values, "problems": problem_list(exc)})
         return web.json_response({**asdict(settings), "problems": []})
@@ -440,6 +452,8 @@ class APIService:
             carrier=data.get("carrier"),
             game=data.get("game"),
             banter=data.get("banter"),
+            stereo=data.get("stereo"),
+            seats=data.get("seats"),
             version=data.get("version"),
         )
         try:

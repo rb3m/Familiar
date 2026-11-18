@@ -13,6 +13,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
+from familiar.audio.pan import pan_stereo
 from familiar.interfaces import AudioChunk, BackendError
 
 SLICE_SECONDS = 0.05
@@ -64,19 +65,25 @@ class _Drain:
 
 class Player:
     def __init__(
-        self, output_factory: Callable | None = None, write_timeout_s: float = 2.0
+        self,
+        output_factory: Callable | None = None,
+        write_timeout_s: float = 2.0,
+        *,
+        stereo: bool = False,
     ) -> None:
         self._factory = output_factory
         self._write_timeout = write_timeout_s
-        self._queue: asyncio.Queue[tuple[int, AudioChunk | _Drain | None]] = asyncio.Queue()
+        self._stereo = stereo
+        self._queue: asyncio.Queue[tuple[int, AudioChunk | _Drain | None, float]] = asyncio.Queue()
         self._worker: asyncio.Task | None = None
         self._stream: Any = None
         self._rate: int | None = None
+        self._channels: int | None = None
         self._generation = 0
         self._closed = False
         self._error: BackendError | None = None
 
-    async def play(self, chunks: AsyncIterator[AudioChunk]) -> None:
+    async def play(self, chunks: AsyncIterator[AudioChunk], pan: float = 0.0) -> None:
         if self._closed:
             raise RuntimeError("Player is closed")
         if self._worker is None:
@@ -86,7 +93,7 @@ class Player:
             if generation != self._generation:
                 return
             self._raise_error()
-            self._queue.put_nowait((generation, chunk))
+            self._queue.put_nowait((generation, chunk, pan))
 
     def _raise_error(self) -> None:
         if self._error is not None:
@@ -95,7 +102,7 @@ class Player:
 
     def _drop_queue(self) -> None:
         while not self._queue.empty():
-            _, item = self._queue.get_nowait()
+            _, item, _ = self._queue.get_nowait()
             self._resolve_drain(item)
             self._queue.task_done()
 
@@ -109,7 +116,7 @@ class Player:
         self._generation += 1
         self._drop_queue()
         if self._worker is not None:
-            self._queue.put_nowait((self._generation, None))
+            self._queue.put_nowait((self._generation, None, 0.0))
 
     async def _close_stream(self, abort: bool = True) -> None:
         stream = self._stream
@@ -121,15 +128,16 @@ class Player:
         finally:
             self._stream = None
             self._rate = None
+            self._channels = None
             await asyncio.to_thread(stream.close)
 
-    def _make_stream(self, rate: int) -> Any:
+    def _make_stream(self, rate: int, channels: int) -> Any:
         factory = self._factory
         if factory is None:
             import sounddevice
 
             factory = sounddevice.RawOutputStream
-        stream = factory(samplerate=rate, channels=1, dtype="int16")
+        stream = factory(samplerate=rate, channels=channels, dtype="int16")
         try:
             stream.start()
         except BaseException:
@@ -137,23 +145,26 @@ class Player:
             raise
         return stream
 
-    async def _open(self, rate: int) -> None:
-        if self._stream is not None and self._rate == rate:
+    async def _open(self, rate: int, channels: int) -> None:
+        if self._stream is not None and self._rate == rate and self._channels == channels:
             return
         await self._close_stream(abort=False)
-        self._stream = await asyncio.to_thread(self._make_stream, rate)
+        self._stream = await asyncio.to_thread(self._make_stream, rate, channels)
         self._rate = rate
+        self._channels = channels
 
-    async def _write(self, generation: int, chunk: AudioChunk) -> None:
+    async def _write(self, generation: int, chunk: AudioChunk, pan: float) -> None:
         if generation != self._generation:
             return
-        await self._open(chunk.sample_rate)
-        size = max(2, int(chunk.sample_rate * SLICE_SECONDS) * 2)
-        for offset in range(0, len(chunk.pcm), size):
+        channels = 2 if self._stereo else 1
+        await self._open(chunk.sample_rate, channels)
+        pcm = pan_stereo(chunk.pcm, pan) if self._stereo else chunk.pcm
+        size = max(2, int(chunk.sample_rate * SLICE_SECONDS) * 2 * channels)
+        for offset in range(0, len(pcm), size):
             if generation != self._generation:
                 await self._close_stream(abort=True)  # barge-in: silence now, from this task
                 return
-            await self._write_slice(chunk.pcm[offset : offset + size])
+            await self._write_slice(pcm[offset : offset + size])
 
     async def _write_slice(self, data: bytes) -> None:
         """Write one slice; a write that never returns abandons the stream instead of hanging."""
@@ -177,6 +188,7 @@ class Player:
         # side sees both flags closes it: the thread if the write ever returns, else us.
         self._stream = None
         self._rate = None
+        self._channels = None
         with lock:
             state["abandoned"] = True
             returned = state["finished"]
@@ -187,10 +199,10 @@ class Player:
 
     async def _run(self) -> None:
         while True:
-            generation, item = await self._queue.get()
+            generation, item, pan = await self._queue.get()
             try:
                 if isinstance(item, AudioChunk):
-                    await self._write(generation, item)
+                    await self._write(generation, item, pan)
                     continue
                 await self._close_stream(abort=item is None)
             except Exception as exc:
@@ -209,7 +221,7 @@ class Player:
         # Drain PortAudio too: queue completion alone would truncate the final
         # buffered samples when say/voice closes or the sample rate changes.
         done = asyncio.get_running_loop().create_future()
-        self._queue.put_nowait((self._generation, _Drain(done)))
+        self._queue.put_nowait((self._generation, _Drain(done), 0.0))
         await done
         self._raise_error()
 

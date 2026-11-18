@@ -2,15 +2,104 @@
 
 import asyncio
 import io
+import math
+import struct
 import threading
 import wave
 
+import numpy as np
 import pytest
+from familiar.audio.pan import pan_gains, pan_stereo
 from familiar.audio.player import Player
 from familiar.audio.recorder import Recorder
 from familiar.audio.wav import pcm_to_wav
 from familiar.interfaces import AudioChunk, AudioClip, BackendError
 from m1_support import run
+
+
+def test_pan_gains_constant_power():
+    left, right = pan_gains(0.0)
+    assert left == pytest.approx(math.sqrt(0.5))
+    assert right == pytest.approx(left)
+    assert pan_gains(-1.0) == pytest.approx((1.0, 0.0))
+    assert pan_gains(1.0) == pytest.approx((0.0, 1.0))
+    assert pan_gains(-0.6)[0] == pytest.approx(pan_gains(0.6)[1])
+
+
+def test_pan_stereo_interleaves_and_never_clips():
+    pcm = struct.pack("<hhh", 32767, -32768, 1000)
+    assert np.frombuffer(pan_stereo(pcm, -1.0), dtype="<i2").tolist() == [
+        32767,
+        0,
+        -32768,
+        0,
+        1000,
+        0,
+    ]
+    assert np.frombuffer(pan_stereo(pcm, 1.0), dtype="<i2").tolist() == [
+        0,
+        32767,
+        0,
+        -32768,
+        0,
+        1000,
+    ]
+    centre = np.frombuffer(pan_stereo(pcm, 0.0), dtype="<i2")
+    assert centre[0] == centre[1] == round(32767 * math.sqrt(0.5))
+    assert abs(centre[2]) <= 32767 and abs(centre[3]) <= 32767
+    assert pan_stereo(b"", 0.0) == b""
+
+
+def test_player_opens_two_channels_only_when_stereo():
+    async def scenario():
+        made = []
+
+        def factory(**kwargs):
+            stream = OutputStream(**kwargs)
+            made.append(kwargs)
+            return stream
+
+        mono = Player(output_factory=factory)
+        await mono.play(chunks(AudioChunk(b"\1\0" * 100, 16000), AudioChunk(b"\1\0", 24000)))
+        await mono.wait_idle()
+        await mono.aclose()
+        stereo = Player(output_factory=factory, stereo=True)
+        await stereo.play(chunks(AudioChunk(b"\1\0" * 100, 16000)), pan=-1.0)
+        await stereo.wait_idle()
+        await stereo.aclose()
+        assert [(m["samplerate"], m["channels"]) for m in made] == [
+            (16000, 1),
+            (24000, 1),
+            (16000, 2),
+        ]
+
+    run(scenario())
+
+
+def test_player_pans_each_item_at_its_speakers_seat():
+    async def scenario():
+        streams = []
+
+        def factory(**kwargs):
+            stream = OutputStream(**kwargs)
+            streams.append(stream)
+            return stream
+
+        player = Player(output_factory=factory, stereo=True)
+        sample = b"\xff\x7f" * 50  # full-scale mono
+        await player.play(chunks(AudioChunk(sample, 16000)), pan=1.0)
+        await player.play(chunks(AudioChunk(sample, 16000)), pan=-1.0)
+        await player.wait_idle()
+        left, right = (
+            np.frombuffer(b"".join(streams[0].writes), dtype="<i2")[channel::2]
+            for channel in (0, 1)
+        )
+        assert left.tolist() == [0] * 50 + [32767] * 50
+        assert right.tolist() == [32767] * 50 + [0] * 50
+        assert len(streams) == 1  # same rate and channels: no reopen
+        await player.aclose()
+
+    run(scenario())
 
 
 def test_wav_round_trip():
