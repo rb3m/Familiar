@@ -5,6 +5,7 @@ requires-python = "==3.12.*"
 [manifest]
 members = [
     "familiar",
+    "familiar-elite",
     "familiar-ksp",
     "familiar-scs",
 ]
@@ -276,6 +277,21 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sounddevice", specifier = ">=0.5.6" },
+]
+
+[[package]]
+name = "familiar-elite"
+version = "0.1.0"
+source = { editable = "packages/familiar-elite" }
+dependencies = [
+    { name = "familiar" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "familiar", editable = "packages/familiar" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]

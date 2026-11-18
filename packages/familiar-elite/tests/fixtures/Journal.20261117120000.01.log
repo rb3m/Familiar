@@ -1,0 +1,4 @@
+﻿{"timestamp": "2026-11-17T12:00:00Z", "event": "Fileheader", "part": 1, "language": "English/UK", "gameversion": "4.0.0.0"}
+{"timestamp": "2026-11-17T12:00:00Z", "event": "LoadGame", "Commander": "Test Commander", "Ship": "Asp", "ShipID": 4, "FuelCapacity": 32, "FuelLevel": 20}
+{"timestamp": "2026-11-17T12:00:00Z", "event": "Location", "StarSystem": "Sol", "StarPos": [0, 0, 0], "Docked": false, "SystemSecurity_Localised": "High", "SystemEconomy_Localised": "Industrial", "Population": 1000000}
+{"timestamp": "2026-11-17T12:00:00Z", "event": "FutureEvent", "FutureField": 42}

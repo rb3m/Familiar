@@ -1,0 +1,8 @@
+appid: '359320'
+proton_user_dir: steamapps/compatdata/{appid}/pfx/drive_c/users/steamuser
+steam_roots:
+  - ~/.local/share/Steam
+  - ~/.steam/steam
+  - ~/.var/app/com.valvesoftware.Steam/.local/share/Steam
+journal_dir: Saved Games/Frontier Developments/Elite Dangerous
+bindings_dir: AppData/Local/Frontier Developments/Elite Dangerous/Options/Bindings
