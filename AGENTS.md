@@ -9,8 +9,8 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Built 2026-11-17, awaiting live checks: **M5 Hands** (ADR 0009: SCS key presses, kRPC actions), **M3 Memory** recall, **Elite** (ADR 0010: General preset to Custom + `familiar elite-bindings --write`, keys by hand, a flight), **M6 Crew** phase 1 (ADR 0011: launcher crew screen, renderer with flash-lite).
-- Next task: M6 phase 2 banter scenes; then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal sync and KWin focus check (roadmap).
+- Built 2026-11-17, awaiting live checks: **M5 Hands** (ADR 0009: SCS key presses, kRPC actions), **M3 Memory** recall, **Elite** (ADR 0010: General preset to Custom + `familiar elite-bindings --write`, keys by hand, a flight), **M6 Crew** phases 1-2 (ADR 0011: launcher crew screen, crew turns and banter in a live session; one scene checked live).
+- Next task: live checks above; then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal sync and KWin focus check (roadmap).
 - Known: flash-lite on the free key; 429s park a model 15 min, then `fallback_api_key_env`. ElevenLabs Pro, Gemini TTS fallback. GUI needs evdev push-to-talk. Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
 ## Rules
