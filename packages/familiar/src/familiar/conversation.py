@@ -14,7 +14,12 @@ from familiar.crew import Crew, persona_id
 from familiar.fallback import llm_budget_blocked
 from familiar.flavor import FlavorKeeper, flavor_hint
 from familiar.hands import ActionKeeper
-from familiar.history import DefaultHistoryRenderer, HistoryRecord, HistoryRenderer
+from familiar.history import (
+    DefaultHistoryRenderer,
+    HistoryRecord,
+    HistoryRenderer,
+    strip_history_labels,
+)
 from familiar.interfaces import (
     GameEvent,
     LLMProvider,
@@ -45,6 +50,23 @@ ACTION_RULE = (
     "confirm_action only after the player answers yes in a later message. Never say an "
     "action happened unless its status is done or already. Say plainly when it is "
     "unavailable or unknown."
+)
+
+
+HANDOFF_SPEC = ToolSpec(
+    "hand_to_carrier",
+    "Hand the player's request to the carrier to operate the ship or game in this reply.",
+    {
+        "type": "object",
+        "properties": {
+            "line": {
+                "type": "string",
+                "description": "Optional in-character spoken remark (at most 200 characters).",
+                "maxLength": 200,
+            }
+        },
+        "additionalProperties": False,
+    },
 )
 
 
@@ -249,7 +271,9 @@ class Conversation:
         if any(chunk.tool_call is not None for chunk in chunks):
             logging.getLogger(__name__).debug("Dropping banter: unexpected tool call")
             return
-        lines = parse_scene("".join(chunk.text for chunk in chunks), self.crew, self.language)
+        lines = parse_scene(
+            strip_history_labels("".join(chunk.text for chunk in chunks)), self.crew, self.language
+        )
         speakers = {speaker for speaker, _ in lines}
         extras = [speaker for speaker, _ in lines if speaker not in pair]
         if not lines or not set(pair).issubset(speakers) or len(extras) > 1:
@@ -358,6 +382,12 @@ class Conversation:
         kinds = {True: "player", False: "game_event"}
         self._record_message(Message("user", text), kind=kinds[player_turn])
         self._remember_many([])
+        async with aclosing(self._respond(text, player_turn)) as sentences:
+            async for sentence in sentences:
+                yield sentence
+
+    async def _respond(self, text: str, player_turn: bool) -> AsyncIterator[str]:
+        """Respond to the current request without recording another player turn."""
         system = ""
         context = self.context() if self.context is not None else ""
         if context:
@@ -370,16 +400,19 @@ class Conversation:
         specs = []
         if player_turn:
             specs = self.tools.specs(carrier=self.speaker == self.crew.carrier)
+        handoff = player_turn and self.speaker != self.crew.carrier and self.tools.has_carrier_tools
+        if handoff:
+            specs.append(HANDOFF_SPEC)
         if any(spec.name == "set_alert" for spec in specs):
             system += ALERT_RULE
         if any(spec.name.startswith("act_") for spec in specs):
             system += ACTION_RULE
-        async with aclosing(self._reply_round(system, specs)) as sentences:
+        async with aclosing(self._reply_round(system, specs, request=text)) as sentences:
             async for sentence in sentences:
                 yield sentence
 
     async def _reply_round(
-        self, system: str, specs: list[ToolSpec], round_index: int = 0
+        self, system: str, specs: list[ToolSpec], round_index: int = 0, request: str = ""
     ) -> AsyncIterator[str]:
         calls: list[ToolCall] = []
         offered = []
@@ -390,12 +423,53 @@ class Conversation:
                 yield sentence
         if not calls:
             return
+        handoff = next((call for call in calls if call.name == HANDOFF_SPEC.name), None)
+        if handoff is not None and HANDOFF_SPEC in offered:
+            async with aclosing(self._hand_off(handoff, calls, request)) as sentences:
+                async for sentence in sentences:
+                    yield sentence
+            return
         await self._execute_calls(calls, offered)
         if not offered:
             return
-        async with aclosing(self._reply_round(system, specs, round_index + 1)) as sentences:
+        async with aclosing(
+            self._reply_round(system, specs, round_index + 1, request)
+        ) as sentences:
             async for sentence in sentences:
                 yield sentence
+
+    async def _hand_off(
+        self, handoff: ToolCall, calls: list[ToolCall], request: str
+    ) -> AsyncIterator[str]:
+        # Complete every protocol call, but execute none of this round's other tools.
+        results = {
+            True: {"status": "handed_off", "detail": self.crew.carrier.display_name},
+            False: {"error": "Skipped because this round handed the request to the carrier"},
+        }
+        self._remember_many([self._tool_result(call, results[call is handoff]) for call in calls])
+        async with aclosing(self._handoff_line(handoff.arguments.get("line", ""))) as sentences:
+            async for sentence in sentences:
+                yield sentence
+        self.speaker = self.crew.carrier
+        async with aclosing(self._respond(request, player_turn=True)) as sentences:
+            async for sentence in sentences:
+                yield sentence
+
+    async def _handoff_line(self, line: object) -> AsyncIterator[str]:
+        if not isinstance(line, str):
+            return
+        line = strip_history_labels(self.crew.strip_prefix(line[:200], self.language))
+        if not line:
+            return
+        before = self._playback_acks
+        heard = False
+        try:
+            yield line
+            heard = self._was_heard(before)
+            self._note_heard(heard)
+        finally:
+            self._record_message(Message("assistant", line), heard=heard)
+            self._log_line(line, heard)
 
     async def _execute_calls(self, calls: list[ToolCall], offered: list[ToolSpec]) -> None:
         results = []
@@ -438,8 +512,8 @@ class Conversation:
 
     def _clean_sentence(self, sentence: str, first: bool) -> str:
         if first:
-            return self.crew.strip_prefix(sentence, self.language)
-        return sentence
+            sentence = self.crew.strip_prefix(sentence, self.language)
+        return strip_history_labels(sentence)
 
     async def _stream_sentences(self, system, tools, calls, fragments) -> AsyncIterator[str]:
         prompt, messages = self.renderer.render(
@@ -480,7 +554,7 @@ class Conversation:
             self._finish_round(fragments, calls, completed, heard)
 
     def _finish_round(self, fragments, calls, completed: bool, heard: bool) -> None:
-        text = self.crew.strip_prefix("".join(fragments), self.language)
+        text = strip_history_labels(self.crew.strip_prefix("".join(fragments), self.language))
         self._log_line(text, completed and heard)
         if text or calls:
             # Defer trimming until results have been attached to their calls.
