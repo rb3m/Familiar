@@ -1,0 +1,7 @@
+# Processes whose presence means Elite is running; binds must only be written
+# while the game is closed, because Elite rewrites the preset on exit.
+# Matched case-insensitively as substrings of /proc/*/cmdline (Proton paths included).
+# Override: ~/.config/familiar/data/familiar_elite/processes.yaml
+names:
+  - EliteDangerous64.exe
+  - EliteDangerous32.exe
