@@ -1,0 +1,8 @@
+# DJ tuning; override ~/.config/familiar/data/familiar_music/music.yaml; restart to reload.
+duck_level: 0.25
+queue_top_up: 5
+track_remark_cooldown_s: 900
+reseed_cooldown_s: 15
+search_timeout_s: 10
+search_limit: 8
+calmer_query: calm relaxing music

@@ -48,7 +48,7 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
 ## Plugin API 2.0: structured tool history
 
 API 2.0 is a breaking interface change; all in-repo plugins use the shared
-`PLUGIN_API_VERSION = "2.0"`. External plugins must declare API major 2 after updating their
+`PLUGIN_API_VERSION` (currently `"2.1"`). External plugins must declare API major 2 after updating their
 message translation; the loader rejects API 1 plugins.
 
 `Message` retains `role` and `text` and adds `tool_calls: tuple[ToolCall, ...] = ()` for assistant
@@ -251,3 +251,17 @@ directory or controls file. `--suggest` merges risky draft actions for unused ke
 controls into the user's `actions.yaml`, preserving existing entries. Review descriptions,
 risk and state behavior before restarting Familiar to use drafts. Missing profile controls
 remain unbound; only sessions without a controls file use packaged default keys.
+
+## Add a companion service
+
+Implement `familiar.interfaces.CompanionService` and register a `familiar.services` entry point.
+`events()` yields ordinary `GameEvent` values without a game snapshot; core marks their origin
+so game connection/pause gates do not suppress them. `service_tools()` returns `ServiceTool`
+values with JSON-schema parameters, async dictionary-returning handlers and `carrier_only`.
+`describe()` must return cached prompt context quickly, or an empty string. `speech_state()`
+receives complete immutable listening/speaking/critical state and the spoken event kind;
+make repeated states idempotent and restore resources in `aclose()`. Core isolates failures.
+API 2.1 is additive and remains compatible with API major 2 plugins. `[music]` selects the first
+service; settings other than `enabled` and `service` pass through to its constructor. Core
+injects `dislike_read()` and `dislike_write(video_id, artists)` callbacks when memory is enabled;
+plugins must import only `familiar.interfaces`, never core memory or voice implementations.

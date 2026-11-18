@@ -157,3 +157,28 @@ max_alerts = 8            # integer from 1 to 8
 # en = ["proceed"]
 # [hands.negatives]
 # en = ["hold on"]
+
+[music]
+enabled = false          # companion DJ, beside any game or in desk voice mode
+service = "pear"         # familiar.services entry point
+# Optional service settings below override packaged YAML defaults.
+# base_url = "http://127.0.0.1:26538"
+# client_id = "familiar"  # approve this client once in Pear Desktop
+# call_timeout_s = 5      # deadline for each REST call
+# auth_timeout_s = 60     # time to click Allow during the handshake
+# poll_interval_s = 5     # low-rate now-playing poll
+# recovery_interval_s = 30 # quiet health re-check while the player is unavailable
+# token_path = "familiar/music/pear-token" # relative to XDG_STATE_HOME (~/.local/state)
+# duck_level = 0.25       # fraction of the user's base volume while listening/speaking
+# queue_top_up = 5        # short radio batch; excludes queued IDs and dislikes
+# track_remark_cooldown_s = 900 # minimum gap between spontaneous track remarks
+# reseed_cooldown_s = 15  # minimum gap for calmer / more-like-this requests
+# search_timeout_s = 10  # deadline for blocking discovery calls (run in a worker thread)
+# search_limit = 8        # candidate songs per search
+# calmer_query = "calm relaxing music"
+# Pear endpoints and queue insertion constants live in familiar_music/pear.yaml;
+# override with ~/.config/familiar/data/familiar_music/pear.yaml. DJ tuning is in
+# familiar_music/music.yaml at the same override root. Restart Familiar to reload.
+# Optional [music.endpoints] replaces individual named paths (auth, song, volume,
+# play, pause, next, queue, like, dislike). insert_now / insert_end override queue
+# insertion constants. Prefer YAML for these API details.

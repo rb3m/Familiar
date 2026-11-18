@@ -170,3 +170,22 @@ clarifying turns preserve pending actions. Pending consent is consumed before ex
 Core owns the optional `Keyboard` backend (`familiar.keyboard`, initially Linux uinput),
 serialises chords and releases keys on cancellation and shutdown. Packs own game safety and
 bindings. See ADR 0009; these additive protocols retain API 2.0.
+
+## Companion services
+
+API 2.1 adds `CompanionService` alongside the game adapter: a `familiar.services` plugin
+provides an asynchronous event stream, `ServiceTool` specifications and handlers (including
+carrier-only visibility), a cached `describe()` line, a `SpeechState` hook and async cleanup.
+Core registers tools in the conversation and combines service context with game context.
+Voice serializes listening/speaking/critical changes, including the active interjection kind,
+and waits for coordination before playback. Hook/feed/cleanup failures are logged and isolated.
+Service events retain Director deadlines, busy gates and cooldowns but bypass game connection
+and pause gates. A service also creates a desk Director when there is no game or crew banter.
+
+The optional `[music]` service is disabled by default. `familiar-music` owns Pear playback,
+threaded YouTube Music discovery, radio selection and a single duck/pause coordinator.
+Track remarks pause music; ordinary speech ducks against a separately remembered base volume.
+Critical pauses resume only while ownership survives explicit user controls and observed track
+or playback changes. An external pause command issued while playback is already paused cannot
+be distinguished through Pear's state-only API. Dislikes use injected MemoryStore callbacks,
+independent of games/personas; disabled memory uses process-local taste instead.

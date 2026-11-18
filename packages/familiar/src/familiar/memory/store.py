@@ -70,6 +70,13 @@ class MemoryStore:
                 raise ValueError(f"Unsupported memory schema version: {version[0]}")
             self.db.executescript(_SCHEMA)
             self.db.executescript(_FLAVOR_SCHEMA)
+            self.db.executescript("""
+                CREATE TABLE IF NOT EXISTS music_dislikes (
+                    video_id TEXT NOT NULL, artist TEXT NOT NULL,
+                    PRIMARY KEY(video_id, artist)
+                );
+                CREATE INDEX IF NOT EXISTS music_dislikes_artist ON music_dislikes(artist);
+            """)
             with self.db:
                 self.db.execute("BEGIN")
                 self._migrate_attribution()
@@ -132,6 +139,25 @@ class MemoryStore:
             )
             return
         self.db.execute(f"UPDATE {table} SET speaker = persona")
+
+    def dislike_music(self, video_id: str, artists: tuple[str, ...]) -> None:
+        """Record distinct tracks per artist, independently of game/session."""
+        with self.db:
+            self.db.executemany(
+                "INSERT OR IGNORE INTO music_dislikes VALUES (?, ?)",
+                [(video_id, artist.casefold()) for artist in artists] or [(video_id, "")],
+            )
+
+    def music_dislikes(self) -> tuple[set[str], set[str]]:
+        tracks = {row[0] for row in self.db.execute("SELECT DISTINCT video_id FROM music_dislikes")}
+        artists = {
+            row[0]
+            for row in self.db.execute(
+                "SELECT artist FROM music_dislikes WHERE artist != '' "
+                "GROUP BY artist HAVING COUNT(DISTINCT video_id) >= 2"
+            )
+        }
+        return tracks, artists
 
     def close(self) -> None:
         self.db.close()

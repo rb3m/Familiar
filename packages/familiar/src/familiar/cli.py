@@ -9,7 +9,7 @@ import signal
 import sys
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from familiar.alerts import AlertKeeper
@@ -25,6 +25,7 @@ from familiar.hands import ActionKeeper
 from familiar.interfaces import (
     Actuator,
     BackendError,
+    CompanionService,
     ConfigError,
     GameAdapter,
     GameEvent,
@@ -93,6 +94,7 @@ class _Runtime:
     crew: Crew | None = None
     active_conversation: Conversation | None = None
     session: SessionSettings | None = None
+    services: list[CompanionService] = field(default_factory=list)
 
     def voice_for(self, name: str) -> str | None:
         persona = self.persona
@@ -119,6 +121,7 @@ class _Runtime:
         if name:
             adapter = load("games", name, self.config.games.get(name, {}))
             self.stack.push_async_callback(close_backend, adapter)
+        contexts = [adapter] if adapter is not None else []
         conversation = Conversation(
             self.backend("llm", self.config.llm),
             self.persona,
@@ -128,20 +131,6 @@ class _Runtime:
             game=adapter.game if adapter is not None else None,
             crew=self.crew,
         )
-        banter = 0
-        if self.session is not None:
-            banter = self.session.banter
-        if adapter is not None or (banter > 0 and len(conversation.crew.members) > 1):
-            director = Director(
-                self.persona.chattiness,
-                self.config.director,
-                crew=conversation.crew,
-                banter=banter,
-                banter_blocked=conversation.banter_blocked,
-                desk=adapter is None,
-            )
-            conversation.banter_started = director.banter_started
-        self.active_conversation = conversation
         if self.config.memory.get("enabled", True):
             conversation.memory = MemoryKeeper(
                 MemoryStore(self.config.memory.get("path")),
@@ -152,6 +141,28 @@ class _Runtime:
                 crew=tuple(persona_id(member) for member in conversation.crew.members),
             )
             self.stack.push_async_callback(conversation.aclose)
+        self._music(conversation)
+        contexts.extend(self.services)
+        if self.services:
+            conversation.context = lambda: self._describe(contexts)
+        banter = 0
+        if self.session is not None:
+            banter = self.session.banter
+        if (
+            adapter is not None
+            or self.services
+            or (banter > 0 and len(conversation.crew.members) > 1)
+        ):
+            director = Director(
+                self.persona.chattiness,
+                self.config.director,
+                crew=conversation.crew,
+                banter=banter,
+                banter_blocked=conversation.banter_blocked,
+                desk=adapter is None,
+            )
+            conversation.banter_started = director.banter_started
+        self.active_conversation = conversation
         if self.config.flavor.get("enabled", True):
             conversation.flavor = FlavorKeeper(
                 conversation.memory.store if conversation.memory is not None else None,
@@ -175,6 +186,38 @@ class _Runtime:
             conversation.actions = ActionKeeper(adapter, self.config.hands, self.language)
             conversation.actions.register(conversation.tools)
         return conversation, adapter, director
+
+    @staticmethod
+    def _describe(sources) -> str:
+        lines = []
+        for source in sources:
+            try:
+                lines.append(source.describe())
+            except Exception:
+                logging.getLogger(__name__).exception("Prompt context unavailable")
+        return "\n".join(filter(None, lines))
+
+    def _music(self, conversation: Conversation) -> None:
+        if not self.config.music.get("enabled", False):
+            return
+        settings = {
+            key: value
+            for key, value in self.config.music.items()
+            if key not in {"enabled", "service"}
+        }
+        if conversation.memory is not None:
+            settings.update(
+                dislike_read=conversation.memory.store.music_dislikes,
+                dislike_write=conversation.memory.store.dislike_music,
+            )
+        try:
+            service = load("services", self.config.music["service"], settings)
+            self.stack.push_async_callback(close_backend, service)
+            for tool in service.service_tools():
+                conversation.tools.register(tool.spec, tool.handler, carrier_only=tool.carrier_only)
+            self.services.append(service)
+        except Exception:
+            logging.getLogger(__name__).exception("Music service unavailable")
 
     def speech(self, kind: str) -> Any:
         spec = getattr(self.config, kind)
@@ -334,6 +377,7 @@ async def _voice(args: argparse.Namespace) -> None:
             adapter=adapter,
             director=director,
             seats=dict(session.seats) if stereo and session else None,
+            services=runtime.services,
         ).run()
 
 

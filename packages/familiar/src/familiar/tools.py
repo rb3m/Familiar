@@ -24,6 +24,7 @@ def _validate(value: object, schema: dict, path: str = "arguments") -> None:
         raise ValueError(f"{path} must be {kind}")
     if "enum" in schema and value not in schema["enum"]:
         raise ValueError(f"{path} must be one of {schema['enum']}")
+    _validate_bounds(value, schema, path)
     if not isinstance(value, dict):
         return
     missing = set(schema.get("required", ())) - value.keys()
@@ -35,6 +36,15 @@ def _validate(value: object, schema: dict, path: str = "arguments") -> None:
     for key, item in value.items():
         if key in properties:
             _validate(item, properties[key], f"{path}.{key}")
+
+
+def _validate_bounds(value: object, schema: dict, path: str) -> None:
+    if type(value) not in {int, float}:
+        return
+    if value < schema.get("minimum", float("-inf")):
+        raise ValueError(f"{path} is below minimum")
+    if value > schema.get("maximum", float("inf")):
+        raise ValueError(f"{path} exceeds maximum")
 
 
 class ToolRegistry:

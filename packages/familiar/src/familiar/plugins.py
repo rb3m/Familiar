@@ -11,6 +11,7 @@ GROUPS = {
     "stt": "familiar.stt",
     "tts": "familiar.tts",
     "games": "familiar.games",
+    "services": "familiar.services",
     "commands": "familiar.commands",
 }
 GROUPS["ptt"] = "familiar.ptt"

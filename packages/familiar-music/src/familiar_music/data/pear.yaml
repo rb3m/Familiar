@@ -1,0 +1,20 @@
+# Pear API defaults; override ~/.config/familiar/data/familiar_music/pear.yaml.
+base_url: http://127.0.0.1:26538
+client_id: familiar
+call_timeout_s: 5
+auth_timeout_s: 60
+poll_interval_s: 5
+recovery_interval_s: 30
+token_path: familiar/music/pear-token
+endpoints:
+  auth: /auth/{id}
+  song: /api/v1/song-info
+  volume: /api/v1/volume
+  play: /api/v1/play
+  pause: /api/v1/pause
+  next: /api/v1/next
+  queue: /api/v1/queue
+  like: /api/v1/like
+  dislike: /api/v1/dislike
+insert_now: INSERT_AFTER_CURRENT_VIDEO
+insert_end: INSERT_AT_END
