@@ -8,7 +8,8 @@ from pathlib import Path
 
 from .text import words
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+CREW_MOMENT_CAP = 300
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (
@@ -62,22 +63,51 @@ class MemoryStore:
         self.revision = 0
         try:
             self.db.execute("PRAGMA journal_mode=WAL")
-            self.db.execute("PRAGMA foreign_keys=ON")
+            self.db.execute("PRAGMA foreign_keys=OFF")
             self.db.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
             version = self.db.execute("SELECT version FROM schema_version").fetchone()
-            if version is not None and version[0] not in {1, 2, SCHEMA_VERSION}:
+            if version is not None and version[0] not in {1, 2, 3, SCHEMA_VERSION}:
                 raise ValueError(f"Unsupported memory schema version: {version[0]}")
+            self.db.executescript(_SCHEMA)
+            self.db.executescript(_FLAVOR_SCHEMA)
             with self.db:
-                self.db.executescript(_SCHEMA)
-                self.db.executescript(_FLAVOR_SCHEMA)
+                self.db.execute("BEGIN")
                 self._migrate_attribution()
+                self._migrate_moments()
                 if version is None:
                     self.db.execute("INSERT INTO schema_version VALUES (?)", (SCHEMA_VERSION,))
                 if version is not None and version[0] < SCHEMA_VERSION:
                     self.db.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+            self.db.execute("PRAGMA foreign_keys=ON")
         except BaseException:
             self.close()
             raise
+
+    def _migrate_moments(self) -> None:
+        """Keep fact deduplication, but allow multiple crew scenes at one place."""
+        sql = self.db.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'episodes'"
+        ).fetchone()[0]
+        if "UNIQUE(session_id, kind, place_key)" in sql:
+            self._rebuild_episodes(sql)
+        self.db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS episodes_fact_unique "
+            "ON episodes(session_id, kind, place_key) WHERE kind != 'crew_moment'"
+        )
+        self.db.execute(
+            "CREATE INDEX IF NOT EXISTS episodes_place ON episodes(game, place_key, session_id)"
+        )
+        self.db.execute(
+            "CREATE INDEX IF NOT EXISTS episodes_region ON episodes(game, region, session_id)"
+        )
+
+    def _rebuild_episodes(self, sql: str) -> None:
+        sql = sql.replace("CREATE TABLE episodes", "CREATE TABLE episodes_new", 1)
+        sql = sql.replace(",\n    UNIQUE(session_id, kind, place_key)", "")
+        self.db.execute(sql)
+        self.db.execute("INSERT INTO episodes_new SELECT * FROM episodes")
+        self.db.execute("DROP TABLE episodes")
+        self.db.execute("ALTER TABLE episodes_new RENAME TO episodes")
 
     def _migrate_attribution(self) -> None:
         """Older rows inherit the session's single persona; game facts stay grounded."""
@@ -139,13 +169,15 @@ class MemoryStore:
     ) -> int | None:
         if source not in {"player_observed", "game", "persona_claim"}:
             raise ValueError(f"Invalid memory source: {source}")
+        if kind == "crew_moment" and source != "persona_claim":
+            raise ValueError("Crew moments must be persona claims")
         with self.db:
             cursor = self.db.execute(
                 """INSERT INTO episodes
                 (session_id, game, ts_utc, kind, place_key, place, region, activity, text, salience,
                  speaker, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(session_id, kind, place_key) DO UPDATE SET
+                ON CONFLICT(session_id, kind, place_key) WHERE kind != 'crew_moment' DO UPDATE SET
                 text = excluded.text, source = excluded.source, speaker = excluded.speaker,
                 salience = excluded.salience, ts_utc = excluded.ts_utc,
                 place = excluded.place, region = excluded.region, activity = excluded.activity
@@ -168,10 +200,37 @@ class MemoryStore:
                 ),
             )
             row = cursor.fetchone()
+            if kind == "crew_moment":
+                self._prune_crew_moments(game)
         if row is None:
             return None
         self.revision += 1
         return row[0]
+
+    def _prune_crew_moments(self, game: str) -> None:
+        stale = "SELECT id FROM episodes WHERE game = ? AND kind = 'crew_moment' "
+        stale += "ORDER BY ts_utc DESC, id DESC LIMIT -1 OFFSET ?"
+        parameters = (game, CREW_MOMENT_CAP)
+        self.db.execute(f"DELETE FROM recalls WHERE episode_id IN ({stale})", parameters)
+        self.db.execute(f"DELETE FROM episodes WHERE id IN ({stale})", parameters)
+
+    def crew_moments(self, game: str) -> list[dict]:
+        return [
+            dict(row)
+            for row in self.db.execute(
+                "SELECT * FROM episodes WHERE game = ? AND kind = 'crew_moment' "
+                "AND source = 'persona_claim' ORDER BY ts_utc DESC, id DESC",
+                (game,),
+            )
+        ]
+
+    def moment_last_use(self, episode_id: int) -> datetime | None:
+        row = self.db.execute(
+            "SELECT MAX(ts_utc) FROM recalls WHERE episode_id = ?", (episode_id,)
+        ).fetchone()
+        if row[0]:
+            return datetime.fromisoformat(row[0])
+        return None
 
     def _episodes(
         self, game: str, session_id: int, condition: str, parameters: tuple, limit: int

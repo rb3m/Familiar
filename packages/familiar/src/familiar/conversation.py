@@ -24,6 +24,7 @@ from familiar.interfaces import (
     ToolSpec,
 )
 from familiar.memory import MemoryKeeper
+from familiar.memory.keeper import CREW_REPLY_WINDOW
 from familiar.persona import Persona
 from familiar.pipeline.sentences import SentenceSplitter
 from familiar.tools import ToolRegistry
@@ -89,6 +90,7 @@ class Conversation:
         self.playback_ack_required = False
         self._playback_acks = 0
         self.casting = Casting()
+        self._crew_reply_candidate = None
         self.banter_started: Callable[[], None] = lambda: None
 
     def acknowledge_playback(self) -> None:
@@ -138,6 +140,7 @@ class Conversation:
         if self.actions is not None:
             self.actions.begin_turn(user_text)
         self.speaker = self.crew.pick_for_utterance(user_text, self.language)
+        self._remember_crew_reply()
         self.transcript.record(
             "user", text=user_text, speaker_id="player", source="player_observed"
         )
@@ -231,6 +234,8 @@ class Conversation:
             + "\nRecent chronological transcript (unheard lines were NOT said):\n"
             + renderer.chronological(self.records, self.crew)
         )
+        if self.memory is not None:
+            prompt += self.memory.crew_callback()
         async with aclosing(
             self.llm.stream([Message("user", "Write the scene.")], prompt, [])
         ) as source:
@@ -245,17 +250,24 @@ class Conversation:
             logging.getLogger(__name__).debug("Dropping malformed banter scene")
             return
         self.banter_started()
+        self._crew_reply_candidate = None
         records = [HistoryRecord(key, "banter", text, False) for key, text in lines]
         members = {persona_id(member): member for member in self.crew.members}
         try:
             for index, record in enumerate(records):
                 self.speaker = members[record.speaker_id]
                 before = self._playback_acks
-                yield record.text
-                heard = self._was_heard(before)
-                records[index] = HistoryRecord(record.speaker_id, "banter", record.text, heard)
-                self._note_heard(heard)
+                resumed = False
+                try:
+                    yield record.text
+                    resumed = True
+                finally:
+                    heard = self._was_heard(before) and (resumed or self.playback_ack_required)
+                    records[index] = HistoryRecord(record.speaker_id, "banter", record.text, heard)
+                    self._note_heard(heard)
+                    self._offer_crew_reply(record.speaker_id, record.text, heard)
         finally:
+            self._remember_scene(records)
             self.records.extend(records)
             self._remember_many([])
             for record in records:
@@ -266,6 +278,29 @@ class Conversation:
                     heard=record.heard,
                     source="persona_claim",
                 )
+
+    def _remember_scene(self, records: list[HistoryRecord]) -> None:
+        if self.memory is None or not all(record.heard for record in records):
+            return
+        self._crew_reply_candidate = None
+        self.memory.remember_crew([(record.speaker_id, record.text) for record in records])
+
+    def _offer_crew_reply(self, speaker: str, text: str, heard: bool) -> None:
+        if self.memory is None or not heard or not text:
+            return
+        self._crew_reply_candidate = (speaker, text, self.memory.clock())
+
+    def _remember_crew_reply(self) -> None:
+        candidate = self._crew_reply_candidate
+        self._crew_reply_candidate = None
+        if self.memory is None or candidate is None:
+            return
+        speaker, text, timestamp = candidate
+        if speaker != persona_id(self.speaker):
+            return
+        if self.memory.clock() - timestamp > CREW_REPLY_WINDOW:
+            return
+        self.memory.remember_crew([(speaker, text)])
 
     def _event_speaker(self, event: GameEvent) -> Persona:
         if event.priority == "critical":
@@ -281,6 +316,8 @@ class Conversation:
         return self.crew.pick_for_event(event)
 
     def _log_line(self, text: str, heard: bool) -> None:
+        self._crew_reply_candidate = None
+        self._offer_crew_reply(persona_id(self.speaker), text, heard)
         fields = {}
         if not heard:
             fields["interrupted"] = True

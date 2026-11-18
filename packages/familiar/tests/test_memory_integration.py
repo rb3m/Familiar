@@ -204,7 +204,10 @@ async def test_desk_session_saved_before_llm_is_closed(tmp_path, monkeypatch, pe
     session = dict(store.db.execute("SELECT * FROM sessions").fetchone())
     assert session["summary"] == "We hauled cattle. We visited France."
     assert session["ended_utc"] is not None
-    assert store.db.execute("SELECT COUNT(*) FROM episodes").fetchone()[0] == 0
+    moments = store.crew_moments("")
+    assert len(moments) == 1  # The second player turn directly answers a heard crew reply.
+    assert moments[0]["source"] == "persona_claim"
+    assert store.known_terms("") == set()
     store.close()
 
 
