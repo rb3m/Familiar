@@ -143,3 +143,14 @@ def test_optional_crew_fields_roundtrip(tmp_path, persona):
     assert loaded == updated
     assert loaded.names("es") == ["Test", "Prueba"]
     assert loaded.names("en") == ["Test"]
+
+
+def test_spoken_units_keep_the_units_given_in_data():
+    from familiar.persona import SPOKEN_RULE
+
+    assert "ly as light-years" in SPOKEN_RULE
+    assert "km/h as kilometres per hour" in SPOKEN_RULE
+    assert "mph as miles per hour" in SPOKEN_RULE
+    assert "never convert to another unit" in SPOKEN_RULE
+    assert "gallons" not in SPOKEN_RULE
+    assert "pounds" not in SPOKEN_RULE

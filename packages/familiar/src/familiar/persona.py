@@ -53,8 +53,9 @@ PRACTICAL_FACTS_RULE = (
 )
 SPOKEN_RULE = (
     "Your replies are spoken aloud by a text-to-speech voice. Write units and abbreviations as "
-    "full words (hours, minutes, miles per hour, gallons, pounds), even when the game data you "
-    "were given abbreviates them, and avoid symbols that read badly aloud."
+    "full words exactly as given in the data (ly as light-years, km/h as kilometres per hour, "
+    "mph as miles per hour); never convert to another unit, and avoid symbols that read "
+    "badly aloud."
 )
 TRUTHFULNESS_RULES = {
     "strict": (

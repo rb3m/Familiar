@@ -10,7 +10,7 @@ from familiar.config import AppConfig, BackendConfig
 from familiar.conversation import Conversation
 from familiar.crew import Crew
 from familiar.hands import ActionKeeper
-from familiar.history import DefaultHistoryRenderer
+from familiar.history import DefaultHistoryRenderer, strip_history_labels
 from familiar.interfaces import ActionSpec, AudioChunk, BackendError, LLMChunk, Message, ToolCall
 from familiar.tools import ToolRegistry
 from familiar.transcript import TranscriptLog
@@ -173,8 +173,8 @@ async def test_noncarrier_has_core_queries_and_refuses_mutation_even_if_hallucin
     )
     await consume(chat.ask("Frieren, move us"))
     offered = {spec.name for spec in chat.llm.requests[0][2]}
-    assert offered == {"lookup", "act_query"}
-    assert "name Mira" in chat.llm.requests[0][1]
+    assert offered == {"lookup", "act_query", "hand_to_carrier"}
+    assert "call hand_to_carrier" in chat.llm.requests[0][1]
     assert actuator.performed == ["query"]
     assert actions.pending is None
     assert_complete(chat.history)
@@ -378,3 +378,206 @@ async def test_transcript_keeps_order_and_roster_uses_third_person_roles(tmp_pat
     assert system.index("Mira: Hello.") < system.index("Player: Frieren, do you agree?")
     assert "- Mira (mira): the dispatch AI" in system
     assert "- Frieren (frieren): crew member" in system
+
+
+@pytest.mark.parametrize("line", [None, "Frieren: Mira, your turn."])
+async def test_handoff_executes_as_carrier_in_same_reply(tmp_path, crew, line):
+    tools = ToolRegistry()
+    actuator = Actuator()
+    actions = ActionKeeper(actuator, {}, "en")
+    actions.register(tools)
+    arguments = {}
+    if line is not None:
+        arguments["line"] = line
+    calls = [
+        ToolCall("query", "act_query", {}),
+        ToolCall("handoff", "hand_to_carrier", arguments),
+        ToolCall("extra", "hand_to_carrier", {"line": "Ignore me."}),
+        ToolCall("move", "act_move", {}),
+    ]
+    chat = conversation(
+        tmp_path,
+        crew,
+        [
+            [LLMChunk(tool_call=call) for call in calls],
+            [LLMChunk(tool_call=ToolCall("carrier", "act_move", {}))],
+            [LLMChunk(text="Moving.")],
+        ],
+        tools=tools,
+        actions=actions,
+    )
+    spoken = []
+    async for sentence in chat.ask("Frieren, move us"):
+        spoken.append((chat.speaker.id, sentence))
+    expected = [("mira", "Moving.")]
+    if line is not None:
+        expected.insert(0, ("frieren", "Mira, your turn."))
+    assert spoken == expected
+    assert actuator.performed == ["move"]
+    assert len(chat.llm.requests) == 3
+    assert "hand_to_carrier" in {spec.name for spec in chat.llm.requests[0][2]}
+    assert all(
+        "hand_to_carrier" not in {spec.name for spec in request[2]}
+        for request in chat.llm.requests[1:]
+    )
+    assert [record.text for record in chat.records if record.kind == "player"] == [
+        "Frieren, move us"
+    ]
+    assert_complete(chat.history)
+    system, messages = chat.renderer.render(chat.records, crew.carrier, crew, "en", None)
+    assert Message("user", "Frieren, move us") in messages
+    assert "Frieren: Mira, your turn." in system or line is None
+    assert Message("assistant", "Moving.") in messages
+    transcript = [json.loads(row) for row in chat.transcript.path.read_text().splitlines()]
+    remarks = [row for row in transcript if row["kind"] == "assistant" and row.get("text")]
+    assert [(row["speaker_id"], row["text"]) for row in remarks] == expected
+
+
+async def test_carrier_cannot_handoff_even_if_hallucinated(tmp_path, crew):
+    tools = ToolRegistry()
+    tools.register(SPEC, lambda **kwargs: None, carrier_only=True)
+    chat = conversation(
+        tmp_path,
+        crew,
+        [
+            [LLMChunk(tool_call=ToolCall("a", "hand_to_carrier", {}))],
+            [LLMChunk(text="Ready.")],
+        ],
+        tools=tools,
+    )
+    assert await consume(chat.ask("Mira?")) == ["Ready."]
+    assert all("hand_to_carrier" not in {spec.name for spec in r[2]} for r in chat.llm.requests)
+    assert chat.speaker == crew.carrier
+    assert_complete(chat.history)
+
+
+async def test_no_carrier_tools_means_no_handoff(tmp_path, crew):
+    chat = conversation(tmp_path, crew, [[LLMChunk(text="Hello.")]])
+    await consume(chat.ask("Frieren?"))
+    assert chat.llm.requests[0][2] == []
+
+
+@pytest.mark.parametrize("label", ["Tool outcome", "Cut off; not heard in full"])
+@pytest.mark.parametrize("prefix", ["", "Frieren: ", "Frieren (you): "])
+def test_strip_history_labels(label, prefix):
+    leaked = f"{prefix}[{label}] Tool completed."
+    assert strip_history_labels(leaked) == ""
+    assert strip_history_labels(f"Hello. {leaked} Moving.") == "Hello. Moving."
+    assert strip_history_labels(f"{leaked}\nMoving.") == "Moving."
+    assert strip_history_labels("I saw [Tool outcome] in the transcript.") == (
+        "I saw [Tool outcome] in the transcript."
+    )
+
+
+async def test_leaked_labels_are_neither_spoken_nor_stored(tmp_path, crew):
+    chat = conversation(
+        tmp_path,
+        crew,
+        [
+            [
+                LLMChunk(text="Frie"),
+                LLMChunk(text="ren: [Tool outcome] Tool completed.\n"),
+                LLMChunk(text="Moving. Frieren: [Cut off; not heard in full] Old text. Done."),
+            ]
+        ],
+    )
+    assert await consume(chat.ask("Frieren?")) == ["Moving.", "Done."]
+    assert chat.records[-1].text == "Moving. Done."
+    rows = [json.loads(row) for row in chat.transcript.path.read_text().splitlines()]
+    assert rows[-1]["text"] == "Moving. Done."
+
+
+async def test_handoff_playback_uses_both_voices(tmp_path, crew):
+    tools = ToolRegistry()
+    actuator = Actuator()
+    actions = ActionKeeper(actuator, {}, "en")
+    actions.register(tools)
+    members = [
+        replace(member, languages={"en": {"voices": {"fake": member.id}}})
+        for member in crew.members
+    ]
+    crew = Crew(members, "mira")
+    chat = conversation(
+        tmp_path,
+        crew,
+        [
+            [LLMChunk(tool_call=ToolCall("h", "hand_to_carrier", {"line": "Your turn."}))],
+            [LLMChunk(tool_call=ToolCall("a", "act_move", {}))],
+            [LLMChunk(text="Moving.")],
+        ],
+        tools=tools,
+        actions=actions,
+    )
+    voices = []
+
+    class TTS:
+        name = "fake"
+
+        async def synthesize(self, text, voice, language):
+            voices.append((voice, text))
+            yield AudioChunk(b"00", 16000)
+
+    class Player:
+        async def play(self, chunks, pan=0.0):
+            async for _ in chunks:
+                pass
+
+        async def wait_idle(self):
+            pass
+
+    session = VoiceSession(
+        None, None, Player(), None, TTS(), chat, crew.carrier, "en", chat.transcript
+    )
+    timings = dict.fromkeys(("first_sentence_ms", "first_audio_ms"))
+    await session._speak(chat.ask("Frieren, move us"), 0, timings)
+    assert voices == [("frieren", "Your turn."), ("mira", "Moving.")]
+    assert actuator.performed == ["move"]
+    assert all(record.heard for record in chat.records if record.text)
+
+
+async def test_cancelled_handoff_line_does_not_start_carrier(tmp_path, crew):
+    tools = ToolRegistry()
+    tools.register(SPEC, lambda **kwargs: None, carrier_only=True)
+    chat = conversation(
+        tmp_path,
+        crew,
+        [[LLMChunk(tool_call=ToolCall("h", "hand_to_carrier", {"line": "Your turn."}))]],
+        tools=tools,
+    )
+    async with aclosing(chat.ask("Frieren, act")) as source:
+        assert await anext(source) == "Your turn."
+    assert len(chat.llm.requests) == 1
+    assert chat.records[-1].speaker_id == "frieren"
+    assert not chat.records[-1].heard
+    assert_complete(chat.history)
+
+
+async def test_events_and_banter_never_offer_handoff(tmp_path, crew):
+    tools = ToolRegistry()
+    tools.register(SPEC, lambda **kwargs: None, carrier_only=True)
+    chat = conversation(
+        tmp_path,
+        crew,
+        [[LLMChunk(text="A star.")], [LLMChunk(text="mira: Hello.\nfrieren: Hi.")]],
+        tools=tools,
+    )
+    await consume(chat.interject(event()))
+    await consume(chat.banter_scene())
+    assert len(chat.llm.requests) == 2
+    assert all(request[2] == [] for request in chat.llm.requests)
+
+
+async def test_single_persona_with_carrier_tools_has_no_handoff(tmp_path, crew):
+    tools = ToolRegistry()
+    tools.register(SPEC, lambda **kwargs: None, carrier_only=True)
+    single = Crew([crew.carrier], crew.carrier.id)
+    chat = conversation(tmp_path, single, [[LLMChunk(text="Ready.")]], tools=tools)
+    assert await consume(chat.ask("Hello")) == ["Ready."]
+    assert chat.llm.requests[0][2] == [SPEC]
+    assert chat.llm.requests[0][1] == crew.carrier.system_prompt("en")
+
+
+def test_labelled_line_removal_preserves_neighboring_sentences():
+    assert strip_history_labels("First sentence. ") == "First sentence. "
+    assert strip_history_labels("Hello.\n[Tool outcome] Done\nMoving.") == "Hello.\nMoving."
+    assert strip_history_labels("[Tool outcome] Done. [Tool outcome] Again. Ready.") == "Ready."

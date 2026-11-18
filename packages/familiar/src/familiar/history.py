@@ -1,12 +1,31 @@
 """Shared attributed records and a replaceable per-persona prompt renderer."""
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
 from familiar.crew import Crew, persona_id
 from familiar.interfaces import Message, ToolCall
 from familiar.persona import Persona
+
+HISTORY_LABELS = ("Tool outcome", "Cut off; not heard in full")
+_LABELLED_SENTENCE = re.compile(
+    r"(?:^|(?<=[.!?…。！？])|(?<=\n))\s*(?:[^\n:：\[.!?]+[:：]\s*)?\[(?:"
+    + "|".join(re.escape(label) for label in HISTORY_LABELS)
+    + r")\][\s\S]*?(?:[.!?…。！？]+(?=\s|$)|\n|$)",
+    re.IGNORECASE,
+)
+
+
+def strip_history_labels(text: str) -> str:
+    """Remove leaked labelled sentences/lines while preserving ordinary spoken text."""
+    cleaned, count = _LABELLED_SENTENCE.subn(
+        lambda match: "\n" if match.group().endswith("\n") else "", text
+    )
+    if count:
+        return cleaned.strip()
+    return text
 
 
 @dataclass(frozen=True)
@@ -67,8 +86,8 @@ class DefaultHistoryRenderer:
         if speaker != crew.carrier:
             system += (
                 f"\nOnly {crew.carrier.display_name} carries out mutating game actions. "
-                "If asked to act, answer in character and name "
-                f"{crew.carrier.display_name}. Do not claim to act or silently delegate."
+                "If asked to operate the ship or game, call hand_to_carrier when offered, "
+                "with an optional short in-character remark. Do not claim to act yourself."
             )
         # Chronological, every speaker labelled, so replies keep their order relative to the
         # player's turns; the persona's own lines also stay as model turns below.

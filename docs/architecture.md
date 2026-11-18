@@ -86,7 +86,10 @@ shared history stores speaker IDs and whether text was heard; voice acknowledges
 after audio drains. Each speaker sees her own model/tool turns and other members in a labelled
 transcript preface with compact tool outcomes. Single-persona prompts retain their existing
 form. Mutating action tools, including confirmation, are offered and dispatched only on the
-carrier's turns; core tools and `read_only` actions are available to everyone. For crews of two or three, session banter levels 1-10 replace idle remarks with one tool-free
+carrier's turns; core tools and `read_only` actions are available to everyone. Non-carriers get
+`hand_to_carrier` when carrier-only tools exist: an optional remark uses their voice, then the
+carrier handles the same request in the same reply (ADR 0013), at most once per player turn.
+For crews of two or three, session banter levels 1-10 replace idle remarks with one tool-free
 call for a validated 2-4-line scene. `banter.py` owns the gap/cap anchors (1: 1200 s, 2/h;
 5: 420 s, 5/h; 10: 120 s, 10/h), linear interpolation with caps rounded down, and a rolling
 hour budget. Only the quiet gap scales by `1.5 - mean chattiness`. Queued items and all speech

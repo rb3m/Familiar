@@ -59,6 +59,10 @@ class ToolRegistry:
         if carrier_only:
             self._carrier_only.add(spec.name)
 
+    @property
+    def has_carrier_tools(self) -> bool:
+        return bool(self._carrier_only)
+
     def specs(self, *, carrier: bool = True) -> list[ToolSpec]:
         return [
             spec
