@@ -4,6 +4,7 @@ import asyncio
 import json
 import secrets
 import time
+import tomllib
 from contextlib import suppress
 from dataclasses import asdict
 from pathlib import Path
@@ -27,6 +28,17 @@ from familiar.persona import (
     validate_persona,
 )
 from familiar.plugins import available, load, load_class
+from familiar.session_settings import (
+    VERSION as SESSION_VERSION,
+)
+from familiar.session_settings import (
+    SessionError,
+    SessionSettings,
+)
+from familiar.session_settings import default_path as default_session_path
+from familiar.session_settings import load as load_session
+from familiar.session_settings import save as save_session
+from familiar.session_settings import validate as validate_session
 
 from .personas import save_persona
 from .session import SessionConflictError, SessionManager
@@ -97,6 +109,8 @@ def summary(persona: dict, builtin: bool, overrides_builtin: bool = False) -> di
             for key in ("id", "display_name", "source", "truthfulness", "chattiness")
         },
         "languages": list(persona["languages"]),
+        "roles": persona.get("roles", {}),
+        "aliases": persona.get("aliases", {}),
         "builtin": builtin,
         "overrides_builtin": overrides_builtin,
     }
@@ -112,11 +126,49 @@ async def body(request: web.Request) -> dict:
     return data
 
 
+async def optional_body(request: web.Request) -> dict:
+    """A POST body that may be absent; an absent/empty body reads as {}."""
+    try:
+        data = await request.json()
+    except (ValueError, UnicodeError):
+        return {}
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ConfigError("Request body must be an object")
+    return data
+
+
+def problem_list(exc: SessionError) -> list[str]:
+    """Unpack the all-problems-at-once SessionError message into its items."""
+    message = str(exc)
+    prefix = "Invalid session:\n- "
+    if not message.startswith(prefix):
+        return [message]
+    return message.removeprefix(prefix).split("\n- ")
+
+
+def invalid_session(exc: SessionError) -> web.Response:
+    problems = problem_list(exc)
+    return web.json_response(
+        {"error": "Invalid session settings", "problems": problems}, status=400
+    )
+
+
 class APIService:
-    def __init__(self, config: AppConfig, config_path: Path | None, token: str) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        config_path: Path | None,
+        token: str,
+        session_path: Path | None = None,
+    ) -> None:
         self.config = config
         self.token = token
-        self.sessions = SessionManager(config, config_path)
+        self.session_path = (
+            Path(session_path).expanduser() if session_path else default_session_path()
+        )
+        self.sessions = SessionManager(config, config_path, self.session_path)
         self.shutdown = asyncio.Event()
         self.clients = 0
         self.last_client = time.monotonic()
@@ -343,10 +395,74 @@ class APIService:
                 await close_backend(backend)
         return web.json_response({"ok": True})
 
+    def settings_defaults(self) -> dict:
+        return {
+            "version": SESSION_VERSION,
+            "game": self.config.game,
+            "crew": [self.config.persona],
+            "language": self.config.language,
+            "carrier": self.config.persona,
+            "banter": 2,
+        }
+
+    def session_options(self) -> dict:
+        return {
+            "personas_dir": self.config.personas_dir,
+            "user_personas_dir": self.config.user_personas_dir,
+        }
+
+    async def get_settings(self, request: web.Request) -> web.Response:
+        """Read-only: saved selections, raw values plus problems, or derived defaults."""
+        path = self.session_path
+        if not path.exists():
+            return web.json_response({**self.settings_defaults(), "problems": []})
+        try:
+            with path.open("rb") as handle:
+                raw = tomllib.load(handle)
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            problem = f"Cannot read session {path}: {exc}"
+            return web.json_response({**self.settings_defaults(), "problems": [problem]})
+        try:
+            settings = load_session(path, **self.session_options())
+        except SessionError as exc:
+            values = {
+                key: raw.get(key)
+                for key in ("version", "game", "crew", "language", "carrier", "banter")
+            }
+            return web.json_response({**values, "problems": problem_list(exc)})
+        return web.json_response({**asdict(settings), "problems": []})
+
+    async def put_settings(self, request: web.Request) -> web.Response:
+        data = await body(request)
+        settings = SessionSettings(
+            crew=data.get("crew"),
+            language=data.get("language"),
+            carrier=data.get("carrier"),
+            game=data.get("game"),
+            banter=data.get("banter"),
+            version=data.get("version"),
+        )
+        try:
+            validate_session(settings, **self.session_options())
+        except SessionError as exc:
+            return invalid_session(exc)
+        save_session(self.session_path, settings)
+        return web.json_response(asdict(settings))
+
     async def start(self, request: web.Request) -> web.Response:
         if self.sessions.state["running"]:
             raise SessionConflictError("A session is already running")
-        data = await body(request)
+        data = await optional_body(request)
+        if data:
+            return await self.start_legacy(data)
+        try:
+            settings = load_session(self.session_path, **self.session_options())
+        except SessionError as exc:
+            return invalid_session(exc)
+        return web.json_response(await self.sessions.start_session(settings))
+
+    async def start_legacy(self, data: dict) -> web.Response:
+        """The old {game, persona, language} body: a crew of one, written nowhere."""
         persona, _ = self.persona(data.get("persona", ""))
         language = data.get("language")
         if not isinstance(language, str) or language not in persona["languages"]:
@@ -431,11 +547,17 @@ async def middleware(request: web.Request, handler: Any) -> web.StreamResponse:
 
 
 def create_app(
-    config: AppConfig | None = None, config_path: Path | None = None, token: str | None = None
+    config: AppConfig | None = None,
+    config_path: Path | None = None,
+    token: str | None = None,
+    session_path: Path | None = None,
 ) -> web.Application:
     """Construct the app without opening a socket or contacting backends."""
     api = APIService(
-        config or load_config(config_path), config_path, token or secrets.token_urlsafe(32)
+        config or load_config(config_path),
+        config_path,
+        token or secrets.token_urlsafe(32),
+        session_path,
     )
     app = web.Application(middlewares=[middleware])
     app[API] = api
@@ -450,6 +572,8 @@ def create_app(
             web.delete("/api/personas/{id}", api.delete_persona),
             web.get("/api/voices", api.voices),
             web.post("/api/voices/test", api.test_voice),
+            web.get("/api/session/settings", api.get_settings),
+            web.put("/api/session/settings", api.put_settings),
             web.post("/api/session/start", api.start),
             web.post("/api/session/stop", api.stop),
             web.post("/api/shutdown", api.exit),
@@ -485,7 +609,9 @@ def create_app(
     return app
 
 
-async def serve(port: int, no_browser: bool, config_path: str | None) -> None:
+async def serve(
+    port: int, no_browser: bool, config_path: str | None, session_path: str | None = None
+) -> None:
     from . import runtime
     from .launcher import open_window
 
@@ -496,7 +622,7 @@ async def serve(port: int, no_browser: bool, config_path: str | None) -> None:
             open_window(existing)
         return
     path = find_config_path(config_path)
-    app = create_app(load_config(path), path)
+    app = create_app(load_config(path), path, session_path=session_path)
     runner = web.AppRunner(app, shutdown_timeout=1)
     await runner.setup()
     try:

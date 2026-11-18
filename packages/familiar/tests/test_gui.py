@@ -9,12 +9,14 @@ from types import SimpleNamespace
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer, make_mocked_request
+from familiar import session_settings
 from familiar.config import AppConfig, BackendConfig, load_config
 from familiar.gui import server
 from familiar.gui.personas import save_persona
 from familiar.gui.session import SessionConflictError, SessionManager
 from familiar.interfaces import ConfigError
 from familiar.persona import list_personas, load_persona, validate_persona
+from familiar.session_settings import SessionSettings
 
 
 def persona(persona_id="custom"):
@@ -87,7 +89,7 @@ async def client(tmp_path, request):
         ptt=BackendConfig("evdev"),
     )
     save_persona(config.personas_dir, persona("mira"))
-    app = server.create_app(config, token="secret")
+    app = server.create_app(config, token="secret", session_path=tmp_path / "session.toml")
     if request.param == "direct":
         yield DirectClient(app)
         return
@@ -123,11 +125,16 @@ async def test_auth_and_state(client):
     assert set(state) == {"games", "personas", "languages", "defaults", "session", "quota"}
     assert state["quota"] is None
     assert state["personas"][0]["builtin"] is True
+    assert "roles" in state["personas"][0]
+    assert "aliases" in state["personas"][0]
     assert set(state["session"]) == {
         "running",
         "game",
         "persona",
         "language",
+        "crew",
+        "carrier",
+        "banter",
         "started_at",
         "exit_code",
     }
@@ -472,6 +479,165 @@ async def test_session_endpoints_and_shutdown(client, monkeypatch):
     assert not api.sessions.state["running"]
     assert (await client.post("/api/shutdown")).status == 200
     await asyncio.wait_for(api.shutdown.wait(), 1)
+
+
+@pytest.mark.asyncio
+async def test_session_settings_defaults_without_file(client, tmp_path):
+    path = tmp_path / "session.toml"
+    assert not path.exists()
+    response = await client.get("/api/session/settings")
+    assert response.status == 200
+    assert await response.json() == {
+        "version": 1,
+        "game": None,
+        "crew": ["mira"],
+        "language": "en",
+        "carrier": "mira",
+        "banter": 2,
+        "problems": [],
+    }
+    assert not path.exists()
+
+
+@pytest.mark.asyncio
+async def test_session_settings_invalid_file_reported_without_writing(client, tmp_path):
+    path = tmp_path / "session.toml"
+    path.write_text(
+        'version = 1\ncrew = ["mira", "mira"]\ncarrier = "ghost"\nlanguage = "en"\nbanter = 99\n'
+    )
+    before = path.read_bytes()
+    response = await client.get("/api/session/settings")
+    assert response.status == 200
+    data = await response.json()
+    assert data["crew"] == ["mira", "mira"]
+    assert data["carrier"] == "ghost"
+    assert data["banter"] == 99
+    problems = data["problems"]
+    assert any("unique" in problem for problem in problems)
+    assert any("carrier" in problem for problem in problems)
+    assert any("banter" in problem for problem in problems)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.asyncio
+async def test_put_session_settings(client, tmp_path):
+    api = client.server.app[server.API]
+    path = tmp_path / "session.toml"
+    good = {
+        "version": 1,
+        "game": None,
+        "crew": ["mira"],
+        "language": "en",
+        "carrier": "mira",
+        "banter": 5,
+    }
+    response = await client.put("/api/session/settings", json=good)
+    assert response.status == 200
+    assert (await response.json())["banter"] == 5
+    loaded = session_settings.load(
+        path,
+        personas_dir=api.config.personas_dir,
+        user_personas_dir=api.config.user_personas_dir,
+    )
+    assert loaded.crew == ("mira",) and loaded.banter == 5
+    bad = {
+        **good,
+        "game": "",
+        "crew": ["mira", "mira"],
+        "language": "",
+        "carrier": "ghost",
+        "banter": -1,
+    }
+    response = await client.put("/api/session/settings", json=bad)
+    assert response.status == 400
+    data = await response.json()
+    assert data["error"]
+    problems = data["problems"]
+    assert any("game" in problem for problem in problems)
+    assert any("unique" in problem for problem in problems)
+    assert any("language" in problem for problem in problems)
+    assert any("carrier" in problem for problem in problems)
+    assert any("banter" in problem for problem in problems)
+    assert (
+        session_settings.load(
+            path,
+            personas_dir=api.config.personas_dir,
+            user_personas_dir=api.config.user_personas_dir,
+        ).banter
+        == 5
+    )
+
+
+@pytest.mark.asyncio
+async def test_carrier_must_be_in_crew(client, tmp_path):
+    body = {
+        "version": 1,
+        "game": None,
+        "crew": ["mira"],
+        "language": "en",
+        "carrier": "ghost",
+        "banter": 2,
+    }
+    response = await client.put("/api/session/settings", json=body)
+    assert response.status == 400
+    assert any("carrier" in problem for problem in (await response.json())["problems"])
+    assert not (tmp_path / "session.toml").exists()
+
+
+@pytest.mark.asyncio
+async def test_start_uses_session_file(client, tmp_path, monkeypatch):
+    api = client.server.app[server.API]
+    settings = SessionSettings(crew=("mira",), language="en", carrier="mira", banter=4)
+    session_settings.save(tmp_path / "session.toml", settings)
+    command = api.sessions.session_command()
+    assert command[:5] == [sys.executable, "-u", "-m", "familiar", "voice"]
+    assert ["--session", str(tmp_path / "session.toml")] == command[5:7]
+    assert "--persona" not in command
+    assert "--language" not in command
+    assert "--game" not in command
+    script = "import time; print('ready',flush=True); time.sleep(30)"
+    monkeypatch.setattr(
+        api.sessions, "session_command", lambda: [sys.executable, "-u", "-c", script]
+    )
+    response = await client.post("/api/session/start")
+    assert response.status == 200
+    state = await response.json()
+    assert state["running"]
+    assert state["crew"] == ["mira"]
+    assert state["carrier"] == "mira"
+    assert state["banter"] == 4
+    assert state["persona"] == "mira"
+    assert (await client.post("/api/session/stop")).status == 200
+
+
+@pytest.mark.asyncio
+async def test_start_with_invalid_session_file(client, tmp_path):
+    (tmp_path / "session.toml").write_text(
+        'version = 1\ncrew = ["mira"]\ncarrier = "ghost"\nlanguage = "en"\nbanter = 3\n'
+    )
+    response = await client.post("/api/session/start", json={})
+    assert response.status == 400
+    data = await response.json()
+    assert any("carrier" in problem for problem in data["problems"])
+    assert not client.server.app[server.API].sessions.state["running"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_start_body_still_works(client, monkeypatch):
+    api = client.server.app[server.API]
+    command = "import time; print('ready',flush=True); time.sleep(30)"
+    monkeypatch.setattr(api.sessions, "command", lambda *args: [sys.executable, "-c", command])
+    response = await client.post(
+        "/api/session/start", json=dict(persona="mira", language="en", game=None)
+    )
+    assert response.status == 200
+    state = await response.json()
+    assert state["running"]
+    assert state["crew"] == ["mira"]
+    assert state["carrier"] == "mira"
+    assert state["banter"] is None
+    assert not (api.session_path).exists()
+    assert (await client.post("/api/session/stop")).status == 200
 
 
 def test_sanitize_draft_voices_keeps_real_gemini_and_clears_elevenlabs():

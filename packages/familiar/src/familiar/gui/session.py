@@ -11,6 +11,8 @@ from typing import Any
 
 from familiar.config import AppConfig
 from familiar.interfaces import ConfigError
+from familiar.session_settings import SessionSettings
+from familiar.session_settings import default_path as default_session_path
 
 # Allow the time-limited trip summary plus audio/backend cleanup before escalation.
 SESSION_STOP_TIMEOUT_S = 20
@@ -25,9 +27,17 @@ class SessionConflictError(Exception):
 
 
 class SessionManager:
-    def __init__(self, config: AppConfig, config_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        config_path: Path | None = None,
+        session_path: Path | None = None,
+    ) -> None:
         self.config = config
         self.config_path = config_path.resolve() if config_path else None
+        self.session_path = (
+            Path(session_path).expanduser() if session_path else default_session_path()
+        )
         self.lines: deque[dict] = deque(maxlen=200)
         self.subscribers: set[asyncio.Queue] = set()
         self.process: asyncio.subprocess.Process | None = None
@@ -38,6 +48,9 @@ class SessionManager:
             game=None,
             persona=None,
             language=None,
+            crew=None,
+            carrier=None,
+            banter=None,
             started_at=None,
             exit_code=None,
         )
@@ -73,7 +86,45 @@ class SessionManager:
             command.extend(["--config", str(self.config_path)])
         return command
 
+    def session_command(self) -> list[str]:
+        """The session file is the single source: no persona/game/language flags."""
+        command = [
+            sys.executable,
+            "-u",
+            "-m",
+            "familiar",
+            "voice",
+            "--session",
+            str(self.session_path),
+        ]
+        if self.config_path:
+            command.extend(["--config", str(self.config_path)])
+        return command
+
     async def start(self, persona: str, language: str, game: str | None = None) -> dict:
+        """Legacy launcher body: a crew of one, written nowhere."""
+        fields = dict(
+            game=game,
+            persona=persona,
+            language=language,
+            crew=[persona],
+            carrier=persona,
+            banter=None,
+        )
+        return await self._spawn(self.command(persona, language, game), fields)
+
+    async def start_session(self, settings: SessionSettings) -> dict:
+        fields = dict(
+            game=settings.game,
+            persona=settings.carrier,
+            language=settings.language,
+            crew=list(settings.crew),
+            carrier=settings.carrier,
+            banter=settings.banter,
+        )
+        return await self._spawn(self.session_command(), fields)
+
+    async def _spawn(self, command: list[str], fields: dict) -> dict:
         async with self._lock:
             if self._state["running"]:
                 raise SessionConflictError("A session is already running")
@@ -83,7 +134,7 @@ class SessionManager:
                     "the terminal push-to-talk needs a terminal window"
                 )
             self.process = await asyncio.create_subprocess_exec(
-                *self.command(persona, language, game),
+                *command,
                 cwd=self.config_path.parent if self.config_path else Path.cwd(),
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
                 stdin=asyncio.subprocess.DEVNULL,
@@ -93,9 +144,7 @@ class SessionManager:
             self.lines.clear()
             self._state.update(
                 running=True,
-                game=game,
-                persona=persona,
-                language=language,
+                **fields,
                 started_at=timestamp(),
                 exit_code=None,
             )

@@ -46,7 +46,7 @@ def test_gui_without_entry_points(monkeypatch, tmp_path):
     monkeypatch.setattr(plugins, "entry_points", lambda **kwargs: [])
     observed = []
 
-    async def serve(port, no_browser, config_path):
+    async def serve(port, no_browser, config_path, session_path=None):
         app = server.create_app(AppConfig(user_personas_dir=tmp_path), token="test")
         state = json.loads((await app[server.API].state(None)).body)
         assert state["games"] == []

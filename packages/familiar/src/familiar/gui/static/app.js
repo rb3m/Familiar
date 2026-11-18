@@ -1,7 +1,6 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const token = new URLSearchParams(location.search).get('token') || '';
-const storageKey = 'familiar.launcher.choices';
 let languageNames = {};
 let englishLanguageNames = {};
 const samples = {
@@ -11,7 +10,9 @@ const samples = {
 };
 const criticalEvents = new Set(['fuel_low', 'air_pressure', 'engine_warning', 'fined', 'job_cancelled']);
 let state;
-let choices = {};
+let choices = { game: null, crew: [], carrier: '', language: '', banter: 2 };
+let saveTimer;
+let saveFailed = false;
 let voices = null;
 let voicesError = '';
 let editor = null;
@@ -28,16 +29,6 @@ let lastBubble = null;
 let replayCounts = new Map();
 const lineCounts = new Map();
 
-function readStorage(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
-  catch { return fallback; }
-}
-
-function writeStorage(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); }
-  catch { /* The launcher also works when browser storage is unavailable. */ }
-}
-
 async function api(path, options = {}) {
   const headers = new Headers(options.headers);
   headers.set('X-Familiar-Token', token);
@@ -47,13 +38,18 @@ async function api(path, options = {}) {
   let data;
   try { data = body ? JSON.parse(body) : null; }
   catch { throw new Error(response.ok ? 'The server returned invalid JSON.' : `Request failed (${response.status}).`); }
-  if (!response.ok) throw new Error(data?.error || `Request failed (${response.status}).`);
+  if (!response.ok) {
+    const error = new Error(data?.error || `Request failed (${response.status}).`);
+    error.problems = Array.isArray(data?.problems) ? data.problems : [];
+    throw error;
+  }
   return data;
 }
 
 const post = (path, body) => api(path, {
   method: 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
+const put = (path, body) => api(path, { method: 'PUT', body: JSON.stringify(body) });
 const personaPath = (id) => `/api/personas/${encodeURIComponent(id)}`;
 
 function element(tag, className, text) {
@@ -118,23 +114,88 @@ function switchView(view) {
   $(`#${view}-title`).focus();
 }
 
-function selectedPersona() {
-  return state?.personas.find((persona) => persona.id === choices.persona);
+function personaById(id) {
+  return state?.personas.find((persona) => persona.id === id);
+}
+
+function personaName(id) {
+  return personaById(id)?.display_name || id;
 }
 
 function normalizeChoices(preferred = choices) {
   const defaults = state.defaults;
   const validGame = (id) => id === null || state.games.some((game) => game.id === id);
   const validPersona = (id) => state.personas.some((persona) => persona.id === id);
+  const validLanguage = (id) => state.languages.some((language) => language.id === id);
   const game = validGame(preferred.game) ? preferred.game : (validGame(defaults.game) ? defaults.game : null);
-  const persona = validPersona(preferred.persona) ? preferred.persona
-    : (validPersona(defaults.persona) ? defaults.persona : state.personas[0]?.id);
-  const allowed = state.languages.filter((language) => state.personas.find((item) => item.id === persona)?.languages.includes(language.id));
-  const validLanguage = (id) => allowed.some((language) => language.id === id);
+  const crew = [];
+  for (const id of Array.isArray(preferred.crew) ? preferred.crew : []) {
+    if (validPersona(id) && !crew.includes(id) && crew.length < 3) crew.push(id);
+  }
+  if (!crew.length && state.personas.length) {
+    crew.push(validPersona(defaults.persona) ? defaults.persona : state.personas[0].id);
+  }
+  const carrier = crew.includes(preferred.carrier) ? preferred.carrier : (crew[0] || '');
   const language = validLanguage(preferred.language) ? preferred.language
-    : (validLanguage(defaults.language) ? defaults.language : allowed[0]?.id);
-  choices = { game, persona, language };
-  writeStorage(storageKey, choices);
+    : (validLanguage(defaults.language) ? defaults.language : state.languages[0]?.id || '');
+  const banter = Number.isInteger(preferred.banter) && preferred.banter >= 0 && preferred.banter <= 10 ? preferred.banter : 2;
+  choices = { game, crew, carrier, language, banter };
+}
+
+function settingsToChoices(settings) {
+  return {
+    game: settings.game ?? null,
+    crew: Array.isArray(settings.crew) ? [...settings.crew] : [],
+    carrier: typeof settings.carrier === 'string' ? settings.carrier : '',
+    language: typeof settings.language === 'string' ? settings.language : '',
+    banter: settings.banter,
+  };
+}
+
+function banterLabel(value) {
+  if (value === 0) return 'Off';
+  if (value <= 3) return 'Rare';
+  if (value <= 6) return 'Sometimes';
+  if (value <= 9) return 'Often';
+  return 'Chatty';
+}
+
+function showCrewProblems(problems) {
+  const root = $('#crew-problems');
+  root.replaceChildren();
+  for (const problem of problems) root.append(element('li', '', problem));
+  root.hidden = problems.length === 0;
+}
+
+function showSaveStatus(message) {
+  $('#save-status').textContent = message;
+}
+
+async function saveSettings() {
+  const payload = { version: 1, ...choices };
+  try {
+    await put('/api/session/settings', payload);
+    saveFailed = false;
+    showSaveStatus('Saved');
+    showCrewProblems([]);
+  } catch (error) {
+    saveFailed = true;
+    showSaveStatus('Could not save');
+    showCrewProblems(error.problems.length ? error.problems : [error.message]);
+  }
+  updateStartAvailability();
+}
+
+function scheduleSave() {
+  if (state.session.running) return;
+  clearTimeout(saveTimer);
+  showSaveStatus('Saving…');
+  saveTimer = setTimeout(saveSettings, 400);
+}
+
+async function flushSave() {
+  clearTimeout(saveTimer);
+  await saveSettings();
 }
 
 function renderGames() {
@@ -143,8 +204,9 @@ function renderGames() {
   for (const game of [{ id: null, name: 'No game', description: 'Desk chat' }, ...state.games]) {
     const node = button('', () => {
       choices.game = game.id;
-      writeStorage(storageKey, choices);
       renderGames();
+      renderCrew();
+      scheduleSave();
       $('[aria-pressed=true]', root)?.focus();
     }, 'choice');
     node.disabled = state.session.running || sessionBusy;
@@ -157,41 +219,103 @@ function renderGames() {
   }
 }
 
-function renderPersonas() {
-  const picker = $('#persona-picker');
-  const library = $('#persona-list');
-  picker.replaceChildren();
-  library.replaceChildren();
+function crewSlot(id, index) {
+  const row = element('div', 'crew-slot');
+  const label = element('label', 'crew-member', `Crew member ${index + 1}`);
+  const select = element('select');
+  for (const persona of state.personas) {
+    const option = new Option(persona.display_name, persona.id);
+    option.disabled = choices.crew.includes(persona.id) && persona.id !== id;
+    select.add(option);
+  }
+  select.value = id;
+  select.disabled = state.session.running || sessionBusy;
+  select.addEventListener('change', (event) => {
+    choices.crew[index] = event.target.value;
+    renderCrew();
+    scheduleSave();
+  });
+  label.append(select);
+  const actions = element('div', 'crew-actions');
+  const locked = state.session.running || sessionBusy;
+  const up = button('↑', () => moveCrew(index, -1), 'subtle');
+  up.disabled = locked || index === 0;
+  up.setAttribute('aria-label', `Move ${personaName(id)} earlier in the roster`);
+  const down = button('↓', () => moveCrew(index, 1), 'subtle');
+  down.disabled = locked || index === choices.crew.length - 1;
+  down.setAttribute('aria-label', `Move ${personaName(id)} later in the roster`);
+  const remove = button('Remove', () => removeCrew(index), 'subtle danger');
+  remove.disabled = locked || choices.crew.length <= 1;
+  remove.setAttribute('aria-label', `Remove ${personaName(id)} from the crew`);
+  actions.append(up, down, remove);
+  row.append(label, actions);
+  const persona = personaById(id);
+  const role = choices.game ? persona?.roles?.[choices.game] : null;
+  const missingVoice = persona && choices.language && !persona.languages.includes(choices.language);
+  if (role || missingVoice) {
+    const meta = element('div', 'crew-meta');
+    if (role) meta.append(element('span', 'crew-role muted', role));
+    if (missingVoice) meta.append(element('span', 'crew-warning', `No voice for ${languageNames[choices.language] || choices.language}`));
+    row.append(meta);
+  }
+  return row;
+}
+
+function moveCrew(index, delta) {
+  const [member] = choices.crew.splice(index, 1);
+  choices.crew.splice(index + delta, 0, member);
+  renderCrew();
+  scheduleSave();
+  $$('#crew-slots .crew-slot')[index + delta]?.querySelector('select')?.focus();
+}
+
+function removeCrew(index) {
+  choices.crew.splice(index, 1);
+  if (!choices.crew.includes(choices.carrier)) choices.carrier = choices.crew[0] || '';
+  renderCrew();
+  scheduleSave();
+}
+
+function addCrewMember() {
+  const free = state.personas.find((persona) => !choices.crew.includes(persona.id));
+  if (!free || choices.crew.length >= 3) return;
+  choices.crew.push(free.id);
+  renderCrew();
+  scheduleSave();
+  $$('#crew-slots .crew-slot').at(-1)?.querySelector('select')?.focus();
+}
+
+function renderCarrier() {
+  const select = $('#carrier');
+  select.replaceChildren();
+  for (const id of choices.crew) select.add(new Option(personaName(id), id));
+  select.value = choices.carrier;
+  select.disabled = state.session.running || sessionBusy || !choices.crew.length;
+}
+
+function renderBanter() {
+  const slider = $('#banter');
+  slider.value = String(choices.banter);
+  slider.disabled = state.session.running || sessionBusy;
+  $('#banter-label').textContent = banterLabel(choices.banter);
+}
+
+function renderCrew() {
+  const root = $('#crew-slots');
+  root.replaceChildren();
   $('#no-personas').hidden = state.personas.length > 0;
+  choices.crew.forEach((id, index) => root.append(crewSlot(id, index)));
+  $('#crew-add').disabled = state.session.running || sessionBusy
+    || choices.crew.length >= 3 || choices.crew.length >= state.personas.length;
+  renderCarrier();
+  renderBanter();
+}
+
+function renderLibrary() {
+  const library = $('#persona-list');
+  library.replaceChildren();
   if (!state.personas.length) library.append(element('p', 'muted', 'No personas yet. Create your first companion.'));
   for (const persona of state.personas) {
-    const node = button('', () => {
-      choices.persona = persona.id;
-      normalizeChoices();
-      renderPersonas();
-      renderLanguage();
-      renderSession();
-      $('[aria-pressed=true]', picker)?.focus();
-    }, 'choice');
-    node.disabled = state.session.running || sessionBusy;
-    node.setAttribute('aria-pressed', String(choices.persona === persona.id));
-    node.append(element('strong', '', persona.display_name), element('small', '', persona.source || 'Original character'));
-    const meta = element('div', 'persona-meta');
-    meta.append(element('span', 'badge', persona.truthfulness), element('span', 'origin', persona.builtin ? 'Built-in' : 'Custom'));
-    const meter = element('div', 'meter');
-    meter.setAttribute('role', 'meter');
-    meter.setAttribute('aria-label', 'Chattiness');
-    meter.setAttribute('aria-valuemin', '0');
-    meter.setAttribute('aria-valuemax', '1');
-    meter.setAttribute('aria-valuenow', String(persona.chattiness));
-    const fill = element('span');
-    fill.style.width = `${Math.max(0, Math.min(1, persona.chattiness)) * 100}%`;
-    meter.append(fill);
-    const chips = element('div', 'chips');
-    for (const language of persona.languages) chips.append(element('span', 'chip', language.toUpperCase()));
-    node.append(meta, meter, chips);
-    picker.append(node);
-
     const item = element('article', 'library-item');
     const title = element('h3', '', persona.display_name);
     title.append(element('span', 'badge', persona.builtin ? 'Built-in' : 'Custom'));
@@ -219,7 +343,7 @@ function renderPersonas() {
 function renderLanguage() {
   const select = $('#language');
   select.replaceChildren();
-  for (const language of state.languages.filter((item) => selectedPersona()?.languages.includes(item.id))) {
+  for (const language of state.languages) {
     select.add(new Option(language.native || language.name, language.id));
   }
   select.value = choices.language || '';
@@ -240,33 +364,63 @@ function renderQuota() {
   root.append(bar);
 }
 
+function updateStartAvailability() {
+  const toggle = $('#session-toggle');
+  toggle.disabled = sessionBusy || (!state.session.running && (saveFailed || !choices.crew.length || !choices.language));
+}
+
+function lockSetupControls(locked) {
+  if (!locked) {
+    renderGames();
+    renderCrew();
+    renderLanguage();
+    return;
+  }
+  for (const control of $$('#games button, #crew-slots button, #crew-slots select')) control.disabled = true;
+  $('#crew-add').disabled = true;
+  $('#carrier').disabled = true;
+  $('#banter').disabled = true;
+  $('#language').disabled = true;
+}
+
 function renderSession() {
   const session = state.session;
   const toggle = $('#session-toggle');
   toggle.textContent = sessionBusy ? 'Please wait…' : (session.running ? 'Stop companion' : 'Start companion');
   toggle.classList.toggle('running', session.running);
-  toggle.disabled = sessionBusy || (!session.running && (!choices.persona || !choices.language));
+  updateStartAvailability();
   let message = 'Ready when you are.';
   if (session.running) {
-    const persona = state.personas.find((item) => item.id === session.persona)?.display_name || session.persona || 'Companion';
+    const crew = (Array.isArray(session.crew) && session.crew.length ? session.crew : [session.persona]).filter(Boolean);
+    const names = crew.map((id) => personaName(id)).join(', ');
+    const carrier = session.carrier ? `${personaName(session.carrier)} takes the controls · ` : '';
     const date = session.started_at ? new Date(session.started_at) : null;
     const since = date && !Number.isNaN(date.getTime()) ? ` · running since ${date.toLocaleString()}` : ' · running';
     const game = state.games.find((item) => item.id === session.game)?.name || session.game || 'desk chat';
-    message = `${persona} · ${game} · ${session.language || ''}${since}`;
+    message = `${names || 'Companion'} · ${carrier}${game} · ${session.language || ''}${since}`;
   }
   if (!session.running && session.exit_code !== null) message = `Session stopped · exit code ${session.exit_code}`;
   $('#session-status').textContent = message;
   if (!session.running) $('#listening').hidden = true;
-  for (const control of $$('#games button, #persona-picker button')) control.disabled = session.running || sessionBusy;
-  $('#language').disabled = session.running || sessionBusy || !$('#language').options.length;
+  lockSetupControls(session.running || sessionBusy);
 }
 
 function applySession(session) {
+  const wasRunning = state.session.running;
   state.session = session;
   if (session.running) {
-    normalizeChoices({ game: session.game, persona: session.persona, language: session.language });
+    normalizeChoices({
+      game: session.game,
+      crew: session.crew,
+      carrier: session.carrier,
+      language: session.language,
+      banter: session.banter,
+    });
+  }
+  if (wasRunning !== session.running) {
     renderGames();
-    renderPersonas();
+    renderCrew();
+    renderLibrary();
     renderLanguage();
   }
   renderSession();
@@ -276,9 +430,10 @@ function applyState(nextState) {
   state = nextState;
   languageNames = Object.fromEntries(state.languages.map((item) => [item.id, item.native || item.name]));
   englishLanguageNames = Object.fromEntries(state.languages.map((item) => [item.id, item.name]));
-  normalizeChoices(state.session.running ? state.session : choices);
+  normalizeChoices(state.session.running ? settingsToChoices(state.session) : choices);
   renderGames();
-  renderPersonas();
+  renderCrew();
+  renderLibrary();
   renderLanguage();
   renderSession();
   renderQuota();
@@ -294,11 +449,16 @@ async function toggleSession() {
   sessionBusy = true;
   renderSession();
   try {
+    if (!state.session.running) {
+      await flushSave();
+      if (saveFailed) throw new Error('Fix the crew settings above before starting.');
+    }
     const session = state.session.running
       ? await post('/api/session/stop')
-      : await post('/api/session/start', choices);
+      : await post('/api/session/start');
     applySession(session);
   } catch (error) {
+    if (error.problems?.length) showCrewProblems(error.problems);
     toast(error.message, true);
     try { await refreshState(); } catch { /* Keep the existing state until reconnect. */ }
   } finally {
@@ -773,7 +933,18 @@ function bindControls() {
   $('.brand').addEventListener('click', (event) => { event.preventDefault(); switchView('play'); });
   $('#language').addEventListener('change', (event) => {
     choices.language = event.target.value;
-    writeStorage(storageKey, choices);
+    renderCrew();
+    scheduleSave();
+  });
+  $('#crew-add').addEventListener('click', addCrewMember);
+  $('#carrier').addEventListener('change', (event) => {
+    choices.carrier = event.target.value;
+    scheduleSave();
+  });
+  $('#banter').addEventListener('input', (event) => {
+    choices.banter = Number(event.target.value);
+    $('#banter-label').textContent = banterLabel(choices.banter);
+    scheduleSave();
   });
   $('#session-toggle').addEventListener('click', toggleSession);
   $('#quit').addEventListener('click', quit);
@@ -820,9 +991,7 @@ async function init() {
     $('#session-status').textContent = 'Waiting for an authenticated launcher URL.';
     return;
   }
-  choices = readStorage(storageKey, {});
-  if (!choices || typeof choices !== 'object') choices = {};
-  const results = await Promise.allSettled([api('/api/state'), api('/api/voices')]);
+  const results = await Promise.allSettled([api('/api/state'), api('/api/voices'), api('/api/session/settings')]);
   if (results[1].status === 'fulfilled') voices = results[1].value;
   if (results[1].status === 'rejected') voicesError = `Voice catalog unavailable: ${results[1].reason.message}`;
   if (results[0].status === 'rejected') {
@@ -833,8 +1002,18 @@ async function init() {
     $('#session-status').textContent = 'Could not connect to the launcher.';
     return;
   }
+  if (results[2].status === 'fulfilled') {
+    choices = settingsToChoices(results[2].value);
+    if (results[2].value.problems?.length) {
+      saveFailed = true;
+      showSaveStatus('Saved session has problems');
+      showCrewProblems(results[2].value.problems);
+    }
+  }
   const languages = await api('/api/languages');
   applyState({ ...results[0].value, languages });
+  // A repaired selection (invalid entries dropped by normalizeChoices) is persisted once.
+  if (saveFailed) scheduleSave();
   $('#main').setAttribute('aria-busy', 'false');
   $('#main').inert = false;
   connectEvents();

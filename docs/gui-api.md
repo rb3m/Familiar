@@ -1,10 +1,11 @@
 # GUI launcher API (contract between `packages/familiar/src/familiar/gui/server.py` and `static/`)
 
-`familiar gui [--port 8765] [--no-browser] [--config PATH]` starts an aiohttp server bound to
-127.0.0.1 only, generates a random per-launch token, and opens `http://127.0.0.1:PORT/?token=T`
-(an app-mode window via chromium/google-chrome/brave/msedge `--app=URL` when available, else the
-default browser). Static files (`index.html`, `app.js`, `style.css`, `familiar.svg`) are served
-from `/` without a token.
+`familiar gui [--port 8765] [--no-browser] [--config PATH] [--session PATH]` starts an aiohttp
+server bound to 127.0.0.1 only, generates a random per-launch token, and opens
+`http://127.0.0.1:PORT/?token=T` (an app-mode window via chromium/google-chrome/brave/msedge
+`--app=URL` when available, else the default browser). Static files (`index.html`, `app.js`,
+`style.css`, `familiar.svg`) are served from `/` without a token. `--session` chooses the
+session file the launcher edits and starts with (default `~/.config/familiar/session.toml`).
 
 ## Auth
 Every `/api/*` request must carry header `X-Familiar-Token: T` (EventSource: query `?token=T`).
@@ -20,12 +21,17 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   "defaults": {"game": "ats" | null, "persona": "mira", "language": "en"},
   "session": Session, "quota": {"used": 120, "limit": 10000} | null}`
   - `PersonaSummary` = `{"id", "display_name", "source", "truthfulness", "chattiness",
-    "languages": ["en", "ja"], "builtin": bool, "overrides_builtin": bool}`; `builtin` = shipped
+    "languages": ["en", "ja"], "roles": {"elite": "the ship's onboard AI", ...},
+    "aliases": {"en": ["Mira"], ...}, "builtin": bool, "overrides_builtin": bool}`;
+    `roles` maps game ids to the persona's role in that game (shown in the crew picker);
+    `aliases` maps languages to the names the crew answers to. `builtin` = shipped
     in `packages/familiar/src/familiar/personas/` (read-only; editing saves a user copy with the same id, which then
     takes precedence); `overrides_builtin` = a user copy shadowing a shipped persona (DELETE
     restores the original, so the UI labels it "Reset to built-in").
   - `Session` = `{"running": bool, "game": str | null, "persona": str | null, "language": str | null,
-    "started_at": ISO-8601 | null, "exit_code": int | null}`
+    "crew": [str, ...] | null, "carrier": str | null, "banter": int | null,
+    "started_at": ISO-8601 | null, "exit_code": int | null}`. `persona` mirrors `carrier` for
+    older clients; a legacy start reports a crew of one with `banter` null.
   - Game names: ats "American Truck Simulator", ets2 "Euro Truck Simulator 2"; unknown ids
     title-cased. The list comes from installed `familiar.games` plugins.
 - `GET /api/languages` → `[{"id": "en", "name": "English", "native": "English"}, ...]`
@@ -54,8 +60,22 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
 - `POST /api/voices/test` body `{"backend": "elevenlabs" | "gemini", "voice": "id-or-name",
   "language": "en", "text": "optional sample"}` → speaks the sample on this machine;
   `200 {"ok": true}`.
-- `POST /api/session/start` body `{"game": "ats" | null, "persona": "mira", "language": "en"}`
-  → `200` Session; `409` if one is already running.
+- `GET /api/session/settings` → the launcher's saved selections. With no session file: derived
+  defaults (`200 {"version": 1, "game", "crew": [config persona], "language", "carrier",
+  "banter": 2, "problems": []}`). With a valid file: its values plus `"problems": []`. With an
+  invalid file: `200` with the raw values that parsed plus `"problems": [...]` (schema and
+  persona problems, reported together) so the UI can show and repair them. Never writes.
+- `PUT /api/session/settings` body `{"version": 1, "game": "ats" | null, "crew": ["mira", ...1-3
+  unique persona ids], "language": "en", "carrier": "<a crew member>", "banter": 0-10}` →
+  validated with the session-settings rules (all problems at once, including personas without a
+  voice for the language) → `400 {"error", "problems": [...]}` or an atomic save → `200` with
+  the saved settings.
+- `POST /api/session/start` with no body (or `{}`): load and validate the session file; `400
+  {"error", "problems": [...]}` if missing or invalid; otherwise spawn `familiar voice
+  --session PATH [--config ...]` — the file is the single source, so no `--persona`/`--game`/
+  `--language` flags are passed → `200` Session; `409` if one is already running. The legacy
+  body `{"game": "ats" | null, "persona": "mira", "language": "en"}` still works: it starts a
+  crew of one via CLI flags and writes nothing.
 - `POST /api/session/stop` → `200` Session (graceful SIGINT, then terminate after 20 s and kill
   after another 2 s; the grace period includes the trip summary's 15-second deadline).
 - `POST /api/shutdown` → stops any session and exits the server (`200` then exit).

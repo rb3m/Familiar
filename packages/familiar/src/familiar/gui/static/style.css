@@ -224,7 +224,7 @@ p {
   margin-right:12px;
 }
 
-.game-grid,.persona-grid {
+.game-grid {
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
   gap:12px;
@@ -287,28 +287,89 @@ p {
   color:var(--gold);
 }
 
-.chips {
-  display:flex;
-  flex-wrap:wrap;
-  gap:5px;
-  margin-top:12px;
-}
-
 .chip {
   color:var(--muted);
 }
 
-.persona-meta {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:6px;
-  margin-top:13px;
+.crew-slots {
+  display:grid;
+  gap:10px;
+  margin:14px 0 6px;
 }
 
-.origin {
-  font-size:10px;
+.crew-slot {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px 12px;
+  background:var(--input);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px 14px;
+}
+
+.crew-member {
+  flex:1 1 190px;
+  display:grid;
+  gap:5px;
+  font-size:12px;
   color:var(--muted);
+}
+
+.crew-member select {
+  width:100%;
+  min-width:0;
+}
+
+.crew-actions {
+  display:flex;
+  gap:6px;
+}
+
+.crew-actions button {
+  padding:6px 10px;
+}
+
+.crew-meta {
+  flex-basis:100%;
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px 14px;
+  font-size:11px;
+}
+
+.crew-warning {
+  color:var(--danger);
+}
+
+.crew-field {
+  display:grid;
+  gap:6px;
+  margin-top:16px;
+}
+
+.crew-field>label {
+  font-size:12px;
+  color:var(--muted);
+}
+
+.crew-field output {
+  color:var(--gold);
+  font-weight:650;
+}
+
+.crew-field .help {
+  font-size:12px;
+  margin:0;
+}
+
+#banter {
+  width:100%;
+}
+
+#crew-problems {
+  margin:14px 0 0;
+  padding-left:20px;
 }
 
 .meter {
@@ -937,7 +998,7 @@ output {
   .conversation-heading,.transcript {
     padding:19px;
   }
-  .game-grid,.persona-grid {
+  .game-grid {
     gap:9px;
   }
   .choice {

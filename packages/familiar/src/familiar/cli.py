@@ -370,7 +370,7 @@ async def _ptt_setup(args: argparse.Namespace) -> None:
 async def _gui(args: argparse.Namespace) -> None:
     from familiar.gui.server import serve
 
-    await serve(args.port, args.no_browser, args.config)
+    await serve(args.port, args.no_browser, args.config, session_path=args.session)
 
 
 def _graceful_signals() -> None:
@@ -409,6 +409,7 @@ def main() -> None:
     gui.add_argument("--port", type=int, default=8765)
     gui.add_argument("--no-browser", action="store_true")
     gui.add_argument("--config")
+    gui.add_argument("--session", metavar="PATH", help="Session file to edit and launch with")
     ptt_setup = commands.add_parser("ptt-setup", help="Detect and save a joystick PTT button")
     ptt_setup.add_argument("--config")
     voices = commands.add_parser("voices", help="List ElevenLabs voices and quota")
