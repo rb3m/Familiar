@@ -31,6 +31,11 @@ the ship's AI, Frieren the copilot, Megumin a stowaway nobody can explain.
   running: resolve the active preset from `StartPreset.*.start`, back up outside the bindings
   folder, fill only Secondary slots whose device is `{NoDevice}`, never touch Primaries, keep
   preset name and version, write atomically, and record the keys we own in a sidecar file.
+  `StartPreset.4.start` holds one preset per category, in the order General, Ship, SRV,
+  On-foot (verified on the Commander's files: every control changed in `Custom` is a ship
+  control). A category may use a read-only built-in preset from the game's `ControlSchemes`
+  folder; Familiar reads it for keys in use and for key presses, never writes it, and tells the
+  player to switch that category to Custom when a wanted control lives there.
   Candidate keys are letters, digits and F-keys free across all bindings (no punctuation, dead
   keys, AltGr; numpad only after a test), listed in a data file. A hash check at session start
   warns when the game or the player has changed the file.
