@@ -144,7 +144,7 @@ def test_precedence_and_single_persona_override(roster, monkeypatch):
     session.save(session.default_path(), settings())
     assert session_settings(config) == settings()
     assert session_settings(config, persona="test", game="ksp", language="en") == settings(
-        crew=("test",), carrier="test", game="ksp", seats={"test": 0.6}
+        crew=("test",), carrier="test", game="ksp", seats={"test": 0.7}
     )  # an overridden crew keeps each member's saved seat
     assert session_settings(config, use_session=False).crew == ("third",)
 
@@ -191,16 +191,16 @@ def test_version_one_file_loads_with_stereo_defaults(roster):
     assert loaded == settings()
     assert loaded.version == 2
     assert loaded.stereo is False
-    assert loaded.seats == {"test": 0.6, "other": 0.0}
+    assert loaded.seats == {"test": 0.7, "other": 0.0}
 
 
 def test_default_seats_alternate_around_the_carrier(roster):
     assert session.default_seats(("test", "other", "third"), "test") == {
         "test": 0.0,
-        "other": 0.6,
-        "third": -0.6,
+        "other": 0.7,
+        "third": -0.7,
     }
-    assert session.default_seats(("test", "other"), "other") == {"test": 0.6, "other": 0.0}
+    assert session.default_seats(("test", "other"), "other") == {"test": 0.7, "other": 0.0}
     assert session.default_seats("not-a-list", None) == {}
 
 
@@ -212,14 +212,14 @@ def test_save_always_writes_version_two_with_seats(roster):
     assert "stereo = true" in text
     loaded = read(path, roster)
     assert loaded.stereo is True
-    assert loaded.seats == {"test": 0.6, "other": 0.0}
+    assert loaded.seats == {"test": 0.7, "other": 0.0}
 
 
 def test_custom_seats_roundtrip_and_missing_members_default(roster):
     path = roster / "session.toml"
     session.save(path, settings(stereo=True, seats={"other": -0.35}))
     loaded = read(path, roster)
-    assert loaded.seats == {"test": 0.6, "other": -0.35}
+    assert loaded.seats == {"test": 0.7, "other": -0.35}
     path.write_text(
         'version = 2\ncrew = ["test", "other"]\ncarrier = "other"\nlanguage = "en"\n'
         "banter = 7\nstereo = true\nseats = {test = 0.35}\n"

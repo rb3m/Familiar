@@ -71,7 +71,7 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   unique persona ids], "language": "en", "carrier": "<a crew member>", "banter": 0-10,
   "stereo": bool, "seats": {"<crew id>": pan}}` — `stereo` (optional, default `false`) turns on
   spatial placement; `seats` (optional) maps crew ids to a pan from -1.0 (left) to 1.0 (right),
-  with missing members defaulted (carrier 0.0, others alternating +0.6, -0.6 in roster order) and
+  with missing members defaulted (carrier 0.0, others alternating +0.7, -0.7 in roster order) and
   non-crew keys rejected →
   validated with the session-settings rules (all problems at once, including personas without a
   voice for the language) → `400 {"error", "problems": [...]}` or an atomic save (always written

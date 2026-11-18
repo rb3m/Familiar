@@ -18,7 +18,7 @@ from familiar.persona import load_persona, validate_id
 VERSION = 2
 _KEYS = {"version", "game", "crew", "language", "carrier", "banter", "stereo", "seats"}
 _REQUIRED = {"version", "crew", "language", "carrier", "banter"}
-SIDE_PAN = 0.6  # default seat for non-carrier members, alternating right then left
+SIDE_PAN = 0.7  # default seat for non-carrier members, alternating right then left
 
 
 class SessionError(ConfigError):
@@ -26,7 +26,7 @@ class SessionError(ConfigError):
 
 
 def default_seats(crew: object, carrier: object) -> dict[str, float]:
-    """Carrier sits centre; other members alternate +0.6 (right), -0.6 (left)."""
+    """Carrier sits centre; other members alternate +0.7 (right), -0.7 (left), matching the GUI presets."""
     seats: dict[str, float] = {}
     others = 0
     for member in _safe_crew(crew):
