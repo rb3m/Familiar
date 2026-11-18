@@ -1,0 +1,44 @@
+"""Unauthenticated YouTube Music discovery, off the event loop."""
+
+import asyncio
+
+from familiar.interfaces import load_data
+from ytmusicapi import YTMusic
+
+from .player import Track
+
+
+def _track(item):
+    duration = item.get("duration_seconds")
+    if duration is None and item.get("duration"):
+        parts = str(item["duration"]).split(":")
+        try:
+            duration = sum(float(part) * 60**i for i, part in enumerate(reversed(parts)))
+        except ValueError:
+            duration = None
+    album = item.get("album") or {}
+    return Track(
+        item["videoId"],
+        item.get("title", "Unknown track"),
+        tuple(artist["name"] for artist in item.get("artists", []) if artist.get("name")),
+        album.get("name", ""),
+        duration,
+    )
+
+
+class Searcher:
+    def __init__(self, client=None, *, timeout=None):
+        self.client = client or YTMusic()
+        self.timeout = timeout or load_data("familiar_music", "music").value["search_timeout_s"]
+
+    async def _call(self, function, *args, **kwargs):
+        async with asyncio.timeout(self.timeout):
+            return await asyncio.to_thread(function, *args, **kwargs)
+
+    async def songs(self, query, limit):
+        results = await self._call(self.client.search, query, filter="songs", limit=limit)
+        return [_track(item) for item in results if item.get("videoId")][:limit]
+
+    async def radio(self, video_id, limit):
+        result = await self._call(self.client.get_watch_playlist, videoId=video_id, limit=limit)
+        return [_track(item) for item in result.get("tracks", []) if item.get("videoId")][:limit]

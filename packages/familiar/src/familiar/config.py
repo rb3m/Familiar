@@ -34,6 +34,9 @@ FLAVOR_DEFAULTS = {
 ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.0, "max_alerts": 8}
 
 
+MUSIC_DEFAULTS = {"enabled": False, "service": "pear"}
+
+
 HANDS_DEFAULTS = {
     "enabled": True,
     "keyboard": "uinput",
@@ -69,6 +72,7 @@ class AppConfig:
     flavor: dict = field(default_factory=lambda: FLAVOR_DEFAULTS.copy())
     alerts: dict = field(default_factory=lambda: ALERT_DEFAULTS.copy())
     hands: dict = field(default_factory=lambda: HANDS_DEFAULTS.copy())
+    music: dict = field(default_factory=lambda: MUSIC_DEFAULTS.copy())
 
 
 def session_settings(
@@ -192,6 +196,18 @@ def _alerts(data: dict) -> dict:
     return settings
 
 
+def _music(data: dict) -> dict:
+    section = data.get("music", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[music] must be a table")
+    settings = {**MUSIC_DEFAULTS, **section}
+    if type(settings["enabled"]) is not bool:
+        raise ConfigError("music.enabled must be a boolean")
+    if not isinstance(settings["service"], str) or not settings["service"]:
+        raise ConfigError("music.service must be a non-empty string")
+    return settings
+
+
 def _hands(data: dict) -> dict:
     section = data.get("hands", {})
     if not isinstance(section, dict):
@@ -264,6 +280,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         flavor=_flavor(data),
         alerts=_alerts(data),
         hands=_hands(data),
+        music=_music(data),
         language=language,
         persona=persona,
         personas_dir=_path(data["personas_dir"], base) if "personas_dir" in data else None,

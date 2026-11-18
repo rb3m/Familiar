@@ -105,7 +105,11 @@ class Director:
         age = max(0, (datetime.now(UTC) - timestamp).total_seconds())
         if not self.enabled or ttl <= age:
             return
-        if event.priority == "ambient" and (not self._connected or self._paused):
+        if (
+            not event.data.get("companion_service")
+            and event.priority == "ambient"
+            and (not self._connected or self._paused)
+        ):
             return
         self._queue = [
             item
@@ -134,7 +138,11 @@ class Director:
     def set_game_state(self, connected: bool, paused: bool) -> None:
         self._connected, self._paused = connected, paused
         if not connected or paused:
-            self._queue = [item for item in self._queue if item.event.priority != "ambient"]
+            self._queue = [
+                item
+                for item in self._queue
+                if item.event.priority != "ambient" or item.event.data.get("companion_service")
+            ]
         self._changed.set()
 
     def notify_spoke(self) -> None:
@@ -144,7 +152,7 @@ class Director:
         self._changed.set()
 
     def _ready(self, event: GameEvent, now: float) -> bool:
-        if not self._connected or self._paused:
+        if not event.data.get("companion_service") and (not self._connected or self._paused):
             return False
         if preempts(event):
             return not (self._busy - {"speaking"})

@@ -1,9 +1,11 @@
 """Push-to-talk voice orchestration and barge-in."""
 
 import asyncio
+import logging
 import sys
 from collections.abc import AsyncIterator
-from contextlib import aclosing
+from contextlib import aclosing, suppress
+from dataclasses import replace
 from time import monotonic
 
 from familiar.audio.player import Player
@@ -16,14 +18,19 @@ from familiar.interfaces import (
     AudioChunk,
     AudioClip,
     BackendError,
+    CompanionService,
     GameAdapter,
     GameEvent,
     PushToTalk,
+    SpeechState,
     SpeechToText,
     TextToSpeech,
 )
 from familiar.persona import Persona
 from familiar.transcript import TranscriptLog
+
+# Longest wait for companion services (e.g. music ducking) before audio or recording starts.
+SERVICE_FLUSH_S = 0.5
 
 
 class VoiceSession:
@@ -41,6 +48,7 @@ class VoiceSession:
         adapter: GameAdapter | None = None,
         director: Director | None = None,
         seats: dict[str, float] | None = None,
+        services: list[CompanionService] | None = None,
     ) -> None:
         self.ptt = ptt
         self.recorder = recorder
@@ -61,8 +69,49 @@ class VoiceSession:
         self._recording = False
         self._reply_lock = asyncio.Lock()
         self._user_busy = False
+        self.services = services or []
+        self._speech_busy: set[str] = set()
+        self._speech_task: asyncio.Task | None = None
+        self._event_kind: str | None = None
+
+    async def _notify_services(self, previous, state: SpeechState) -> None:
+        if previous is not None:
+            await previous
+        for service in self.services:
+            try:
+                await service.speech_state(state)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "Service speech hook failed: %s", service.name
+                )
+
+    async def _service_events(self, service: CompanionService) -> None:
+        assert self.director is not None
+        try:
+            async for event in service.events():
+                self.director.submit(replace(event, data={**event.data, "companion_service": True}))
+        except Exception:
+            logging.getLogger(__name__).exception("Service events failed: %s", service.name)
+
+    async def _flush_speech(self) -> None:
+        """Let services duck first, but never hold push-to-talk or speech on a slow player."""
+        if self._speech_task is None:
+            return
+        with suppress(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(self._speech_task), SERVICE_FLUSH_S)
 
     def _busy(self, reason: str, busy: bool) -> None:
+        self._speech_busy.discard(reason)
+        if busy:
+            self._speech_busy.add(reason)
+        if self.services and reason in {"user", "speaking", "critical"}:
+            state = SpeechState(
+                "user" in self._speech_busy,
+                "speaking" in self._speech_busy,
+                "critical" in self._speech_busy,
+                self._event_kind if "speaking" in self._speech_busy else None,
+            )
+            self._speech_task = asyncio.create_task(self._notify_services(self._speech_task, state))
         if reason == "user":
             self._user_busy = busy
         if self.director is not None:
@@ -91,6 +140,7 @@ class VoiceSession:
         async with self._reply_lock:
             await self._cancel_reply()
             self._busy("user", True)
+        await self._flush_speech()
         try:
             await asyncio.to_thread(self.recorder.start)
         except BaseException:
@@ -161,9 +211,11 @@ class VoiceSession:
         timings: dict[str, float | None],
         event: GameEvent | None = None,
     ) -> None:
+        self._event_kind = event.kind if event is not None else None
         self._busy("critical", event is not None and event.priority == "critical")
         self._busy("speaking", True)
         try:
+            await self._flush_speech()
             async with aclosing(sentences):
                 async for sentence in sentences:
                     if timings["first_sentence_ms"] is None:
@@ -186,6 +238,8 @@ class VoiceSession:
                 self.director.notify_spoke()
             self._busy("speaking", False)
             self._busy("critical", False)
+            self._event_kind = None
+            await self._flush_speech()
 
     async def _interject(self, event: GameEvent) -> None:
         timings: dict[str, float | None] = dict.fromkeys(
@@ -215,6 +269,7 @@ class VoiceSession:
                     self.director.submit(event)
                     continue
                 self._interjection = event
+                self._event_kind = event.kind
                 self._busy("speaking", True)
                 self._busy("critical", self.director.preempts(event))
                 self._reply_task = asyncio.create_task(self._interject(event))
@@ -229,6 +284,7 @@ class VoiceSession:
                     )
                 )
             if self.director is not None:
+                tasks.extend(asyncio.create_task(self._service_events(s)) for s in self.services)
                 tasks.append(asyncio.create_task(self._game_replies()))
             if self.director is not None and self.conversation.alerts is not None:
                 tasks.append(
@@ -245,6 +301,14 @@ class VoiceSession:
             await self._cancel_reply()
             self._busy("user", False)
             await asyncio.to_thread(self.recorder.stop)
+            await self._flush_speech()
+            for service in self.services:
+                try:
+                    await service.aclose()
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "Service shutdown failed: %s", service.name
+                    )
             await self.conversation.aclose()
             await asyncio.gather(
                 *(

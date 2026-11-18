@@ -13,12 +13,13 @@ from .errors import BackendError, ConfigError, PluginError
 from .game import GameAdapter
 from .llm import LLMProvider
 from .ptt import PushToTalk
+from .service import CompanionService, ServiceTool, SpeechState
 from .stt import SpeechToText
 from .tts import TextToSpeech
 from .types import AudioChunk, AudioClip, GameEvent, LLMChunk, Message, ToolCall, ToolSpec
 from .watch import Watchable, WatchSample, WatchSpec
 
-PLUGIN_API_VERSION = "2.0"
+PLUGIN_API_VERSION = "2.1"
 
 __all__ = [
     "PLUGIN_API_VERSION",
@@ -38,6 +39,9 @@ __all__ = [
     "ConfigError",
     "PluginError",
     "GameAdapter",
+    "CompanionService",
+    "ServiceTool",
+    "SpeechState",
     "LLMProvider",
     "SpeechToText",
     "TextToSpeech",

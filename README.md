@@ -159,3 +159,14 @@ were checked against Wikipedia articles.
 ## License
 
 MIT, see `LICENSE`.
+
+### Companion DJ (optional)
+
+Install **Pear Desktop** (YouTube Music), enable its **API Server** plugin, set the hostname to
+`127.0.0.1`, then fully restart the app and **play a song once**. Enable `[music]` with
+`enabled = true` and `service = "pear"` in Familiar's config. On first use, click **Allow** for
+the `familiar` client in YouTube Music. The token stays private in the user state directory.
+Ask for music, a skip, calmer music, more like this, likes/dislikes or volume changes in any
+game or desk voice mode. The carrier controls playback; everyone can ask what's playing.
+Music ducks during speech, pauses for critical events and rare track remarks, and remembers
+dislikes when memory is enabled. See `config.example.toml` for tuning and data overrides.

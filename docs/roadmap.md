@@ -63,7 +63,7 @@ Japanese plain form vs です/ます vs 敬語 and honorifics (さん, 様), Spa
 du vs Sie. English mostly changes tone.
 
 Nice to have: **the companion as DJ** (in every game; design agreed with the Commander
-2026-11-18, ADR 0012). Phase 1 (in progress): YouTube Music through Pear Desktop's API, search
+2026-11-18, ADR 0012). Phase 1 (built 2026-11-18, live test pending): YouTube Music through Pear Desktop's API, search
 via `ytmusicapi`, seed + radio, duck/pause, voice commands, dislikes in memory; later phases
 add the local library (MPD), taste weighting, history import and tag fingerprinting. The action-carrier is the DJ: picks music for the moment and comments
 on it; the rest of the crew react through banter. Play, skip and queue are carrier-only actions.
