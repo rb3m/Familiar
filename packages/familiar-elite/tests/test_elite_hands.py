@@ -94,7 +94,7 @@ def test_protocols_and_specs(hands):
     assert isinstance(adapter, Actuator)
     assert isinstance(adapter, KeyboardUser)
     assert adapter.action_context() == "Mira:42"
-    assert len(adapter.actions()) == 9
+    assert len(adapter.actions()) == 10
     assert all(not spec.risky for spec in adapter.actions().values())
     assert adapter.actions()["landing_gear"].parameters["properties"]["state"]["enum"] == [
         "up",

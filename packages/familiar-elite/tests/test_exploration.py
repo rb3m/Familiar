@@ -447,3 +447,184 @@ def test_carriers_never_best_station():
     result = summarize(system, [], stations, [0, 0, 0], interest)
     assert result["best_station"]["name"] == "Port"
     assert result["station_count"] == 1 and result["fleet_carriers"] == 1
+
+
+@pytest.mark.asyncio
+async def test_system_info_reports_scans_services_and_offline_cache(client_factory):
+    calls = []
+    fail = False
+
+    def handler(request):
+        calls.append(request)
+        if fail:
+            raise httpx.ConnectError("offline", request=request)
+        if request.url.path.endswith("/bodies"):
+            return httpx.Response(
+                200,
+                json={
+                    "bodies": [
+                        {"name": "Sol 3", "subType": "Earthlike body", "distanceToArrival": 500},
+                        {
+                            "name": "Sol 4",
+                            "subType": "Rocky body",
+                            "isLandable": True,
+                            "rings": [{}],
+                        },
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "stations": [
+                    {
+                        "name": "Port",
+                        "type": "Outpost",
+                        "distanceToArrival": 600,
+                        "economy": "Industrial",
+                        "haveMarket": True,
+                        "haveShipyard": False,
+                        "haveOutfitting": True,
+                        "body": {"name": "Sol 4"},
+                        "otherServices": ["Search and Rescue", "Interstellar Factors Contact"],
+                    },
+                    {"name": "XYZ-123", "type": "Fleet Carrier"},
+                ]
+            },
+        )
+
+    current = state()
+    current.star_pos = None  # This query needs only the system name.
+    current.bodies = 9
+    current.apply(
+        {
+            "event": "Scan",
+            "BodyName": "Sol 3",
+            "PlanetClass": "Earthlike body",
+            "WasDiscovered": False,
+            "WasMapped": False,
+        }
+    )
+    client, clock = client_factory(handler)
+    explorer = Explorer({}, client)
+    result = await explorer.perform("system_info", {}, current)
+    assert result["status"] == "done" and not result["offline"]
+    assert len(calls) == 2 and clock.waits == [0, 1]
+    assert result["edsm"]["body_count"] == 2
+    assert result["edsm"]["bodies"][0]["notable"] == "Earthlike body"
+    assert result["edsm"]["bodies"][1]["landable"]
+    assert result["edsm"]["bodies"][1]["rings"] == [{}]
+    assert result["edsm"]["bodies"][0]["distance_ls"] == 500
+    assert result["local"]["fss_body_count"] == 9
+    assert result["local"]["bodies"][0]["first_discovery"]
+    assert result["local"]["bodies"][0]["source"] == "our scans"
+    assert "WasDiscovered" not in result["edsm"]["bodies"][0]
+    station = result["edsm"]["stations"][0]
+    assert station["distance_ls"] == 600 and station["largest_pad"] == "M"
+    assert station["body"] == {"name": "Sol 4"}
+    assert station["haveMarket"] and not station["haveShipyard"] and station["haveOutfitting"]
+    assert station["otherServices"] == ["Search and Rescue", "Interstellar Factors Contact"]
+    assert result["edsm"]["fleet_carriers"] == 1 and result["edsm"]["station_count"] == 1
+    await explorer.perform("system_info", {}, current)
+    assert len(calls) == 2  # Both endpoints cached.
+    clock.now += 604801
+    fail = True
+    cached = await explorer.perform("system_info", {}, current)
+    assert cached["offline"] and "offline" in cached["detail"]
+    assert cached["edsm"] == result["edsm"] and cached["local"] == result["local"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "focus,endpoints",
+    [
+        ("bodies", ["bodies"]),
+        ("stations", ["stations"]),
+        ("services", ["stations"]),
+    ],
+)
+async def test_system_info_focus(client_factory, focus, endpoints):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path.rsplit("/", 1)[-1])
+        return httpx.Response(200, json={})
+
+    client, _ = client_factory(handler)
+    result = await Explorer({}, client).perform("system_info", {"focus": focus}, state())
+    assert result["status"] == "done" and calls == endpoints
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_system_info_local_only_disabled_and_validation(client_factory):
+    def handler(request):
+        raise AssertionError("No network allowed")
+
+    client, _ = client_factory(handler, edsm_enabled=False)
+    current = state()
+    current.apply({"event": "Docked", "StationName": "Home", "StationServices": ["market"]})
+    explorer = Explorer({}, client)
+    result = await explorer.perform("system_info", {}, current)
+    assert result["offline"] and not result["edsm"]["bodies_available"]
+    assert not result["edsm"]["stations_available"]
+    assert result["local"]["station"]["services"] == ["market"]
+    assert (await explorer.perform("system_info", {"focus": "wrong"}, current))["status"] == "error"
+    assert (await explorer.perform("system_info", {"extra": 1}, current))["status"] == "error"
+    current.system = None
+    assert (await explorer.perform("system_info", {}, current))["status"] == "unavailable"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "service,expected",
+    [
+        ("sEaRcH aNd ReScUe", "Rescue"),
+        ("MARKET", "Market"),
+        ("shipyard", "Yard"),
+        ("outfitting", "Outfitter"),
+        ("Interstellar Factors", "Rescue"),
+        ("missing", None),
+    ],
+)
+async def test_nearby_service_filter_no_extra_fanout(client_factory, service, expected):
+    calls = []
+    stations = [
+        {
+            "name": "Rescue",
+            "type": "Outpost",
+            "otherServices": ["Search and Rescue", "Interstellar Factors Contact"],
+        },
+        {"name": "Market", "type": "Coriolis Starport", "haveMarket": True},
+        {"name": "Yard", "type": "Outpost", "haveShipyard": True},
+        {"name": "Outfitter", "type": "Outpost", "haveOutfitting": True},
+    ]
+
+    def handler(request):
+        calls.append(request)
+        match request.url.path:
+            case "/api-v1/sphere-systems":
+                return httpx.Response(
+                    200, json=[system(str(n), n, population=10) for n in range(1, 10)]
+                )
+            case "/api-system-v1/bodies":
+                return httpx.Response(200, json={"bodies": []})
+            case "/api-system-v1/stations":
+                return httpx.Response(200, json={"stations": stations})
+        raise AssertionError(request.url)
+
+    client, _ = client_factory(handler)
+    result = await Explorer({}, client).perform("nearby_systems", {"service": service}, state())
+    assert len(calls) == 13  # One sphere and the same six body/station pairs as before.
+    assert {r.url.params.get("systemName") for r in calls[1:]} == set("123456")
+    if expected is None:
+        assert result["systems"] == []
+        await client.aclose()
+        return
+    assert len(result["systems"]) == 3
+    assert all(s["best_station"]["name"] == expected for s in result["systems"])
+    assert all(s["station_count"] == 1 for s in result["systems"])
+    assert result["systems"][0]["distance_ly"] == 1
+    await client.aclose()

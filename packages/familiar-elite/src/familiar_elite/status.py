@@ -22,16 +22,17 @@ class StatusReader:
         self.snapshots: dict[str, Snapshot] = {}
         self.signatures = {}
         self.flag_bits = load_data("familiar_elite", "status_flags").value
+        self.files = load_data("familiar_elite", "paths").value["snapshot_files"]
 
     def poll(self):
-        for name in ("Status", "NavRoute", "Cargo"):
+        for name in self.files:
             self._read(name)
 
     def _read(self, name):
         if self.directory is None:
             return
         try:
-            path = self.directory / f"{name}.json"
+            path = self.directory / self.files[name]
             contents = path.read_bytes()
             if contents == self.signatures.get(name):
                 # The game rewrites these files only on change: unchanged still means current.
@@ -108,6 +109,13 @@ class StatusReader:
             return self.data["Cargo"]
         sample = self.snapshots.get("Cargo")
         return sample.data.get("Count") if sample else None
+
+    @property
+    def cargo_inventory(self):
+        sample = self.snapshots.get("Cargo")
+        if sample is None:
+            return []
+        return [item for item in sample.data.get("Inventory", []) if isinstance(item, dict)]
 
     @property
     def destination(self):

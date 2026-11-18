@@ -13,11 +13,12 @@ from familiar.interfaces import (
     Keyboard,
     WatchSample,
     WatchSpec,
+    load_data,
 )
 
 from .actions import BindingSource, action_specs, hold_times, load_catalogue
 from .events import EventDetector
-from .exploration import Explorer, query_specs
+from .exploration import Explorer, local_body, query_specs
 from .journal import JournalTailer
 from .paths import find_paths
 from .state import EliteState
@@ -247,22 +248,165 @@ class EliteAdapter:
     def describe(self):
         if not self._connected():
             return ""
-        values = self.watch_sample().values
-        active = ", ".join(key for key, enabled in self.status.flags.items() if enabled)
-        fuel = "unknown"
-        if values["fuel"] is not None:
-            fuel = f"{values['fuel']:.1f}%"
-        cargo = values["cargo"] if values["cargo"] is not None else "unknown"
-        jumps = values["jumps_remaining"]
-        jumps = jumps if jumps is not None else "unknown"
-        return (
-            f"Commander {self.state.commander or 'unknown'}; "
-            f"ship {self.state.ship_name or self.state.ship or 'unknown'}.\n"
-            f"System: {self.state.system or 'unknown'}; "
-            f"station/body: {self.state.station or self.state.body or 'unknown'}.\n"
-            f"Fuel: {fuel}; cargo: {cargo}; route jumps remaining: {jumps}.\n"
-            f"Active flags: {active}."
+        state = self.state
+        identity = "; ".join(
+            str(value) for value in (state.ship, state.ship_name, state.ship_ident) if value
         )
+        lines = [
+            text
+            for text in (
+                f"Commander {state.commander}" if state.commander else "",
+                f"Ship: {identity}" if identity else "",
+                self._ship_description(),
+                self._cargo_description(),
+                self._system_description(),
+                self._scan_description(),
+                self._station_description(),
+            )
+            if text
+        ]
+        timestamp = max(state.timestamp or "", self.status.data.get("timestamp", ""))
+        if timestamp:
+            lines.append(f"Game time (UTC): {timestamp}")
+        jumps = self.status.jumps_remaining(state.system)
+        if jumps is not None:
+            lines.append(f"Route jumps remaining: {jumps}")
+        active = ", ".join(key for key, enabled in self.status.flags.items() if enabled)
+        if active:
+            lines.append(f"Active flags: {active}")
+        return "\n".join(lines)
+
+    def _ship_description(self):
+        state, status = self.state, self.status
+        shields = "not fitted"
+        if state.shields_fitted is not False:
+            shields = {True: "up", False: "down"}[status.flags["shields_up"]]
+        parts = [f"Shields: {shields}"]
+        if state.hull is not None:
+            parts.append(f"hull {100 * state.hull:g} percent")
+        fuel = status.fuel_main
+        if fuel is None:
+            fuel = state.fuel_level
+        if fuel is not None:
+            parts.append(self._fuel_description(fuel))
+        if state.max_jump_range is not None:
+            parts.append(f"max jump range {state.max_jump_range:g} light-years")
+        balance = status.data.get("Balance")
+        if balance is not None:
+            parts.append(f"balance {balance} credits")
+        if status.legal_state is not None:
+            parts.append(f"legal state {status.legal_state}")
+        if status.pips is not None:
+            pips = "/".join(f"{value / 2:g}" for value in status.pips)
+            parts.append(f"pips SYS/ENG/WEP {pips}")
+        if status.flags.get("over_heating") and status.data.get("Heat") is not None:
+            parts.append(f"heat {status.data['Heat']:g} percent (overheating)")
+        return "; ".join(parts)
+
+    def _fuel_description(self, fuel):
+        capacity = self.state.fuel_capacity
+        if capacity is None or capacity <= 0:
+            return f"fuel {fuel:g} tonnes"
+        return f"fuel {fuel:g} / {capacity:g} tonnes ({100 * fuel / capacity:g} percent)"
+
+    def _cargo_description(self):
+        amount, capacity = self.status.cargo, self.state.cargo_capacity
+        parts = []
+        if amount is not None:
+            parts.append(f"{amount:g} tonnes used")
+        if capacity is not None:
+            parts.append(f"capacity {capacity:g} tonnes")
+        inventory = sorted(self.status.cargo_inventory, key=lambda item: -item.get("Count", 0))
+        parts.extend(self._cargo_item(item) for item in inventory[:5])
+        if len(inventory) > 5:
+            parts.append(f"{len(inventory) - 5} more cargo types")
+        if not parts:
+            return ""
+        return "Cargo: " + "; ".join(parts)
+
+    @staticmethod
+    def _cargo_item(item):
+        name = (
+            item.get("Name_Localised")
+            or item.get("name_Localised")
+            or item.get("Name", "unnamed cargo")
+        )
+        flags = [
+            text
+            for enabled, text in (
+                (item.get("Stolen"), f"stolen {item.get('Stolen')} tonnes"),
+                (item.get("MissionID") or item.get("Mission"), "mission cargo"),
+            )
+            if enabled
+        ]
+        suffix = f" ({', '.join(flags)})" if flags else ""
+        return f"{name}: {item.get('Count', 0):g} tonnes{suffix}"
+
+    def _system_description(self):
+        state = self.state
+        fields = {
+            "System": state.system,
+            "body": state.body,
+            "star class": state.star_class,
+            "allegiance": state.allegiance,
+            "economy": state.economy,
+            "security": state.security,
+            "government": state.government,
+            "population": state.population,
+            "controlling faction": (state.faction or {}).get("Name"),
+            "FSS body count": state.bodies,
+        }
+        return "; ".join(f"{key}: {value}" for key, value in fields.items() if value is not None)
+
+    def _scan_description(self):
+        scans = self.state.scans
+        if not scans:
+            return ""
+        interest = load_data("familiar_elite", "interest").value
+        bodies = sorted(
+            (local_body(scan, interest) for scan in scans.values()),
+            key=lambda body: (not bool(body["notable"]), not body["first_discovery"]),
+        )
+        features = [
+            self._scan_feature(body)
+            for body in bodies
+            if body["notable"] or body["landable"] or body["first_discovery"]
+        ]
+        counts = (
+            f"Our scans: {len(scans)} bodies; "
+            f"{sum(bool(body['landable']) for body in bodies)} landable; "
+            f"{sum(body['first_discovery'] for body in bodies)} first discoveries"
+        )
+        if not features:
+            return counts
+        return counts + "; notable: " + ", ".join(features[:5])
+
+    @staticmethod
+    def _scan_feature(body):
+        details = [
+            text
+            for text in (
+                body["notable"],
+                "landable" if body["landable"] else "",
+                "first discovery" if body["first_discovery"] else "",
+            )
+            if text
+        ]
+        return f"{body['name']} ({', '.join(details)})"
+
+    def _station_description(self):
+        state = self.state
+        if not state.docked:
+            return ""
+        fields = {
+            "Docked": state.station,
+            "type": state.station_type,
+            "economy": state.station_economy,
+        }
+        parts = [f"{key}: {value}" for key, value in fields.items() if value is not None]
+        if state.station_services is not None:
+            parts.append("services: " + ", ".join(state.station_services))
+        return "; ".join(parts)
 
     def watchables(self):
         return {
