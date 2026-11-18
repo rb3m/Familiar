@@ -321,3 +321,16 @@ def test_command_check_reports_clean_then_drift(tmp_path, capsys, monkeypatch):
     preset.write_bytes(edited.encode("utf-8"))
     assert command.run(_cli_args(command, *args, "--check"), None) == 1
     assert "warning:" in capsys.readouterr().out
+
+
+def test_game_running_ignores_mentions_in_arguments(tmp_path):
+    proc = tmp_path / "proc"
+    (proc / "77").mkdir(parents=True)
+    (proc / "77" / "cmdline").write_bytes(b"copilot\x00-p\x00close EliteDangerous64.exe first\x00")
+    assert bindings.game_running(["EliteDangerous64.exe"], proc) is None
+
+
+def test_chord_with_unknown_modifier_is_skipped():
+    slot = bindings.Slot("Keyboard", "Key_K", (("Keyboard", "Key_Mystery"),))
+    binding = bindings.Binding(slot, bindings.Slot(bindings.NO_DEVICE, ""))
+    assert bindings.keyboard_map({"Thing": binding}, {"Key_K": "k"}) == {}

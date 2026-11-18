@@ -351,23 +351,23 @@ def _write_sidecar(
 
 
 def game_running(names: list[str], proc_root: Path | None = None) -> str | None:
-    """Return the matching process name found under /proc, if any."""
-    needles = [name.lower() for name in names]
-    hits = {
-        needle
-        for text in _process_texts(proc_root or Path("/proc"))
-        for needle in needles
-        if needle in text
-    }
+    """Return the matching program name found under /proc, if any.
+
+    Only argv[0] counts (Wine sets it to the Windows path of the .exe), so a process that
+    merely mentions the name in its arguments, such as an editor or a shell, never matches.
+    """
+    needles = {name.lower() for name in names}
+    hits = {name for name in _program_names(proc_root or Path("/proc")) if name in needles}
     return min(hits, default=None)
 
 
-def _process_texts(proc_root: Path) -> Iterator[str]:
+def _program_names(proc_root: Path) -> Iterator[str]:
     for cmdline in proc_root.glob("[0-9]*/cmdline"):
         try:
-            yield cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").lower()
+            program = cmdline.read_bytes().split(b"\x00", 1)[0]
         except OSError:
             continue
+        yield program.decode("utf-8", "replace").replace("\\", "/").rsplit("/", 1)[-1].lower()
 
 
 def check_sidecar(binds_path: Path, sidecar_path: Path) -> list[str]:
@@ -431,13 +431,9 @@ def _keyboard_slot(binding: Binding) -> Slot | None:
 def _evdev_chord(control: str, slot: Slot, key_names: dict[str, str]) -> tuple[str, ...] | None:
     names = [key for device, key in slot.modifiers if device == KEYBOARD]
     names.append(slot.key)
-    chord = []
-    for name in names:
-        evdev = key_names.get(name)
-        if evdev is None:
-            logger.debug("Skipping unknown Elite key name %s on %s", name, control)
-            continue
-        chord.append(evdev)
-    if slot.key not in key_names:
+    unknown = [name for name in names if name not in key_names]
+    if unknown:
+        # A partial chord would press a different control, so skip the whole binding.
+        logger.debug("Skipping %s: unknown Elite key name(s) %s", control, ", ".join(unknown))
         return None
-    return tuple(chord)
+    return tuple(key_names[name] for name in names)
