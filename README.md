@@ -108,7 +108,10 @@ at most two scenes per rolling hour after 20 quiet minutes; level 5 allows five 
 minutes; level 10 allows ten after two minutes. Mean crew chattiness scales the quiet gap.
 Level 0 or a crew of one keeps ordinary idle remarks. Push-to-talk and critical alerts cut
 scenes short; pending confirmations, busy game events, paused/disconnected games and LLM
-budget pressure suppress them. Persona YAML
+budget pressure suppress them. Fully heard scenes, and crew lines you answer directly within
+30 seconds, can become shared crew memories. Ask “remember when…” to recall them; banter may
+occasionally call back to older moments. These stay labelled as things the crew said, never
+as game facts. Persona YAML
 supports language-specific `aliases`, event-kind/prefix `interests`, and optional one-line
 `relationships` in your own persona files; see Mira's YAML for examples.
 
