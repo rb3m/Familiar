@@ -86,6 +86,14 @@ on it; the rest of the crew react through banter. Play, skip and queue are carri
 - **Tags:** a scan that identifies untagged tracks by audio fingerprint (AcoustID/MusicBrainz)
   and proposes tags for approval, never rewriting files silently.
 - Facts about songs (artist, year, album) come from tags and MusicBrainz, never from the model.
+- **Regional flavour** (the Commander's idea 2026-11-18; phase 2): the music follows where the
+  player is. ETS2: Spanish bands in Spain, German in Germany, Eastern European in Eastern
+  Europe; ATS: country/Tejano in Texas, zydeco/Cajun in Louisiana, Nashville in Tennessee. The
+  place comes from the adapter's `whereabouts()` (country/state already tracked); a border
+  crossing re-seeds and gives the DJ a natural line. Place-to-flavour hints (search phrases,
+  genres, example artists) live in a data file per game with user overrides, never in code.
+  A blend, not a takeover: a configurable regional share (e.g. 40%) mixed with the usual
+  selection, and still filtered by dislikes.
 
 Planned (M5, after the first hands): **Touch Portal sync, both directions.** Familiar's actions and
 state (alerts, fuel, last action) update panel buttons, and panel buttons trigger Familiar (talk,
