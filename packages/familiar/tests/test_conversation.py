@@ -41,8 +41,8 @@ async def test_stream_transcript_history(tmp_path, persona):
     assert log.path.name.endswith("-session1.jsonl")
     for _ in range(3):
         _ = [sentence async for sentence in conversation.ask("Again")]
-    assert len(conversation.history) == 3
-    assert conversation.history[-1].role == "assistant"
+    # Whole turns only: three records would open with a reply, so two are kept.
+    assert [m.role for m in conversation.history] == ["user", "assistant"]
 
 
 async def test_cancellation(tmp_path, persona):

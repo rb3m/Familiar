@@ -129,11 +129,17 @@ class Conversation:
     def _remember_many(self, messages: list[Message]) -> None:
         for message in messages:
             self._record_message(message)
-        start = max(0, len(self.records) - self.history_limit)
-        # The history limit is soft for an indivisible call/results group.
-        while start > 0 and self.records[start].kind == "tool_result":
-            start -= 1
-        del self.records[:start]
+        del self.records[: self._trim_start()]
+
+    def _trim_start(self) -> int:
+        """Cut only at a user turn: Gemini rejects history opening with a call or result."""
+        limit = len(self.records) - self.history_limit
+        if limit <= 0:
+            return 0
+        users = [i for i, record in enumerate(self.records) if record.message().role == "user"]
+        # Prefer the first user turn within the limit; else keep the whole current turn.
+        current = max((i for i in users if i < limit), default=0)
+        return min((i for i in users if i >= limit), default=current)
 
     async def ask(self, user_text: str) -> AsyncIterator[str]:
         """Yield reply sentences and retain partial replies on cancellation."""

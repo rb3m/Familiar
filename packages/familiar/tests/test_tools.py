@@ -147,7 +147,29 @@ async def test_tool_round_cap_final_call_and_history_trimming(tmp_path, persona)
     for history, _, _ in llm.requests:
         assert_complete(history)
     assert_complete(conversation.history)
-    assert len(conversation.history) == 1
+    # The limit never splits the current turn, so its question is kept with its calls.
+    assert conversation.history[0].role == "user"
+    assert len(conversation.history) == 8
+
+
+async def test_trimmed_history_never_opens_with_a_tool_call(tmp_path, persona):
+    """Live 400 (2026-11-17): the cut fell between a question and its call."""
+    llm = LLM(
+        [
+            [LLMChunk(tool_call=ToolCall("a", "lookup", {"value": 1}))],
+            [LLMChunk(text="Two.")],
+            [LLMChunk(text="Hello.")],
+        ]
+    )
+    conversation = Conversation(
+        llm, persona, "en", TranscriptLog(tmp_path), tools=registry(), history_limit=4
+    )
+    assert [s async for s in conversation.ask("Look")] == ["Two."]
+    assert [s async for s in conversation.ask("Hi")] == ["Hello."]
+    for history, _, _ in llm.requests:
+        assert history[0].role == "user"
+        assert_complete(history)
+    assert [m.role for m in conversation.history] == ["user", "assistant"]
 
 
 @pytest.mark.parametrize(
