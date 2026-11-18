@@ -1,0 +1,27 @@
+# Interest heuristics/classes. Override in ~/.config/familiar/data/familiar_elite/interest.yaml.
+scoopable: [K, G, B, F, O, A, M]
+notable_planets: [Earthlike body, Water world, Ammonia world]
+notable_stars: [Black Hole, Neutron Star, White Dwarf, Wolf-Rayet]
+gas_giant_text: gas giant
+no_atmospheres: ['', 'No atmosphere']
+# Player-owned or transient stations: counted separately, never the "best station".
+transient_station_types: [Fleet Carrier]
+# EDSM holds test/placeholder entries; real systems never share coordinates with ours.
+min_distance_ly: 0.5
+ignored_systems: [Somewhere Else, AssetViewerSystem]
+pad_ranks: {L: 3, M: 2, S: 1, Large: 3, Medium: 2, Small: 1}
+weights:
+  any: {notable: 3, inhabited: 2, stations: 1, scoopable: 1, few_reports: 1}
+  scenic: {notable: 10, inhabited: 0, stations: 0, scoopable: 1, few_reports: 0}
+  inhabited: {notable: 0, inhabited: 10, stations: 3, scoopable: 1, few_reports: 0}
+  exploration: {notable: 2, inhabited: -5, stations: -1, scoopable: 1, few_reports: 12}
+station_pads:
+  Coriolis Starport: L
+  Orbis Starport: L
+  Ocellus Starport: L
+  Asteroid base: L
+  Planetary Port: L
+  Planetary Outpost: L
+  # Odyssey settlement pads vary; leave unknown unless the API supplies a size.
+  Fleet Carrier: L
+  Outpost: M

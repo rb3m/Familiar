@@ -10,7 +10,7 @@ API tier) is the first backend; others plug in via entry points.
 
 ## Current step
 - Milestone: **M5 Hands** built 2026-11-17 (ADR 0009); gate verified live in en/es/ja. Needs in-game checks: SCS key presses (hold times, toggles, read-back), kRPC actions. M3 Memory needs its live check (second drive past a known place, recall, summary row).
-- **Elite** pack built 2026-11-17 (ADR 0010): journal/status events, keys written to Ship preset, hands. Needs: General preset set to Custom + `familiar elite-bindings --write` (docking keys), keys checked by hand, a live flight. Then EDSM "least reported" exploration hints.
+- **Elite** pack built 2026-11-17 (ADR 0010): journal/status events, keys written to Ship preset, hands. Needs: General preset set to Custom + `familiar elite-bindings --write` (docking keys), keys checked by hand, a live flight. EDSM nearby/exploration queries smoke-tested live from Sol.
 - Next task: live-verify M5 and M3, then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`). Then Touch Portal sync (both ways) and a KWin window-focus check for key presses (roadmap).
 - Known: LLM is flash-lite on the free key; quota 429s park a model 15 min and fall back to `fallback_api_key_env`. ElevenLabs Pro; Gemini TTS fallback. GUI sessions need evdev push-to-talk. Key presses go to the focused window (guard: fresh, unpaused telemetry). SCS radio power is unbound by default.
 

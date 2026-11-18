@@ -17,6 +17,7 @@ from familiar.interfaces import (
 
 from .actions import BindingSource, action_specs, hold_times, load_catalogue
 from .events import EventDetector
+from .exploration import Explorer, query_specs
 from .journal import JournalTailer
 from .paths import find_paths
 from .state import EliteState
@@ -56,12 +57,13 @@ class EliteAdapter:
         self._binding_source = BindingSource(self.paths)
         self._keyboard: Keyboard | None = None
         self._action_lock = asyncio.Lock()
+        self._explorer = Explorer(self.settings)
 
     def attach_keyboard(self, keyboard: Keyboard) -> None:
         self._keyboard = keyboard
 
     def actions(self) -> dict[str, ActionSpec]:
-        return action_specs(self._catalogue)
+        return {**action_specs(self._catalogue), **query_specs()}
 
     def action_context(self) -> str:
         return f"{self.state.commander}:{self.state.ship_id}"
@@ -104,6 +106,8 @@ class EliteAdapter:
             return await self._perform(name, arguments)
 
     async def _perform(self, name, arguments):
+        if name in query_specs():
+            return await self._explorer.perform(name, arguments, self.state)
         entry = self._catalogue.get(name)
         if entry is None:
             return _result("error", f"Unknown Elite action: {name}")
@@ -297,3 +301,4 @@ class EliteAdapter:
     async def aclose(self):
         self.closed = True
         await self.journal.aclose()
+        await self._explorer.aclose()

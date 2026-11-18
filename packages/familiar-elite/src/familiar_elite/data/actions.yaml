@@ -32,6 +32,7 @@ shields_priority:
     - {control: IncreaseSystemsPower}
   pips: [8, 2, 2]
 request_docking:
+  timeout_s: 15
   description: Request docking via the Contacts panel (experimental).
   # Default sequence is unverified, check in game. Never repeat automatically.
   steps:

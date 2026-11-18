@@ -13,6 +13,7 @@ class ActionSpec:
     parameters: dict
     risky: bool = False
     risky_when: Callable[[dict], bool] | None = None
+    timeout_s: float | None = None
 
 
 @runtime_checkable

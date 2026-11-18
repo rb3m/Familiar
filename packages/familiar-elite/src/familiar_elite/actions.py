@@ -46,6 +46,7 @@ def _validate_entry(name, entry, flags):
         "steps",
         "pips",
         "hold_s",
+        "timeout_s",
     }
     _require(not entry.keys() - allowed, f"{name}: unknown keys")
     _require(_text(entry.get("description")), f"{name}: description required")
@@ -53,6 +54,8 @@ def _validate_entry(name, entry, flags):
         _number(entry.get("hold_s", 0.08)) and entry.get("hold_s", 0.08) > 0,
         f"{name}: hold_s must be positive and finite",
     )
+    timeout = entry.get("timeout_s", 5)
+    _require(_number(timeout) and timeout > 0, f"{name}: timeout_s must be positive and finite")
     if "control" in entry:
         _require(_text(entry["control"]), f"{name}: invalid control")
         _require("steps" not in entry and "pips" not in entry, f"{name}: mixed action types")
@@ -117,7 +120,7 @@ def _spec(entry):
     if "states" in entry:
         schema["properties"]["state"] = {"type": "string", "enum": list(entry["states"])}
         schema["required"] = ["state"]
-    return ActionSpec(entry["description"], schema)
+    return ActionSpec(entry["description"], schema, timeout_s=entry.get("timeout_s"))
 
 
 class BindingSource:

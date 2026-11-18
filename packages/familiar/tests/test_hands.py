@@ -356,3 +356,25 @@ async def test_cancelled_execution_is_not_retried(gate, monkeypatch):
     assert (await call(registry, "act_light"))["status"] == "unknown"
     assert calls == ["light"]
     assert any(row["decision"] == "interrupted" for row in keeper.history)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("override,expected", [(None, 5), (15, 15), (0.01, 0.01)])
+@pytest.mark.parametrize("risky", [False, True])
+async def test_per_action_timeout(monkeypatch, override, expected, risky):
+    observed = []
+
+    async def wait_for(awaitable, timeout):
+        observed.append(timeout)
+        return await awaitable
+
+    monkeypatch.setattr("familiar.hands.asyncio.wait_for", wait_for)
+    keeper = ActionKeeper(Actuator(), {}, "en")
+    keeper.begin_turn("act")
+    spec = ActionSpec("Act", SCHEMA, risky=risky, timeout_s=override)
+    result = await keeper.request("light", spec)
+    if risky:
+        keeper.begin_turn("yes")
+        result = await keeper.confirm_action(result["confirmation_id"])
+    assert result["status"] == "done"
+    assert observed == [expected]

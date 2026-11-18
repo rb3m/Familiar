@@ -1,10 +1,10 @@
 [project]
 name = "familiar-elite"
 version = "0.1.0"
-description = "Read-only local Elite Dangerous game pack for Familiar."
+description = "Elite Dangerous telemetry, hands and exploration queries for Familiar."
 requires-python = ">=3.12,<3.13"
 license = "MIT"
-dependencies = ["familiar>=0.1.0,<1.0.0", "pyyaml>=6.0.2"]
+dependencies = ["familiar>=0.1.0,<1.0.0", "pyyaml>=6.0.2", "httpx>=0.28.1"]
 
 [tool.uv.sources]
 familiar = { workspace = true }

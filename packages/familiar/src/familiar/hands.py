@@ -73,6 +73,7 @@ class _Pending:
     turn: int
     timestamp: float
     context: str | None
+    spec: ActionSpec
 
 
 class ActionKeeper:
@@ -173,6 +174,7 @@ class ActionKeeper:
                     self.turn,
                     time.monotonic(),
                     self._context(),
+                    spec,
                 )
                 if self.pending is not None:
                     self._record(
@@ -190,20 +192,23 @@ class ActionKeeper:
                     ask=f"{summary} {args}".strip(),
                 )
             else:
-                result = await self._perform(name, frozen)
+                result = await self._perform(name, frozen, spec)
             self._results[key] = deepcopy(result)
             return result
 
-    async def _perform(self, name: str, arguments: dict) -> dict:
+    async def _perform(self, name: str, arguments: dict, spec: ActionSpec) -> dict:
         # Cache an uncertain outcome before awaiting so cancellation cannot permit a retry.
         key = json.dumps([name, arguments], sort_keys=True, allow_nan=False)
         self._results[key] = {
             "status": "unknown",
             "detail": "execution interrupted; outcome unknown, not retried",
         }
+        timeout = self.action_timeout_s
+        if spec.timeout_s is not None:
+            timeout = spec.timeout_s
         try:
             result = await asyncio.wait_for(
-                self.actuator.perform(name, deepcopy(arguments)), self.action_timeout_s
+                self.actuator.perform(name, deepcopy(arguments)), timeout
             )
             if (
                 not isinstance(result, dict)
@@ -241,7 +246,7 @@ class ActionKeeper:
             if reason is not None:
                 return self._record("refused", status="error", detail=reason)
             self.pending = None
-            return await self._perform(pending.name, pending.arguments)
+            return await self._perform(pending.name, pending.arguments, pending.spec)
 
     async def cancel_action(self) -> dict:
         self.pending = None

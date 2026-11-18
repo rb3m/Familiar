@@ -100,6 +100,9 @@ knowledge_paths = []      # curated landmark/lore packs
 # journal_dir = "~/path/to/Elite Dangerous"  # auto-discovered in Steam/Proton libraries
 # bindings_dir = "~/path/to/Options/Bindings"
 # poll_interval_s = 0.5
+# edsm_enabled = true       # anonymous public lookups only when a query action is called
+# edsm_min_interval_s = 1.0  # serial EDSM request pacing
+# default_jump_range_ly = 20 # fallback when Loadout has no MaxJumpRange
 # [games.elite.hold_s]
 # landing_gear = 0.08       # per-action key hold duration in seconds
 

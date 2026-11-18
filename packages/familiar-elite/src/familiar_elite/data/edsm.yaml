@@ -1,0 +1,15 @@
+# EDSM public API and cache policy. Override in ~/.config/familiar/data/familiar_elite/edsm.yaml.
+base_url: https://www.edsm.net/
+endpoints:
+  sphere:
+    path: api-v1/sphere-systems
+    ttl_s: 2592000
+    limit: 100
+    flags: {showId: 1, showCoordinates: 1, showPrimaryStar: 1, showInformation: 1}
+  cube:
+    path: api-v1/cube-systems
+    ttl_s: 2592000
+    limit: 200
+    flags: {showCoordinates: 1}
+  bodies: {path: api-system-v1/bodies, ttl_s: 604800}
+  stations: {path: api-system-v1/stations, ttl_s: 86400}

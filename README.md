@@ -31,6 +31,8 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
 - **Elite Dangerous hands**: gear, lights, cargo scoop, ship/suit night vision and power
   distribution use your active keyboard bindings with status read-back; experimental docking
   requests use a configurable Contacts sequence and report the journal outcome without retries.
+- **Elite Dangerous exploration**: on request, two or three interesting systems within jump
+  range and the least-reported directions to explore, from EDSM's public data (cached, read-only).
 
 Status: early and personal, but working. Linux (KDE Wayland) is the daily driver; macOS on Apple
 Silicon is the next target. See `docs/roadmap.md`.

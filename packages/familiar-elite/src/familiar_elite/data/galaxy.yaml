@@ -1,0 +1,16 @@
+# Galaxy heuristics/landmarks. Override in ~/.config/familiar/data/familiar_elite/galaxy.yaml.
+sol: [0, 0, 0]
+sagittarius_a: [25.21875, -20.90625, 25899.96875]
+colonia: [-9530.5, -910.28125, 19808.125]
+scale_height_ly: 300
+scale_length_ly: 8500
+sample_offset_ly: 150
+sample_size_ly: 100
+directions:
+  '+x': {axis: 0, sign: 1, words: toward galactic +X}
+  '-x': {axis: 0, sign: -1, words: toward galactic -X}
+  '+y': {axis: 1, sign: 1, words: above the galactic plane}
+  '-y': {axis: 1, sign: -1, words: below the galactic plane}
+  '+z': {axis: 2, sign: 1, words: coreward}
+  '-z': {axis: 2, sign: -1, words: rimward}
+# Spinward naming is unverified; do not use it.

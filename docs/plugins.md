@@ -209,6 +209,8 @@ JSON-schema subset. Set `risky` for confirmation, or supply `risky_when(argument
 override it per call. Optional `action_context()` returns a fast identity (`str | None`)
 that core checks again before confirming. Packs must re-check game safety before acting.
 
+Optional `ActionSpec.timeout_s` overrides the core `action_timeout_s` for that action.
+
 Core offers `act_<name>` only on player turns and owns confirmation, timeouts and deduplication.
 A `KeyboardUser` implements `attach_keyboard(keyboard)`; core loads `familiar.keyboard`
 (default `uinput`) and owns cleanup. Use `await keyboard.tap(["leftctrl", "o"], hold_s=0.05)`

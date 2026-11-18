@@ -9,6 +9,7 @@ class EliteState:
     ship: str | None = None
     ship_id: int | None = None
     ship_name: str | None = None
+    max_jump_range: float | None = None
     fuel_capacity: float | None = None
     fuel_level: float | None = None
     system: str | None = None
@@ -57,6 +58,7 @@ class EliteState:
                         "Ship": "ship",
                         "ShipID": "ship_id",
                         "ShipName": "ship_name",
+                        "MaxJumpRange": "max_jump_range",
                         "FuelLevel": "fuel_level",
                         "HullHealth": "hull",
                     },
