@@ -1,13 +1,27 @@
 """Selection, taste and one coordinator for all music interruptions."""
 
 import asyncio
+import random
 import time
-from collections import Counter
+from collections import Counter, deque
+from dataclasses import dataclass, field
 from itertools import chain
 
 from familiar.interfaces import spoken
 
+from .player import Track
 from .settings import music_settings
+
+# How far back "don't repeat" looks, for songs and for genre playlists.
+RECENT_TRACKS = 60
+RECENT_PLAYLISTS = 5
+
+
+@dataclass
+class Selection:
+    tracks: list[Track]
+    reserve: list[Track] = field(default_factory=list)
+    playlist: str = ""
 
 
 class Dislikes:
@@ -37,14 +51,20 @@ class Dislikes:
 
 
 class DJ:
-    def __init__(self, player, searcher, *, settings=None, dislikes=None, clock=time.monotonic):
+    def __init__(
+        self, player, searcher, *, settings=None, dislikes=None, clock=time.monotonic, rng=None
+    ):
         self.player, self.searcher = player, searcher
+        self.rng = rng or random.Random()
         self.settings = music_settings(settings)
         self.dislikes = dislikes or Dislikes()
         self.clock = clock
         self.last_seed = float("-inf")
         self.announced: set[str] = set()
         self.radio_seed: str | None = None
+        self.reserve: list = []
+        self.recent: deque[str] = deque(maxlen=RECENT_TRACKS)
+        self.recent_playlists: deque[str] = deque(maxlen=RECENT_PLAYLISTS)
         self.base_volume: float | None = None
         self.level: float | None = None
         self.volume_chosen = False
@@ -53,21 +73,62 @@ class DJ:
         self._pause_requested = False
         self._lock = asyncio.Lock()
 
-    async def seed(self, query, mood=None, *, calm=False):
-        hits = await self.searcher.songs(
-            " ".join(filter(None, (query, mood))), self.settings["search_limit"]
-        )
-        track = next((track for track in hits if not self.dislikes.blocked(track)), None)
-        if track is None:
+    async def seed(self, query, mood=None, *, kind="song", calm=False):
+        """Genres start a shuffled batch from a curated playlist; songs and artists start radio."""
+        text = " ".join(filter(None, (query, mood)))
+        pickers = {"genre": self._pick_playlist, "artist": self._pick_song, "song": self._pick_song}
+        selection = await pickers.get(kind, self._pick_song)(text)
+        if selection is None:
             return {"error": "No suitable music found"}
-        await self.player.play_now(track.video_id)
+        return await self._start(selection, calm)
+
+    def _fresh(self, tracks):
+        return [t for t in tracks if not self.dislikes.blocked(t) and t.video_id not in self.recent]
+
+    async def _pick_song(self, text):
+        hits = await self.searcher.songs(text, self.settings["search_limit"])
+        allowed = [track for track in hits if not self.dislikes.blocked(track)]
+        # Asking again should not replay the same top hit; fall back to it only if nothing is new.
+        track = next(iter(self._fresh(allowed) + allowed), None)
+        if track is None:
+            return None
+        return Selection([track])
+
+    async def _pick_playlist(self, text):
+        candidates = await self.searcher.playlists(text, self.settings["search_limit"])
+        new = [p for p in candidates if p.playlist_id not in self.recent_playlists]
+        for playlist in new + candidates:
+            tracks = await self.searcher.playlist_tracks(
+                playlist.playlist_id, self.settings["playlist_tracks"]
+            )
+            fresh = self._fresh(tracks)
+            if not fresh:
+                continue
+            self.rng.shuffle(fresh)
+            self.recent_playlists.append(playlist.playlist_id)
+            batch = self.settings["genre_batch"]
+            return Selection(fresh[:batch], fresh[batch:], playlist.title)
+        return None
+
+    async def _start(self, selection, calm):
+        first, *rest = selection.tracks
+        if "clear" in self.player.capabilities:
+            await self.player.clear_upcoming()
+        await self.player.play_now(first.video_id)
+        for track in rest:
+            await self.player.enqueue(track.video_id)
+        self.recent.extend(track.video_id for track in selection.tracks)
+        self.reserve = list(selection.reserve)
         self._pause_owner = None
-        self.announced.add(track.video_id)
-        self.radio_seed = track.video_id
+        self.announced.add(first.video_id)
+        self.radio_seed = first.video_id
         self.last_seed = self.clock()
         level = await self._default_volume(calm)
-        await self.top_up(track.video_id, force=True)
-        return {"playing": track.summary(), "duration": spoken(track.duration_s, "s"), **level}
+        await self.top_up(first.video_id, force=not rest)
+        result = {"playing": first.summary(), "duration": spoken(first.duration_s, "s"), **level}
+        if selection.playlist:
+            result |= {"playlist": selection.playlist, "queued": f"{len(rest)} more songs"}
+        return result
 
     async def _default_volume(self, calm):
         """Calm music always settles at calm_volume; plain play keeps a volume someone chose."""
@@ -77,38 +138,54 @@ class DJ:
         return await self._locked_volume(self.settings[key], None)
 
     async def top_up(self, video_id=None, *, force=False):
+        """Keep a few songs queued: the genre playlist's reserve first, then radio."""
         seed = video_id or self.radio_seed
         if seed is None:
             return
         queued = set(await self.player.queue_ids())
-        queued.add(seed)
         target = self.settings["queue_top_up"]
         needed = max(0, target - len(queued - {seed}))
         if force:
             needed = target
         if not needed:
             return
+        queued.add(seed)
+        self.reserve, needed = await self._enqueue_from(self.reserve, queued, needed)
+        if not needed:
+            return
         radio = await self.searcher.radio(
             seed, target + len(queued) + self.settings["search_limit"]
         )
-        for track in radio:
-            if track.video_id in queued or self.dislikes.blocked(track):
+        await self._enqueue_from(radio, queued, needed)
+
+    async def _enqueue_from(self, pool, queued, needed):
+        """Enqueue up to `needed` new tracks; returns (unused rest of the pool, still needed).
+
+        The radio seed follows the last queued track so recommendations keep moving instead of
+        running dry on one seed's short list once "don't repeat" has used it up.
+        """
+        for position, track in enumerate(pool):
+            if not needed:
+                return pool[position:], 0
+            if track.video_id in queued or not self._fresh([track]):
                 continue
             await self.player.enqueue(track.video_id)
             queued.add(track.video_id)
+            self.recent.append(track.video_id)
+            self.radio_seed = track.video_id
             needed -= 1
-            if not needed:
-                break
+        return [], needed
 
     async def reseed(self, *, calmer=False):
         if self.clock() - self.last_seed < self.settings["reseed_cooldown_s"]:
             return {"status": "Music selection is already refreshing"}
         if calmer:
-            return await self.seed(self.settings["calmer_query"], calm=True)
+            return await self.seed(self.settings["calmer_query"], kind="genre", calm=True)
         current = await self.player.now_playing()
         if current is None:
             return {"error": "Nothing is playing"}
         self.radio_seed = current.video_id
+        self.reserve = []  # "more like this" means the current song, not the last genre
         self.last_seed = self.clock()
         await self.top_up(current.video_id, force=True)
         return {"status": "Queued more like this"}

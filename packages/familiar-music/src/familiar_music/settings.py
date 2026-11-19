@@ -25,6 +25,8 @@ def music_settings(overrides):
     number(settings, "calm_volume", maximum=100)
     number(settings, "queue_top_up", integer=True, positive=True)
     number(settings, "search_limit", integer=True, positive=True)
+    number(settings, "genre_batch", integer=True, positive=True)
+    number(settings, "playlist_tracks", integer=True, positive=True)
     number(settings, "search_timeout_s", positive=True)
     number(settings, "track_remark_cooldown_s")
     number(settings, "reseed_cooldown_s")
@@ -38,7 +40,15 @@ def pear_settings(overrides):
     overrides = overrides or {}
     settings = {**defaults, **overrides}
     settings["endpoints"] = {**defaults["endpoints"], **overrides.get("endpoints", {})}
-    for key in ("call_timeout_s", "auth_timeout_s", "poll_interval_s", "recovery_interval_s"):
+    keys = (
+        "call_timeout_s",
+        "auth_timeout_s",
+        "poll_interval_s",
+        "recovery_interval_s",
+        "insert_wait_s",
+        "insert_poll_s",
+    )
+    for key in keys:
         number(settings, key, positive=True)
     keys = ("base_url", "client_id", "token_path", "insert_now", "insert_end")
     strings = [settings[key] for key in keys] + list(settings["endpoints"].values())

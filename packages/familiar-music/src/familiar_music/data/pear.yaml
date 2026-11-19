@@ -5,6 +5,9 @@ call_timeout_s: 5
 auth_timeout_s: 60
 poll_interval_s: 5
 recovery_interval_s: 30
+# Pear adds queued songs asynchronously (~0.25 s each): wait for one before skipping to it.
+insert_wait_s: 8
+insert_poll_s: 0.1
 token_path: familiar/music/pear-token
 endpoints:
   auth: /auth/{id}
@@ -14,6 +17,7 @@ endpoints:
   pause: /api/v1/pause
   next: /api/v1/next
   queue: /api/v1/queue
+  queue_item: /api/v1/queue/{index}
   like: /api/v1/like
   dislike: /api/v1/dislike
 insert_now: INSERT_AFTER_CURRENT_VIDEO

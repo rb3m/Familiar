@@ -104,7 +104,18 @@ class PearMusicService:
     def service_tools(self):
         string = {"type": "string"}
         definitions = {
-            "play_music": ("Choose and play music", {"query": string, "mood": string}, ["query"]),
+            "play_music": (
+                "Play music. kind=genre for a genre, era or mood: write the query as a "
+                "descriptive playlist search such as '70s disco classics' or 'late night jazz "
+                "bar'; it queues several songs. kind=artist or song plays that, then similar "
+                "music.",
+                {
+                    "query": string,
+                    "mood": string,
+                    "kind": {"type": "string", "enum": ["genre", "artist", "song"]},
+                },
+                ["query", "kind"],
+            ),
             "skip_track": ("Skip the current track", {}, []),
             "dislike_track": ("Remember a dislike and skip", {}, []),
             "like_track": ("Like the current track", {}, []),

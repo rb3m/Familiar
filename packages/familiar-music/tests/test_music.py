@@ -11,7 +11,7 @@ from familiar.memory.store import MemoryStore
 from familiar.tools import ToolRegistry
 from familiar_music.dj import DJ, Dislikes
 from familiar_music.pear import Health, PearPlayer
-from familiar_music.player import Track
+from familiar_music.player import Playlist, Track
 from familiar_music.search import Searcher
 from familiar_music.service import PearMusicService
 
@@ -20,6 +20,12 @@ from familiar_music.service import PearMusicService
 def isolated_data(monkeypatch, tmp_path):
     monkeypatch.setenv("FAMILIAR_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+
+
+def queued(video_id):
+    """A Pear queue response where `video_id` has landed right after the current song."""
+    items = [{"videoId": "now", "selected": True}, {"videoId": video_id}]
+    return httpx.Response(200, json={"items": items})
 
 
 async def test_token_storage_reauth_and_play_order(tmp_path):
@@ -32,6 +38,8 @@ async def test_token_storage_reauth_and_play_order(tmp_path):
         calls.append((request.method, request.url.path, request.content))
         if request.url.path == "/auth/familiar":
             return httpx.Response(200, json={"accessToken": next(tokens)})
+        if request.method == "GET":
+            return queued("seed")
         if request.url.path.endswith("queue") and reject:
             reject = False
             return httpx.Response(401)
@@ -44,6 +52,7 @@ async def test_token_storage_reauth_and_play_order(tmp_path):
         "/api/v1/queue",
         "/auth/familiar",
         "/api/v1/queue",
+        "/api/v1/queue",  # waits until Pear has added the song
         "/api/v1/next",
     ]
     assert json.loads(calls[3][2]) == {
@@ -155,6 +164,12 @@ class FakePlayer:
 class FakeSearch:
     async def songs(self, query, limit):
         return [Track("bad", "Bad", ("Bad",)), Track("seed", "Seed", ("Good",), duration_s=285)]
+
+    async def playlists(self, query, limit):
+        return [Playlist("pl-a", f"{query} A"), Playlist("pl-b", f"{query} B")]
+
+    async def playlist_tracks(self, playlist_id, limit):
+        return [Track(f"{playlist_id}-{i}", f"Song {i}", ("Band",)) for i in range(limit)][:30]
 
     async def radio(self, video_id, limit):
         return [
@@ -333,6 +348,8 @@ async def test_handshake_storage_reauth_and_play_order(tmp_path):
             if request.headers["Authorization"] == "Bearer token-1":
                 return httpx.Response(401)
             return httpx.Response(200, json={"videoId": "song", "title": "Song", "artist": "A"})
+        if request.method == "GET":
+            return queued("new")
         return httpx.Response(204)
 
     player = PearPlayer(transport=httpx.MockTransport(handle), state_dir=tmp_path)
@@ -342,7 +359,7 @@ async def test_handshake_storage_reauth_and_play_order(tmp_path):
     assert player.token_path.stat().st_mode & 0o777 == 0o600
     requests.clear()
     await player.play_now("new")
-    assert [r.url.path for r in requests] == ["/api/v1/queue", "/api/v1/next"]
+    assert [r.url.path for r in requests] == ["/api/v1/queue", "/api/v1/queue", "/api/v1/next"]
     assert json.loads(requests[0].content) == {
         "videoId": "new",
         "insertPosition": "INSERT_AFTER_CURRENT_VIDEO",
@@ -427,8 +444,8 @@ async def test_reseed_uses_current_radio_and_cooldown():
     assert "already" in (await dj.reseed(calmer=True))["status"]
     assert not calls
     now[0] = 100
-    await dj.reseed(calmer=True)
-    assert ("search", dj.settings["calmer_query"]) in calls
+    result = await dj.reseed(calmer=True)
+    assert result["playlist"] == f"{dj.settings['calmer_query']} A"
 
 
 async def test_pause_failure_and_shutdown_restore_owned_pause():
@@ -602,3 +619,129 @@ async def test_play_and_calm_volume_defaults():
     dj.last_seed = float("-inf")
     await dj.reseed(calmer=True)
     assert player.volume == 40
+
+
+class ClearingPlayer(FakePlayer):
+    capabilities = frozenset({"like", "dislike", "clear"})
+
+    async def clear_upcoming(self):
+        self.calls.append("clear")
+        self.queued = []
+
+
+async def test_genre_replaces_queue_with_shuffled_playlist_batch():
+    player = ClearingPlayer()
+    dj = DJ(player, FakeSearch(), settings={"genre_batch": 4, "queue_top_up": 3})
+    result = await dj.seed("70s disco classics", kind="genre")
+    assert player.calls[:2] == ["clear", ("play", player.current.video_id)]
+    assert result["playlist"] == "70s disco classics A" and result["queued"] == "3 more songs"
+    assert len(player.queued) == 3 and "already" not in player.queued
+    assert all(v.startswith("pl-a-") for v in player.queued + [player.current.video_id])
+    reserve = len(dj.reserve)
+    player.queued = player.queued[:1]
+    await dj.top_up()
+    assert len(player.queued) == 3 and len(dj.reserve) == reserve - 2
+
+
+async def test_asking_again_picks_something_new():
+    player = ClearingPlayer()
+    dj = DJ(player, FakeSearch())
+
+    class TwoSongs(FakeSearch):
+        async def songs(self, query, limit):
+            return [Track("top", "Top", ("A",)), Track("second", "Second", ("A",))]
+
+    dj.searcher = TwoSongs()
+    assert (await dj.seed("classic rock", kind="song"))["playing"] == "Top by A"
+    assert (await dj.seed("classic rock", kind="song"))["playing"] == "Second by A"
+    assert (await dj.seed("disco", kind="genre"))["playlist"] == "disco A"
+    assert (await dj.seed("disco", kind="genre"))["playlist"] == "disco B"
+
+
+async def test_pear_upcoming_queue_and_clear(tmp_path):
+    def item(video, selected=False):
+        return {"playlistPanelVideoRenderer": {"videoId": video, "selected": selected}}
+
+    queue = [
+        item("played"),
+        item("now", selected=True),
+        {"playlistPanelVideoWrapperRenderer": {"primaryRenderer": item("wrapped")}},
+        item("last"),
+    ]
+    deleted = []
+
+    def handle(request):
+        if request.method == "DELETE":
+            deleted.append(int(request.url.path.rsplit("/", 1)[1]))
+            return httpx.Response(204)
+        return httpx.Response(200, json={"items": queue})
+
+    player = PearPlayer(transport=httpx.MockTransport(handle), state_dir=tmp_path)
+    player.token = "saved"
+    assert await player.queue_ids() == ["wrapped", "last"]
+    await player.clear_upcoming()
+    assert deleted == [3, 2]
+    await player.aclose()
+
+
+async def test_play_now_waits_for_pear_to_add_the_song(tmp_path):
+    landed = iter([False, False, True])
+    calls = []
+
+    def handle(request):
+        calls.append((request.method, request.url.path))
+        if request.method == "GET":
+            return queued({True: "new", False: "other"}[next(landed)])
+        return httpx.Response(204)
+
+    player = PearPlayer({"insert_poll_s": 0.001}, transport=httpx.MockTransport(handle))
+    player.token = "saved"
+    await player.play_now("new")
+    assert [c for c in calls if c[0] == "GET"] == [("GET", "/api/v1/queue")] * 3
+    assert calls[-1] == ("POST", "/api/v1/next")
+    await player.aclose()
+
+
+class StableRadio(FakeSearch):
+    """Radio that returns the same numbered list per seed, like a real recommendation list."""
+
+    async def radio(self, video_id, limit):
+        return [Track(f"{video_id}>{i}", str(i), ("Band",)) for i in range(limit)]
+
+
+async def test_radio_keeps_replenishing_with_stable_results():
+    player = FakePlayer()
+    player.queued = []
+    dj = DJ(player, StableRadio())
+    dj.radio_seed = "seed"
+    await dj.top_up()
+    played = 0
+    while player.queued and played < 200:
+        player.queued.pop(0)
+        played += 1
+        await dj.top_up()
+    assert played == 200
+
+
+async def test_unusable_reserve_falls_through_to_radio():
+    player = FakePlayer()
+    player.queued = []
+    dj = DJ(player, StableRadio(), settings={"queue_top_up": 2})
+    blocked = Track("blocked", "Blocked", ("Nope",))
+    dj.dislikes.add(blocked)
+    dj.reserve = [blocked]
+    dj.radio_seed = "seed"
+    await dj.top_up()
+    assert player.queued == ["seed>0", "seed>1"] and dj.reserve == []
+
+
+async def test_more_like_this_drops_the_genre_reserve():
+    player = ClearingPlayer()
+    dj = DJ(player, StableRadio(), settings={"genre_batch": 2})
+    await dj.seed("disco", kind="genre")
+    assert dj.reserve
+    dj.last_seed = float("-inf")
+    await dj.reseed()
+    assert dj.reserve == [] and any(
+        v.startswith(f"{player.current.video_id}>") for v in player.queued
+    )

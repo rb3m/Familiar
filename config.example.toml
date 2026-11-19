@@ -168,6 +168,8 @@ service = "pear"         # familiar.services entry point
 # auth_timeout_s = 60     # time to click Allow during the handshake
 # poll_interval_s = 5     # low-rate now-playing poll
 # recovery_interval_s = 30 # quiet health re-check while the player is unavailable
+# insert_wait_s = 8       # wait for Pear to add a song before skipping to it
+# insert_poll_s = 0.1     # queue check interval during that wait
 # token_path = "familiar/music/pear-token" # relative to XDG_STATE_HOME (~/.local/state)
 # duck_level = 0.25       # fraction of the user's base volume while listening/speaking
 # volume_tolerance = 5   # a read this close to the level we set is treated as ours
@@ -179,9 +181,11 @@ service = "pear"         # familiar.services entry point
 # search_timeout_s = 10  # deadline for blocking discovery calls (run in a worker thread)
 # search_limit = 8        # candidate songs per search
 # calmer_query = "calm relaxing music"
+# genre_batch = 10        # songs queued at once for a genre/mood request (shuffled curated playlist)
+# playlist_tracks = 100   # playlist songs fetched to shuffle from; the rest top up the queue later
 # Pear endpoints and queue insertion constants live in familiar_music/pear.yaml;
 # override with ~/.config/familiar/data/familiar_music/pear.yaml. DJ tuning is in
 # familiar_music/music.yaml at the same override root. Restart Familiar to reload.
 # Optional [music.endpoints] replaces individual named paths (auth, song, volume,
-# play, pause, next, queue, like, dislike). insert_now / insert_end override queue
+# play, pause, next, queue, queue_item, like, dislike). insert_now / insert_end override queue
 # insertion constants. Prefer YAML for these API details.

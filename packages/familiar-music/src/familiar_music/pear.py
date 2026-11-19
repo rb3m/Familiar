@@ -20,7 +20,7 @@ class Health:
 
 
 class PearPlayer:
-    capabilities = frozenset({"like", "dislike", "queue", "volume"})
+    capabilities = frozenset({"like", "dislike", "queue", "clear", "volume"})
 
     def __init__(self, settings=None, *, transport=None, state_dir=None):
         self.data = pear_settings(settings)
@@ -64,25 +64,25 @@ class PearPlayer:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
 
-    async def _send(self, method, kind, payload):
+    async def _send(self, method, kind, payload, path):
         timeout = self.data["call_timeout_s"]
         async with asyncio.timeout(timeout):
             return await self.client.request(
                 method,
-                self.data["endpoints"][kind],
+                self.data["endpoints"][kind].format(**path),
                 json=payload,
                 headers={"Authorization": f"Bearer {self.token}"},
                 timeout=timeout,
             )
 
-    async def _request(self, method, kind, payload=None):
+    async def _request(self, method, kind, payload=None, **path):
         if not self.token:
             await self._auth("")
         token = self.token
-        response = await self._send(method, kind, payload)
+        response = await self._send(method, kind, payload, path)
         if response.status_code in {401, 403}:
             await self._auth(token)
-            response = await self._send(method, kind, payload)
+            response = await self._send(method, kind, payload, path)
         response.raise_for_status()
         if response.status_code == 204:
             return None
@@ -129,7 +129,14 @@ class PearPlayer:
                 "insertPosition": self.data["insert_now"],
             },
         )
+        await self._until_queued(video_id)
         await self.skip()
+
+    async def _until_queued(self, video_id):
+        """Pear adds songs asynchronously; skipping before one lands plays the wrong song."""
+        async with asyncio.timeout(self.data["insert_wait_s"]):
+            while video_id not in await self.queue_ids():
+                await asyncio.sleep(self.data["insert_poll_s"])
 
     async def enqueue(self, video_id):
         await self._request(
@@ -165,12 +172,28 @@ class PearPlayer:
     async def dislike(self):
         await self._request("POST", "dislike")
 
-    async def queue_ids(self):
+    async def _queue(self):
+        """Renderers for the whole queue and the index of the current song (-1 if none)."""
         data = await self._request("GET", "queue")
         entries = data or []
         if isinstance(data, dict):
             entries = data.get("items", [])
-        return [video for entry in entries if (video := _queue_video(entry))]
+        renderers = [_renderer(entry) for entry in entries]
+        current = next((i for i, r in enumerate(renderers) if r.get("selected")), -1)
+        return renderers, current
+
+    async def queue_ids(self):
+        """Songs still to play after the current one; played history is not counted."""
+        renderers, current = await self._queue()
+        return [video for r in renderers[current + 1 :] if (video := r.get("videoId"))]
+
+    async def clear_upcoming(self):
+        """Drop what was queued after the current song, last first so indices stay valid."""
+        renderers, current = await self._queue()
+        if current < 0:
+            return
+        for index in range(len(renderers) - 1, current, -1):
+            await self._request("DELETE", "queue_item", index=index)
 
     async def aclose(self):
         await self.client.aclose()
@@ -186,7 +209,7 @@ def _written_level(read, curve):
     return curve[-1][0]
 
 
-def _queue_video(entry):
-    """Pear queue items wrap YouTube's playlistPanelVideoRenderer."""
-    renderer = entry.get("playlistPanelVideoRenderer", entry)
-    return renderer.get("videoId")
+def _renderer(entry):
+    """Pear queue items wrap YouTube's playlistPanelVideoRenderer, sometimes twice."""
+    wrapper = entry.get("playlistPanelVideoWrapperRenderer", {}).get("primaryRenderer", entry)
+    return wrapper.get("playlistPanelVideoRenderer", wrapper)

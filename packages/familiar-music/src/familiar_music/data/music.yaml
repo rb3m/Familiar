@@ -8,6 +8,9 @@ reseed_cooldown_s: 15
 search_timeout_s: 10
 search_limit: 8
 calmer_query: calm relaxing music
+# Genre requests: songs queued at once from a shuffled curated playlist, and how many to fetch.
+genre_batch: 10
+playlist_tracks: 100
 # Volume (0-100, Pear's slider) when music starts, unless one was asked for; calmer music always.
 play_volume: 70
 calm_volume: 40

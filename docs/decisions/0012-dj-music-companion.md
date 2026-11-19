@@ -67,6 +67,12 @@ album, duration), independent of the app's page state.
   after current, then next), and keeps a short queue topped up from that track's radio, filtered
   by stored dislikes. "Calmer", "more like this" and a dislike re-seed. Dislikes go to the trip
   memory SQLite (track; a repeat for the same artist counts against the artist) and to Pear.
+  *Amended 2026-11-19 after the Elite test:* a genre or mood ("disco") matched song titles, so
+  `play_music` now takes `kind`. Genres start a shuffled batch from a curated YouTube Music
+  playlist (community ones as fallback), keeping the rest as a reserve before radio; artists and
+  songs stay seed + radio. A new pick first clears Pear's upcoming queue (radio used to land
+  behind the old list), waits for Pear's asynchronous queue add before skipping, and avoids
+  replaying recent tracks and playlists.
 - **Search with `ytmusicapi`, unauthenticated**; Pear does playback and control. It avoids the
   page-state hang and gives parsed results. Account login (likes/history for taste) is a later
   phase.

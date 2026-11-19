@@ -17,6 +17,12 @@ class Track:
         return f"{self.title} by {', '.join(self.artists) or 'unknown artist'}"
 
 
+@dataclass(frozen=True)
+class Playlist:
+    playlist_id: str
+    title: str
+
+
 class MusicPlayer(Protocol):
     capabilities: frozenset[str]
 
@@ -30,4 +36,5 @@ class MusicPlayer(Protocol):
     async def set_volume(self, level: float) -> None: ...
     async def like(self) -> None: ...
     async def dislike(self) -> None: ...
-    async def queue_ids(self) -> list[str]: ...
+    async def queue_ids(self) -> list[str]: ...  # upcoming songs only
+    async def clear_upcoming(self) -> None: ...  # only when "clear" is in capabilities
