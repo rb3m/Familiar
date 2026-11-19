@@ -181,7 +181,11 @@ async def test_seed_top_up_and_artist_dislikes():
     dislikes.add(Track("b2", "B2", ("BANNED",)))
     dj = DJ(player, FakeSearch(), dislikes=dislikes, settings={"queue_top_up": 2})
     result = await dj.seed("music")
-    assert result == {"playing": "Seed by Good", "duration": "4 minutes 45 seconds"}
+    assert result == {
+        "playing": "Seed by Good",
+        "duration": "4 minutes 45 seconds",
+        "volume": "70 percent",
+    }
     assert player.calls == [("play", "seed")]
     assert player.queued == ["already", "one", "two"]
     await dj.dislike()
@@ -455,6 +459,8 @@ async def test_pause_failure_and_shutdown_restore_owned_pause():
         {"poll_interval_s": 0},
         {"auth_timeout_s": -1},
         {"volume_tolerance": -1},
+        {"play_volume": 101},
+        {"calm_volume": -5},
         {"volume_curve": [[0, 0], [50, 60], [100, 40]]},
         {"volume_curve": [[0, 0]]},
         {"volume_curve": "flat"},
@@ -580,3 +586,19 @@ def test_pear_volume_curve_inverts_reads():
     assert _written_level(10, curve) == 25
     assert _written_level(60, curve) == 75
     assert _written_level(120, curve) == 100
+
+
+async def test_play_and_calm_volume_defaults():
+    player = FakePlayer()
+    dj = DJ(player, FakeSearch())
+    result = await dj.seed("disco")
+    assert player.volume == 70 and result["volume"] == "70 percent"
+    dj.last_seed = float("-inf")  # past the reseed cooldown
+    await dj.reseed(calmer=True)
+    assert player.volume == 40
+    await dj.volume(level=55)
+    await dj.seed("disco")
+    assert player.volume == 55
+    dj.last_seed = float("-inf")
+    await dj.reseed(calmer=True)
+    assert player.volume == 40

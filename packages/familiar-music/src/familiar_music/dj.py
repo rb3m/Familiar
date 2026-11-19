@@ -47,12 +47,13 @@ class DJ:
         self.radio_seed: str | None = None
         self.base_volume: float | None = None
         self.level: float | None = None
+        self.volume_chosen = False
         self.ducks = 0
         self._pause_owner: str | None = None
         self._pause_requested = False
         self._lock = asyncio.Lock()
 
-    async def seed(self, query, mood=None):
+    async def seed(self, query, mood=None, *, calm=False):
         hits = await self.searcher.songs(
             " ".join(filter(None, (query, mood))), self.settings["search_limit"]
         )
@@ -64,8 +65,16 @@ class DJ:
         self.announced.add(track.video_id)
         self.radio_seed = track.video_id
         self.last_seed = self.clock()
+        level = await self._default_volume(calm)
         await self.top_up(track.video_id, force=True)
-        return {"playing": track.summary(), "duration": spoken(track.duration_s, "s")}
+        return {"playing": track.summary(), "duration": spoken(track.duration_s, "s"), **level}
+
+    async def _default_volume(self, calm):
+        """Calm music always settles at calm_volume; plain play keeps a volume someone chose."""
+        if self.volume_chosen and not calm:
+            return {}
+        key = {True: "calm_volume", False: "play_volume"}[calm]
+        return await self._locked_volume(self.settings[key], None)
 
     async def top_up(self, video_id=None, *, force=False):
         seed = video_id or self.radio_seed
@@ -95,7 +104,7 @@ class DJ:
         if self.clock() - self.last_seed < self.settings["reseed_cooldown_s"]:
             return {"status": "Music selection is already refreshing"}
         if calmer:
-            return await self.seed(self.settings["calmer_query"])
+            return await self.seed(self.settings["calmer_query"], calm=True)
         current = await self.player.now_playing()
         if current is None:
             return {"error": "Nothing is playing"}
@@ -181,6 +190,11 @@ class DJ:
         return {"status": "Skipped track"}
 
     async def volume(self, level=None, change=None):
+        """An explicit request; later plays keep it instead of the play_volume default."""
+        self.volume_chosen = True
+        return await self._locked_volume(level, change)
+
+    async def _locked_volume(self, level, change):
         async with self._lock:
             try:
                 return await self._volume(level, change)

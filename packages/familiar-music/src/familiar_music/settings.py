@@ -21,6 +21,8 @@ def music_settings(overrides):
     settings = {**load_data("familiar_music", "music").value, **(overrides or {})}
     number(settings, "duck_level", maximum=1)
     number(settings, "volume_tolerance", maximum=100)
+    number(settings, "play_volume", maximum=100)
+    number(settings, "calm_volume", maximum=100)
     number(settings, "queue_top_up", integer=True, positive=True)
     number(settings, "search_limit", integer=True, positive=True)
     number(settings, "search_timeout_s", positive=True)
