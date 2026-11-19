@@ -20,11 +20,28 @@ Games sort by the job the companion does, and each job needs less precise data t
 | Advisor | Grand strategy, colony sims | Filter the notification noise; answer questions about the world | Snapshots every few minutes |
 | Commentator | RPGs, story games | MST3K-style banter and reactions | Coarse context: place, quest, combat |
 Steps, in order:
-1. **Screen-vision adapter (spike).** A generic `GameAdapter` that grabs a screenshot every N
-   seconds (or on a hotkey), asks a vision model for a short scene description, and emits it as
-   a low-priority event. Works with any game and no mod; too slow for copilot callouts, enough
-   for commentary. Tells us cheaply whether commentator mode is fun before writing game mods.
-   Watch cost per hour on the free tier and how long a frame takes from capture to remark.
+1. **Screen vision, on demand first** (the Commander's pick 2026-11-18). "What's that?",
+   "what does that sign say?", "which one is the fuel gauge?" in any game, sims included.
+   - Capture a frame at each push-to-talk press (the moment of asking), kept in memory only,
+     never written to disk. The LLM gets a `look_at_screen` tool; only when it calls it is the
+     frame sent with that one request, otherwise the frame is discarded.
+   - Telemetry first, eyes second: packs answer what they know exactly (Elite `ShipTargeted`,
+     nav destination; SCS nearest landmark), vision fills the gaps (rings, a station's shape, a
+     road sign, a building in Skyrim). "That" defaults to screen centre, crosshair or what is
+     highlighted.
+   - Not knowing is fine and expected: unknown things are part of play. How a persona guesses
+     follows its existing `truthfulness`: `strict` personas (Frieren, Mira) say what they can
+     actually see and plainly admit what they can't identify; `playful` ones (Megumin) may
+     speculate ("it looks like...") as long as it is clearly a guess. Never state a visual guess
+     as fact.
+   - Capture on KDE Wayland via Spectacle background mode or KWin's screenshot interface (not
+     the portal that asks each time); test fullscreen Proton games first. Expect about 0.5-1.5 s
+     extra on turns that look; a frame costs a few hundred tokens.
+   - Then the **periodic** variant for commentator mode: the same capture as a companion service
+     (ADR 0012 contract, so it runs beside the game adapter) that describes the scene every N
+     seconds as a low-priority event. Too slow for copilot callouts, enough for commentary; tells
+     us cheaply whether commentator mode is fun before writing game mods. Watch cost per hour on
+     the free tier and capture-to-remark time.
 2. **Commentator manners in the Director.** A hard-quiet flag while dialogue or a cutscene
    plays (like the hands gate), a smaller remark budget than sims (riffs land because they're
    sparse; crew banter carries it better than solo lines), and spoiler guarding: the persona is
