@@ -5,6 +5,8 @@ import time
 from collections import Counter
 from itertools import chain
 
+from familiar.interfaces import spoken
+
 from .settings import music_settings
 
 
@@ -62,7 +64,7 @@ class DJ:
         self.radio_seed = track.video_id
         self.last_seed = self.clock()
         await self.top_up(track.video_id, force=True)
-        return {"playing": track.summary()}
+        return {"playing": track.summary(), "duration": spoken(track.duration_s, "s")}
 
     async def top_up(self, video_id=None, *, force=False):
         seed = video_id or self.radio_seed
@@ -184,7 +186,7 @@ class DJ:
             self.base_volume = value
             applied = value * self.settings["duck_level"]
         await self.player.set_volume(applied)
-        return {"volume": value}
+        return {"volume": spoken(value, "%")}
 
     async def pause(self):
         async with self._lock:

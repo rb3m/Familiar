@@ -154,7 +154,7 @@ class FakePlayer:
 
 class FakeSearch:
     async def songs(self, query, limit):
-        return [Track("bad", "Bad", ("Bad",)), Track("seed", "Seed", ("Good",))]
+        return [Track("bad", "Bad", ("Bad",)), Track("seed", "Seed", ("Good",), duration_s=285)]
 
     async def radio(self, video_id, limit):
         return [
@@ -180,7 +180,8 @@ async def test_seed_top_up_and_artist_dislikes():
     assert "banned" not in dislikes.values()[1]
     dislikes.add(Track("b2", "B2", ("BANNED",)))
     dj = DJ(player, FakeSearch(), dislikes=dislikes, settings={"queue_top_up": 2})
-    assert (await dj.seed("music"))["playing"] == "Seed by Good"
+    result = await dj.seed("music")
+    assert result == {"playing": "Seed by Good", "duration": "4 minutes 45 seconds"}
     assert player.calls == [("play", "seed")]
     assert player.queued == ["already", "one", "two"]
     await dj.dislike()
@@ -513,3 +514,19 @@ async def test_poll_recovers_by_periodic_health_check():
     feed = service.events()
     assert (await asyncio.wait_for(anext(feed), 1)).kind == "music_track"
     await feed.aclose()
+
+
+async def test_tool_quantities_are_spoken_and_player_values_stay_numeric():
+    player = FakePlayer()
+    player.current = replace(player.current, duration_s=3661)
+    service = PearMusicService({}, player=player, searcher=FakeSearch())
+    result = await service._execute("now_playing")
+    assert result["duration"] == "1 hour 1 minute 1 second"
+    result = await service._execute("set_music_volume", level=60)
+    assert result["volume"] == "60 percent"
+    assert player.volume == 60
+    assert player.current.duration_s == 3661
+    player.current = None
+    result = await service._execute("now_playing")
+    assert result == {"playing": "Nothing is playing", "duration": "unknown"}
+    await service.aclose()

@@ -7,7 +7,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from functools import partial
 
-from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ServiceTool, ToolSpec
+from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ServiceTool, ToolSpec, spoken
 
 from .dj import DJ, Dislikes
 from .pear import PearPlayer
@@ -90,7 +90,12 @@ class PearMusicService:
             return await handlers[name](**arguments)
         if name == "now_playing":
             self._current = await self.player.now_playing()
-            return {"playing": self.describe() or "Nothing is playing"}
+            return {
+                "playing": self.describe() or "Nothing is playing",
+                "duration": spoken(
+                    self._current.duration_s if self._current is not None else None, "s"
+                ),
+            }
         if "like" not in self.player.capabilities:
             return {"error": "This player does not support likes"}
         await self.player.like()

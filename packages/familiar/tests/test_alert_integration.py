@@ -40,7 +40,11 @@ class LLM:
     async def stream(self, messages, system, tools):
         if messages[-1].role == "tool":
             result = json.loads(messages[-1].text)
-            assert (result["value"], result["unit"], result["si_value"]) == (4, "km", 4000)
+            assert (result["value"], result["unit"], result["si_value"]) == (
+                "4 kilometres",
+                "km",
+                "4,000 metres",
+            )
             yield LLMChunk(text="I'll tell you at four kilometres.")
             return
         if not tools:

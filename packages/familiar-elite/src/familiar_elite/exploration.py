@@ -2,11 +2,48 @@
 
 import math
 
-from familiar.interfaces import ActionSpec, ConfigError, load_data
+from familiar.interfaces import ActionSpec, ConfigError, load_data, spoken
 
 from .edsm import EdsmClient, positive
 
 ACTION_BUDGET_S = 19.0  # Leave time for returning a result inside the core's 20 s limit.
+
+
+# Only applied at the tool boundary, after numeric filtering and ranking.
+RESULT_QUANTITIES = {
+    "distance_ly": ("distance", "ly"),
+    "radius_ly": ("radius", "ly"),
+    "distance_ls": ("distance_to_arrival", "ls"),
+    # Ring measurements copied from EDSM and local journal scans, respectively.
+    "massMT": ("mass", "Mt"),
+    "innerRadius": ("inner_radius", "km"),
+    "outerRadius": ("outer_radius", "km"),
+    "MassMT": ("mass", "Mt"),
+    "InnerRad": ("inner_radius", "m"),
+    "OuterRad": ("outer_radius", "m"),
+    "distance_from_sol_ly": ("distance_from_sol", "ly"),
+    "height_off_plane_ly": ("height_off_plane", "ly"),
+    "distance_from_sol_colonia_line_ly": ("distance_from_sol_colonia_line", "ly"),
+    "distance_from_sol_sagittarius_a_line_ly": ("distance_from_sol_sagittarius_a_line", "ly"),
+}
+
+
+def spoken_result(value):
+    """Copy a completed result, giving dimensional quantities explicit units."""
+    if isinstance(value, list):
+        return [spoken_result(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    return dict(spoken_field(key, item) for key, item in value.items())
+
+
+def spoken_field(key, value):
+    if key in RESULT_QUANTITIES:
+        name, unit = RESULT_QUANTITIES[key]
+        return name, spoken(value, unit)
+    if key == "coordinates":
+        return key, [spoken(axis, "ly") for axis in value]
+    return key, spoken_result(value)
 
 
 def query_specs():
@@ -271,7 +308,7 @@ class Explorer:
         deadline = self.client.clock() + ACTION_BUDGET_S
         try:
             if name == "system_info":
-                return await self.system_info(arguments, state, deadline)
+                return spoken_result(await self.system_info(arguments, state, deadline))
             if not state.system or not valid_position(state.star_pos):
                 return {
                     "status": "unavailable",
@@ -279,10 +316,12 @@ class Explorer:
                 }
             position = list(state.star_pos)
             if name == "nearby_systems":
-                return await self.nearby(
-                    arguments, position, state.system, state.max_jump_range, deadline
+                return spoken_result(
+                    await self.nearby(
+                        arguments, position, state.system, state.max_jump_range, deadline
+                    )
                 )
-            return await self.hint(arguments, position, deadline)
+            return spoken_result(await self.hint(arguments, position, deadline))
         except (ConfigError, TypeError, ValueError, KeyError) as exc:
             return {"status": "error", "detail": str(exc)}
 
@@ -417,7 +456,8 @@ class Explorer:
         return {
             "status": "done",
             "detail": (
-                f"EDSM nearby systems; radius {radius:g} ly from {source} (capped at {limit:g} ly)"
+                f"EDSM nearby systems; radius {spoken(radius, 'ly')} from {source} "
+                f"(capped at {spoken(limit, 'ly')})"
             )
             + offline_suffix(offline),
             "radius_ly": radius,

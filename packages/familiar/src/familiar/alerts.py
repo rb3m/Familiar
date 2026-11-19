@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from statistics import median
 from uuid import uuid4
 
-from familiar.interfaces import GameEvent, ToolSpec, Watchable, WatchSample
+from familiar.interfaces import GameEvent, ToolSpec, Watchable, WatchSample, spoken
 from familiar.tools import ToolRegistry
 
 _LOG = logging.getLogger(__name__)
@@ -35,6 +35,12 @@ UNITS = {
 
 def _number(value: object) -> bool:
     return type(value) in {int, float} and math.isfinite(value)
+
+
+def _spoken_value(value: float, unit: str) -> str | float:
+    if unit == "count":
+        return value
+    return spoken(value, unit)
 
 
 @dataclass
@@ -67,9 +73,9 @@ class _Alert:
             "alert_id": self.id,
             "quantity": self.quantity,
             "direction": self.direction,
-            "value": self.requested_value,
+            "value": _spoken_value(self.requested_value, self.requested_unit),
             "unit": self.requested_unit,
-            "si_value": self.threshold,
+            "si_value": _spoken_value(self.threshold, self.unit),
             "si_unit": self.unit,
             "label": self.label,
             "context": self.context,
@@ -177,7 +183,11 @@ class AlertKeeper:
             label,
             announcement.strip(),
         )
-        details = {**alert.details(), "current_value": current, "current_unit": spec.unit}
+        details = {
+            **alert.details(),
+            "current_value": _spoken_value(current, spec.unit),
+            "current_unit": spec.unit,
+        }
         if alert.sign * (current - threshold) >= 0:
             return {**details, "status": "already_satisfied", "alert_id": None}
         if len(self.alerts) >= self.max_alerts:
