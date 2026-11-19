@@ -112,6 +112,20 @@ on it; the rest of the crew react through banter. Play, skip and queue are carri
   A blend, not a takeover: a configurable regional share (e.g. 40%) mixed with the usual
   selection, and still filtered by dislikes.
 
+Nice to have, research first: **phone notifications as desk alerts** (the Commander's idea
+2026-11-18). In desk sessions, the companion voices selected phone notifications in persona
+("your pizza is almost here"). Delivery apps (Uber Eats, Rappi, DiDi Food) have no public
+order-tracking API, so the source is the phone's own notifications, not the service.
+- **Devices:** the Commander has both platforms: Android + this PC, iPhone + the Mac Mini.
+- **Android → PC:** KDE Connect mirrors notifications and exposes them on D-Bus (app, title,
+  text). Likely the easy path.
+- **iPhone → Mac:** iOS keeps other apps' notifications from third-party apps; research
+  macOS-side options (iPhone Mirroring / notification forwarding, the Notification Center
+  database, ANCS) and whether any is reliable.
+- **Shape:** a service plugin feeding the desk Director; an allowlist of apps in a data file
+  with user overrides; only allowlisted notifications reach the LLM, the rest are dropped
+  unlogged; block two-factor codes. Open: desk-only or also low-priority in games.
+
 Planned (M5, after the first hands): **Touch Portal sync, both directions.** Familiar's actions and
 state (alerts, fuel, last action) update panel buttons, and panel buttons trigger Familiar (talk,
 status report, set an alert). Needs a Touch Portal plugin connection; see the `touchportal-builder`
