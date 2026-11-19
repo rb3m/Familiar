@@ -186,6 +186,13 @@ service = "pear"         # familiar.services entry point
 # calmer_query = "calm relaxing music"
 # genre_batch = 10        # songs queued at once for a genre/mood request (shuffled curated playlist)
 # playlist_tracks = 100   # playlist songs fetched to shuffle from; the rest top up the queue later
+# mpv local-library player (call_timeout_s above also bounds its IPC calls):
+# executable = "mpv"      # local-library player binary
+# args = ["--idle=yes", "--no-video", "--no-terminal"] # extra mpv arguments
+# socket_dir = "familiar" # IPC socket directory under XDG_RUNTIME_DIR
+# socket_name = "mpv.sock"
+# quit_timeout_s = 3      # wait for mpv to exit on shutdown before terminating it
+# spawn_poll_s = 0.05     # interval while waiting for a spawned mpv's socket
 # Pear endpoints and queue insertion constants live in familiar_music/pear.yaml;
 # override with ~/.config/familiar/data/familiar_music/pear.yaml. DJ tuning is in
 # familiar_music/music.yaml at the same override root. Restart Familiar to reload.

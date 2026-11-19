@@ -3,20 +3,13 @@
 import asyncio
 import os
 import tempfile
-from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
 
 import httpx
 
-from .player import Track
+from .player import Health, Track
 from .settings import pear_settings
-
-
-@dataclass(frozen=True)
-class Health:
-    status: str
-    hint: str = ""
 
 
 class PearPlayer:

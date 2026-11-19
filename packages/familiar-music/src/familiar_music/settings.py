@@ -76,6 +76,19 @@ def pear_settings(overrides):
     return settings
 
 
+def mpv_settings(overrides):
+    settings = {**load_data("familiar_music", "mpv").value, **(overrides or {})}
+    for key in ("call_timeout_s", "quit_timeout_s", "spawn_poll_s"):
+        number(settings, key, positive=True)
+    strings = [settings[key] for key in ("executable", "socket_dir", "socket_name")]
+    if any(not isinstance(value, str) or not value for value in strings):
+        raise ConfigError("Music mpv executable and socket names must be nonempty strings")
+    args = settings["args"]
+    if not isinstance(args, list) or any(not isinstance(arg, str) for arg in args):
+        raise ConfigError("Music mpv args must be a list of strings")
+    return settings
+
+
 def volume_curve(points):
     """Pairs of [written, read back], strictly rising on both sides so the curve inverts."""
     try:

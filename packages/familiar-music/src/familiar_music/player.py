@@ -25,6 +25,12 @@ class Playlist:
     title: str
 
 
+@dataclass(frozen=True)
+class Health:
+    status: str
+    hint: str = ""
+
+
 class MusicPlayer(Protocol):
     capabilities: frozenset[str]
 

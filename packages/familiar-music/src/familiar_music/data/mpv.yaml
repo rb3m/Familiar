@@ -1,0 +1,13 @@
+# mpv local-library player defaults; override ~/.config/familiar/data/familiar_music/mpv.yaml.
+executable: mpv
+args:
+  - --idle=yes
+  - --no-video
+  - --no-terminal
+  - --audio-client-name=Familiar
+# IPC socket is <XDG_RUNTIME_DIR or temp dir>/<socket_dir>/<socket_name>, dir mode 0700.
+socket_dir: familiar
+socket_name: mpv.sock
+call_timeout_s: 5
+quit_timeout_s: 3
+spawn_poll_s: 0.05
