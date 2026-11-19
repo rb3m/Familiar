@@ -4,6 +4,7 @@ import asyncio
 import os
 import tempfile
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 
 import httpx
@@ -151,7 +152,9 @@ class PearPlayer:
 
     async def get_volume(self):
         data = await self._request("GET", "volume")
-        return float(data.get("volume", data.get("state")))
+        return _written_level(
+            float(data.get("volume", data.get("state"))), self.data["volume_curve"]
+        )
 
     async def set_volume(self, level):
         await self._request("POST", "volume", {"volume": max(0, min(100, level))})
@@ -171,6 +174,16 @@ class PearPlayer:
 
     async def aclose(self):
         await self.client.aclose()
+
+
+def _written_level(read, curve):
+    """Map a read-back volume to the level that was written, interpolating between points."""
+    for (low_written, low_read), (high_written, high_read) in pairwise(curve):
+        if read > high_read:
+            continue
+        share = max(0.0, (read - low_read) / (high_read - low_read))
+        return low_written + share * (high_written - low_written)
+    return curve[-1][0]
 
 
 def _queue_video(entry):

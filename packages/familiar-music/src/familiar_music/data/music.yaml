@@ -1,5 +1,7 @@
 # DJ tuning; override ~/.config/familiar/data/familiar_music/music.yaml; restart to reload.
 duck_level: 0.25
+# A volume read this close to one we set is treated as ours (reads lag writes and round).
+volume_tolerance: 5
 queue_top_up: 5
 track_remark_cooldown_s: 900
 reseed_cooldown_s: 15

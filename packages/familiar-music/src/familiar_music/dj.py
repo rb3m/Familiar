@@ -46,6 +46,7 @@ class DJ:
         self.announced: set[str] = set()
         self.radio_seed: str | None = None
         self.base_volume: float | None = None
+        self.level: float | None = None
         self.ducks = 0
         self._pause_owner: str | None = None
         self._pause_requested = False
@@ -125,13 +126,28 @@ class DJ:
         if self.ducks:
             self.ducks += 1
             return
-        self.base_volume = await self.player.get_volume()
+        self.base_volume = await self._owned_volume()
+        self.level = self.base_volume
         self.ducks = 1
         try:
             await self.player.set_volume(self.base_volume * self.settings["duck_level"])
         except BaseException:
             await self.restore_volume()
             raise
+
+    async def _owned_volume(self):
+        """Keep the level we set unless the player moved away from it.
+
+        Player reads lag writes and round, so trusting them blindly lets every duck shave a little
+        off the restored volume until the music falls silent.
+        """
+        current = await self.player.get_volume()
+        if self.level is None:
+            return current
+        ours = (self.level, self.level * self.settings["duck_level"])
+        if any(abs(current - value) <= self.settings["volume_tolerance"] for value in ours):
+            return self.level
+        return current
 
     async def release_duck(self):
         self.ducks = max(0, self.ducks - 1)
@@ -144,6 +160,7 @@ class DJ:
             return
         base = self.base_volume
         await self.player.set_volume(base)
+        self.level = base
         self.base_volume = None
 
     @property
@@ -176,12 +193,13 @@ class DJ:
             return {"error": "Specify exactly one of level or change"}
         base = self.base_volume
         if base is None:
-            base = await self.player.get_volume()
+            base = await self._owned_volume()
         value = level
         if value is None:
             value = base + change
         value = max(0, min(100, value))
         applied = value
+        self.level = value
         if self.ducks:
             self.base_volume = value
             applied = value * self.settings["duck_level"]

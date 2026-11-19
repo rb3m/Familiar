@@ -1,6 +1,7 @@
 """Merged data defaults and bounded numeric settings."""
 
 import math
+from itertools import pairwise
 
 from familiar.interfaces import ConfigError, load_data
 
@@ -19,6 +20,7 @@ def number(settings, key, *, minimum=0, maximum=float("inf"), positive=False, in
 def music_settings(overrides):
     settings = {**load_data("familiar_music", "music").value, **(overrides or {})}
     number(settings, "duck_level", maximum=1)
+    number(settings, "volume_tolerance", maximum=100)
     number(settings, "queue_top_up", integer=True, positive=True)
     number(settings, "search_limit", integer=True, positive=True)
     number(settings, "search_timeout_s", positive=True)
@@ -40,4 +42,17 @@ def pear_settings(overrides):
     strings = [settings[key] for key in keys] + list(settings["endpoints"].values())
     if any(not isinstance(value, str) or not value for value in strings):
         raise ConfigError("Music Pear paths, identifiers and endpoints must be nonempty strings")
+    settings["volume_curve"] = volume_curve(settings["volume_curve"])
     return settings
+
+
+def volume_curve(points):
+    """Pairs of [written, read back], strictly rising on both sides so the curve inverts."""
+    try:
+        curve = [(float(written), float(read)) for written, read in points]
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("Music volume_curve must be a list of [written, read] pairs") from exc
+    rising = all(a[0] < b[0] and a[1] < b[1] for a, b in pairwise(curve))
+    if len(curve) < 2 or not rising:
+        raise ConfigError("Music volume_curve must have two or more strictly rising pairs")
+    return curve

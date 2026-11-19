@@ -454,6 +454,10 @@ async def test_pause_failure_and_shutdown_restore_owned_pause():
         {"search_timeout_s": float("nan")},
         {"poll_interval_s": 0},
         {"auth_timeout_s": -1},
+        {"volume_tolerance": -1},
+        {"volume_curve": [[0, 0], [50, 60], [100, 40]]},
+        {"volume_curve": [[0, 0]]},
+        {"volume_curve": "flat"},
     ],
 )
 def test_invalid_settings_fail_clearly(settings):
@@ -466,7 +470,7 @@ def test_invalid_settings_fail_clearly(settings):
 async def test_pear_volume_and_queue_response_shapes(tmp_path):
     def handle(request):
         payloads = {
-            "/api/v1/volume": {"state": 75},
+            "/api/v1/volume": {"state": 40},
             "/api/v1/queue": {
                 "items": [
                     {"playlistPanelVideoRenderer": {"videoId": "wrapped"}},
@@ -479,7 +483,7 @@ async def test_pear_volume_and_queue_response_shapes(tmp_path):
 
     player = PearPlayer(transport=httpx.MockTransport(handle), state_dir=tmp_path)
     player.token = "saved"
-    assert await player.get_volume() == 75
+    assert await player.get_volume() == 70  # read on Pear's curve, reported as written
     assert await player.queue_ids() == ["wrapped", "flat"]
     await player.aclose()
 
@@ -530,3 +534,49 @@ async def test_tool_quantities_are_spoken_and_player_values_stay_numeric():
     result = await service._execute("now_playing")
     assert result == {"playing": "Nothing is playing", "duration": "unknown"}
     await service.aclose()
+
+
+class LaggingPlayer(FakePlayer):
+    """Pear-like: a read right after a write still returns the previous level, rounded."""
+
+    def __init__(self, volume=70):
+        super().__init__()
+        self.volume = self.audible = volume
+
+    async def get_volume(self):
+        return round(self.audible)
+
+    async def set_volume(self, level):
+        self.audible, self.volume = self.volume, level
+
+
+async def test_repeated_ducks_restore_full_volume_despite_lagging_reads():
+    player = LaggingPlayer()
+    dj = DJ(player, FakeSearch())
+    for _ in range(5):
+        await dj.speech_state(SpeechState(listening=True))
+        await dj.speech_state(SpeechState())
+        await dj.speech_state(SpeechState(speaking=True))
+        await dj.speech_state(SpeechState())
+    assert player.volume == 70
+
+
+async def test_manual_volume_change_between_ducks_is_kept():
+    player = FakePlayer()
+    dj = DJ(player, FakeSearch())
+    await dj.speech_state(SpeechState(listening=True))
+    await dj.speech_state(SpeechState())
+    player.volume = 40
+    await dj.speech_state(SpeechState(speaking=True))
+    await dj.speech_state(SpeechState())
+    assert player.volume == 40
+
+
+def test_pear_volume_curve_inverts_reads():
+    from familiar_music.pear import _written_level
+
+    curve = [(0.0, 0.0), (50.0, 20.0), (100.0, 100.0)]
+    assert _written_level(0, curve) == 0
+    assert _written_level(10, curve) == 25
+    assert _written_level(60, curve) == 75
+    assert _written_level(120, curve) == 100
