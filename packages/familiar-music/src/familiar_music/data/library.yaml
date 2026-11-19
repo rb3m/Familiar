@@ -1,0 +1,33 @@
+# Music library scanner and deduplication configuration
+extensions:
+  - mp3
+  - flac
+  - m4a
+  - aac
+  - ogg
+  - opus
+
+# Junk genres to ignore / strip
+junk_genres:
+  - ""
+  - "other"
+  - "unknown"
+  - "none"
+  - "genre"
+
+# Deduplication duration threshold in seconds
+dup_duration_s: 3
+
+# MusicBrainz enrichment configuration
+musicbrainz:
+  endpoint: "https://musicbrainz.org/ws/2"
+  user_agent: "Familiar/0.1 ( https://github.com/rb3m/Familiar )"
+  rate_limit_s: 1.0
+  match_threshold: 90
+  retry_error_days: 7
+  search_limit: 3
+
+# Remove guest credits, but keep band names containing & or and.
+featured_artist_patterns:
+  - '\s*[([]?\b(?:feat\.?|ft\.?|featuring)\s+'
+  - '\s*\(with\s+'

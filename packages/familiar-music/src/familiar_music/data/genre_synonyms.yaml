@@ -1,0 +1,132 @@
+# Common query terms; aliases share tags and years. User-overridable.
+terms:
+  eighties:
+    tags:
+    - pop
+    - rock
+    - new wave
+    - synthpop
+    years:
+    - 1980
+    - 1989
+    aliases:
+    - 80s
+    - 1980s
+    - '''80s'
+  seventies:
+    tags:
+    - classic rock
+    - disco
+    - funk
+    years:
+    - 1970
+    - 1979
+    aliases:
+    - 70s
+    - 1970s
+    - '''70s'
+  sixties:
+    tags:
+    - rock
+    - psychedelic rock
+    - pop
+    - motown
+    years:
+    - 1960
+    - 1969
+    aliases:
+    - 60s
+    - 1960s
+    - '''60s'
+  nineties:
+    tags:
+    - alternative rock
+    - grunge
+    - britpop
+    - hip hop
+    years:
+    - 1990
+    - 1999
+    aliases:
+    - 90s
+    - 1990s
+    - '''90s'
+  disco:
+    tags:
+    - disco
+    - funk
+    - dance
+  mellow:
+    tags:
+    - ambient
+    - downtempo
+    - soft rock
+    - acoustic
+    aliases:
+    - chill
+    - calm
+  synthwave:
+    tags:
+    - synthpop
+    - new wave
+    - electronic
+  lo-fi:
+    tags:
+    - lo-fi
+    - downtempo
+    - ambient
+    aliases:
+    - lofi
+  jazz:
+    tags:
+    - jazz
+    - smooth jazz
+    - bebop
+  latin:
+    tags:
+    - latin
+    - rock en español
+    - salsa
+    - latin rock
+  rock en español:
+    tags:
+    - rock en español
+    - latin rock
+    aliases:
+    - rock en espanol
+    - rock latino
+  j-pop:
+    tags:
+    - j-pop
+    - japanese
+    aliases:
+    - jpop
+    - anime
+    - j-pop/anime
+  metal:
+    tags:
+    - heavy metal
+    - metal
+    - hard rock
+  country:
+    tags:
+    - country
+    - americana
+    - bluegrass
+  cumbia:
+    tags:
+    - cumbia
+  ska:
+    tags:
+    - ska
+  city pop:
+    tags:
+    - city pop
+    - j-pop
+  soundtrack:
+    aliases:
+    - score
+    - soundtrack/score
+    tags:
+    - soundtrack
+    - score
