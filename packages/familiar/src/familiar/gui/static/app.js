@@ -587,6 +587,7 @@ function fillEditor(data, isNew, draft = false) {
   $('#chattiness-value').textContent = $('#edit-chattiness').value;
   $('#edit-prompt').value = data.prompt || '';
   $('#edit-rules').value = (data.style_rules || []).join('\n');
+  $('#edit-music').value = (data.tastes?.music || []).join('\n');
   showMessage($('#editor-notice'), draft ? 'AI draft · Unsaved. Review the facts, personality, voices, and game hooks before saving.'
     : (data.builtin && !isNew ? 'This is a built-in persona. Saving creates a custom copy with the same ID; the original stays available to restore.' : ''));
   showMessage($('#editor-error'), '');
@@ -764,8 +765,19 @@ function collectPersona() {
   return { ...original, id: form.get('id').trim(), display_name: form.get('display_name').trim(),
     source: form.get('source').trim(), truthfulness: form.get('truthfulness'),
     chattiness: Number(form.get('chattiness')), prompt: form.get('prompt').trim(),
-    style_rules: form.get('style_rules').split('\n').map((line) => line.trim()).filter(Boolean),
+    style_rules: lines(form.get('style_rules')),
+    tastes: withTaste(original.tastes, 'music', lines(form.get('music_taste'))),
     languages, game_hooks: gameHooks };
+}
+
+function lines(text) {
+  return text.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
+// Set one taste topic, keeping the others; an empty list removes the topic.
+function withTaste(tastes, topic, likes) {
+  const { [topic]: _previous, ...others } = tastes || {};
+  return likes.length ? { ...others, [topic]: likes } : others;
 }
 
 async function savePersona(event) {

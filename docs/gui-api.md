@@ -44,7 +44,9 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   `$FAMILIAR_DATA_DIR/familiar/languages.yaml`), preserving other overrides. Enable the language
   and configure its voices in each persona that will use it.
 - `GET /api/personas/{id}` → full persona as JSON (same keys as the YAML) + `"builtin": bool`
-  and `"overrides_builtin": bool`.
+  and `"overrides_builtin": bool`. This includes optional `tastes`, e.g.
+  `{"music": ["70s city pop"]}`; the editor's "Music taste" box edits `tastes.music` and keeps
+  other topics.
 - `PUT /api/personas/{id}` body = full persona JSON → validated with the persona loader rules;
   saved as YAML in the user personas dir; `200` → PersonaSummary; `400` on validation error.
   The id in the URL wins over any id in the body. Ids: `^[a-z0-9][a-z0-9_-]{0,39}$`.

@@ -178,6 +178,16 @@ async def test_persona_crud(client):
     assert (await client.delete("/api/personas/custom")).status == 200
 
 
+async def test_persona_music_taste_round_trips(client):
+    tastes = {"music": ["70s city pop", "quiet folk"], "food": ["ramen"]}
+    saved = await client.put("/api/personas/custom", json={**persona(), "tastes": tastes})
+    assert saved.status == 200
+    data = await (await client.get("/api/personas/custom")).json()
+    assert data["tastes"] == tastes
+    bad = {**persona(), "tastes": {"music": "city pop"}}
+    assert (await client.put("/api/personas/custom", json=bad)).status == 400
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fenced", [False, True, None])
 async def test_draft(client, monkeypatch, fenced):

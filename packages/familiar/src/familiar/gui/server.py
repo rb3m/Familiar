@@ -309,6 +309,10 @@ class APIService:
                     "chattiness": {"type": "number", "minimum": 0, "maximum": 1},
                     "truthfulness": {"enum": list(TRUTHFULNESS_RULES)},
                     "style_rules": {"type": "array", "items": {"type": "string"}},
+                    "tastes": {
+                        "type": "object",
+                        "additionalProperties": {"type": "array", "items": {"type": "string"}},
+                    },
                     "game_hooks": {"type": "object", "additionalProperties": {"type": "string"}},
                     "languages": {
                         "type": "object",
