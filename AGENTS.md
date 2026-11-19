@@ -10,7 +10,7 @@ API tier) is the first backend; others plug in via entry points.
 
 ## Current step
 - Live OK 2026-11-17: KSP crew turns, banter, kRPC actions; ETS2 **M3** recall, **M6** stereo; 2026-11-18 Elite flight: gear, cargo scoop, EDSM nearby. Awaiting live checks: **M5** SCS key presses, callbacks, Elite hand-off (ADR 0013) + ship/system awareness + `system_info`.
-- Next task: live checks above; DJ phase 1 live test (built; `[music] enabled = true`, Pear open and played once); then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal sync and KWin focus check; M7 Vic2 save-diff adapter (roadmap).
+- Next task: live checks above; DJ live check of genre playlists, song remarks every 3-4 songs and carrier DJ turns (ADR 0014; `[music] enabled = true`, Pear open); then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal sync and KWin focus check; M7 Vic2 save-diff adapter (roadmap).
 - Known: flash-lite free key; 429s park a model 15 min, then `fallback_api_key_env`. ElevenLabs Pro, Gemini TTS fallback. GUI needs evdev push-to-talk. Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
 ## Rules
