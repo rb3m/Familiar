@@ -20,7 +20,7 @@ from .tts import TextToSpeech
 from .types import AudioChunk, AudioClip, GameEvent, LLMChunk, Message, ToolCall, ToolSpec
 from .watch import Watchable, WatchSample, WatchSpec
 
-PLUGIN_API_VERSION = "2.1"
+PLUGIN_API_VERSION = "2.2"
 
 __all__ = [
     "PLUGIN_API_VERSION",

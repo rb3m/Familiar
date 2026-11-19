@@ -12,6 +12,8 @@ class ServiceTool:
     spec: ToolSpec
     handler: Callable[..., Awaitable[dict]]
     carrier_only: bool = False
+    # May be offered on an unprompted turn when an event names it in data["tools"].
+    autonomous: bool = False
 
 
 @dataclass(frozen=True)

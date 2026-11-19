@@ -3,7 +3,13 @@ duck_level: 0.25
 # A volume read this close to one we set is treated as ours (reads lag writes and round).
 volume_tolerance: 5
 queue_top_up: 5
-track_remark_cooldown_s: 900
+# A remark on the new song every [low, high] song changes (picked songs don't count).
+remark_every: [3, 4]
+# The carrier may choose new music every [low, high] song changes...
+dj_turn_every: [8, 12]
+# ...but not within this long of a music request, and never while music is paused.
+autonomy_hold_s: 900
+autonomous_picks: true
 reseed_cooldown_s: 15
 search_timeout_s: 10
 search_limit: 8

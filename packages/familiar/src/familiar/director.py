@@ -158,6 +158,9 @@ class Director:
             return not (self._busy - {"speaking"})
         if self._busy:
             return False
+        if event.data.get("cue"):
+            # Tied to a moment (e.g. a song change): wait only for silence, not quiet gaps.
+            return True
         if (
             self._last_spoke is not None
             and now - self._last_spoke < self._cooldowns[event.priority]

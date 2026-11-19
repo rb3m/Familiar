@@ -86,6 +86,8 @@ class Persona:
     interests: dict[str, float] = field(default_factory=dict)
     relationships: dict[str, str] = field(default_factory=dict)
     roles: dict[str, str] = field(default_factory=dict)
+    # Free-text likes per topic, e.g. {"music": ["70s city pop", "quiet folk"]}.
+    tastes: dict[str, list[str]] = field(default_factory=dict)
 
     def names(self, language: str) -> list[str]:
         """The display name is an alias in every language."""
@@ -177,6 +179,14 @@ def validate_persona(data: object) -> dict:
     for identifier in relationships:
         validate_id(identifier)
     roles = _one_line_mapping(data, "roles", "game ids")
+    tastes = data.get("tastes", {})
+    if not isinstance(tastes, dict) or any(
+        not isinstance(topic, str)
+        or not isinstance(likes, list)
+        or any(not isinstance(like, str) or not like.strip() for like in likes)
+        for topic, likes in tastes.items()
+    ):
+        raise ConfigError("Persona tastes must map topics to lists of non-empty strings")
     return {
         **data,
         "style_rules": rules,
@@ -186,6 +196,7 @@ def validate_persona(data: object) -> dict:
         "interests": interests,
         "relationships": relationships,
         "roles": roles,
+        "tastes": tastes,
     }
 
 

@@ -51,17 +51,32 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, tuple[ToolSpec, ToolHandler]] = {}
         self._carrier_only: set[str] = set()
+        self._autonomous: set[str] = set()
 
-    def register(self, spec: ToolSpec, handler: ToolHandler, *, carrier_only: bool = False) -> None:
+    def register(
+        self,
+        spec: ToolSpec,
+        handler: ToolHandler,
+        *,
+        carrier_only: bool = False,
+        autonomous: bool = False,
+    ) -> None:
         if spec.name in self._tools:
             raise ValueError(f"Duplicate tool: {spec.name}")
         self._tools[spec.name] = spec, handler
         if carrier_only:
             self._carrier_only.add(spec.name)
+        if autonomous:
+            self._autonomous.add(spec.name)
 
     @property
     def has_carrier_tools(self) -> bool:
         return bool(self._carrier_only)
+
+    def offered(self, names, *, carrier: bool) -> list[ToolSpec]:
+        """Tools an event may offer an unprompted turn: named, registered as autonomous."""
+        allowed = set(names) & self._autonomous
+        return [spec for spec in self.specs(carrier=carrier) if spec.name in allowed]
 
     def specs(self, *, carrier: bool = True) -> list[ToolSpec]:
         return [

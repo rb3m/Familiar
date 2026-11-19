@@ -114,8 +114,9 @@ budget pressure suppress them. Fully heard scenes, and crew lines you answer dir
 30 seconds, can become shared crew memories. Ask “remember when…” to recall them; banter may
 occasionally call back to older moments. These stay labelled as things the crew said, never
 as game facts. Persona YAML
-supports language-specific `aliases`, event-kind/prefix `interests`, and optional one-line
-`relationships` in your own persona files; see Mira's YAML for examples.
+supports language-specific `aliases`, event-kind/prefix `interests`, optional one-line
+`relationships`, and `tastes` (e.g. `music: ["70s city pop", "quiet folk"]`, hints for the
+carrier's own music picks) in your own persona files; see Mira's YAML for examples.
 
 ATS/ETS2 telemetry comes from a local TruckSim GPS telemetry server (default
 `http://localhost:31377`); see `[games.ats]` in `config.example.toml`.

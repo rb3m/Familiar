@@ -28,11 +28,29 @@ def music_settings(overrides):
     number(settings, "genre_batch", integer=True, positive=True)
     number(settings, "playlist_tracks", integer=True, positive=True)
     number(settings, "search_timeout_s", positive=True)
-    number(settings, "track_remark_cooldown_s")
+    number(settings, "autonomy_hold_s")
+    for key in ("remark_every", "dj_turn_every"):
+        settings[key] = song_range(settings, key)
+    if not isinstance(settings["autonomous_picks"], bool):
+        raise ConfigError("Music autonomous_picks must be true or false")
     number(settings, "reseed_cooldown_s")
     if not isinstance(settings["calmer_query"], str) or not settings["calmer_query"].strip():
         raise ConfigError("Music calmer_query must be a nonempty string")
     return settings
+
+
+def song_range(settings, key):
+    """[low, high] whole numbers of songs, 1 <= low <= high."""
+    value = settings[key]
+    valid = (
+        isinstance(value, list | tuple)
+        and len(value) == 2
+        and all(type(n) is int and n >= 1 for n in value)
+        and value[0] <= value[1]
+    )
+    if not valid:
+        raise ConfigError(f"Music {key} must be [low, high] song counts with 1 <= low <= high")
+    return tuple(value)
 
 
 def pear_settings(overrides):

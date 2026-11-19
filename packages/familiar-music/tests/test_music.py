@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import random
 from dataclasses import replace
 
 import httpx
@@ -270,25 +271,104 @@ async def test_critical_pause_ownership(user_change):
     assert ("resume" in player.calls) == (user_change in {"none", "resume"})
 
 
-async def test_track_cooldown_and_requested_track_suppression():
+class FixedRng:
+    """randint returns the low bound, so cadences are predictable."""
+
+    def randint(self, low, high):
+        return low
+
+    def shuffle(self, items):
+        pass
+
+
+async def change(service, player, video_id):
+    player.current = Track(video_id, video_id.title(), ("Band",))
+    return await service.poll()
+
+
+async def test_remark_every_few_songs_and_only_once_heard():
     player = FakePlayer()
-    now = [0]
-    service = PearMusicService({}, player=player, searcher=FakeSearch(), clock=lambda: now[0])
-    event = await service.poll()
-    assert event.kind == "music_track" and event.data["ttl_s"] == 15
+    service = PearMusicService(
+        {"remark_every": [3, 4], "autonomous_picks": False},
+        player=player,
+        searcher=FakeSearch(),
+        rng=FixedRng(),
+    )
     assert await service.poll() is None
-    player.current = Track("two", "Two")
-    now[0] = 10
-    assert await service.poll() is None
-    now[0] = 1000
-    player.current = Track("three", "Three")
-    assert await service.poll() is not None
+    assert await service.poll() is None  # same song: not a change
+    assert await change(service, player, "two") is None
+    event = await change(service, player, "three")
+    assert event.kind == "music_track" and event.data["cue"] and event.data["ttl_s"] == 15
+    # Dropped by the Director (never acknowledged): the next change tries again.
+    assert (await change(service, player, "four")).kind == "music_track"
+    await service.speech_state(SpeechState(speaking=True, event_kind="music_track"))
+    assert await change(service, player, "five") is None
     await service.dj.seed("music")
-    now[0] = 2000
-    assert await service.poll() is None
+    assert await service.poll() is None  # a requested song is not counted
     assert "bad" in service.describe()
     await service.aclose()
     assert player.closed
+
+
+async def test_dj_turn_goes_to_the_carrier_with_play_music_only():
+    player = FakePlayer()
+    now = [0]
+    service = PearMusicService(
+        {"remark_every": [9, 9], "dj_turn_every": [2, 2], "autonomy_hold_s": 100},
+        player=player,
+        searcher=FakeSearch(),
+        clock=lambda: now[0],
+        rng=FixedRng(),
+    )
+    await service.poll()
+    event = await change(service, player, "two")
+    assert event.kind == "music_dj_turn"
+    assert event.data["speaker"] == "carrier" and event.data["tools"] == ["play_music"]
+    assert event.data["taste"] == "music" and event.data["cue"] and "Two" in event.data["summary"]
+    await service.speech_state(SpeechState(speaking=True, event_kind="music_dj_turn"))
+    assert service.picks.count == 0 and service.remarks.count == 0
+    tools = {tool.spec.name: tool for tool in service.service_tools()}
+    assert [name for name, tool in tools.items() if tool.autonomous] == ["play_music"]
+    await service.aclose()
+
+
+async def test_user_requests_and_pause_hold_back_autonomous_picks():
+    player = FakePlayer()
+    now = [0]
+    service = PearMusicService(
+        {"remark_every": [9, 9], "dj_turn_every": [1, 1], "autonomy_hold_s": 100},
+        player=player,
+        searcher=FakeSearch(),
+        clock=lambda: now[0],
+        rng=FixedRng(),
+    )
+    await service._execute("skip_track")
+    assert await change(service, player, "two") is None  # inside the hold
+    now[0] = 200
+    await service._execute("pause_music")
+    assert await change(service, player, "three") is None  # paused: no picks
+    await service._execute("resume_music")
+    assert (await change(service, player, "four")).kind == "music_dj_turn"
+    await service._execute("set_music_volume", level=50)  # volume is not a selection
+    assert (await change(service, player, "five")).kind == "music_dj_turn"
+    await service.aclose()
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"remark_every": [4, 3]},
+        {"remark_every": [0, 2]},
+        {"dj_turn_every": 5},
+        {"autonomous_picks": "yes"},
+        {"autonomy_hold_s": -1},
+    ],
+)
+def test_invalid_cadence_settings(settings):
+    from familiar.interfaces import ConfigError
+
+    with pytest.raises(ConfigError):
+        PearMusicService(settings, player=FakePlayer(), searcher=FakeSearch())
 
 
 async def test_tool_schema_carrier_and_health_hint_once(caplog):
@@ -404,7 +484,7 @@ async def test_poll_parks_until_explicit_health_recovery():
         return Health("not running", "Open YouTube Music")
 
     player.health = unavailable
-    service = PearMusicService({}, player=player, searcher=FakeSearch())
+    service = PearMusicService({"remark_every": [1, 1]}, player=player, searcher=FakeSearch())
     feed = service.events()
     pending = asyncio.create_task(anext(feed))
     await ready.wait()
@@ -437,7 +517,7 @@ async def test_reseed_uses_current_radio_and_cooldown():
             return await super().songs(query, limit)
 
     now = [0]
-    dj = DJ(player, Search(), clock=lambda: now[0])
+    dj = DJ(player, Search(), clock=lambda: now[0], rng=FixedRng())
     await dj.reseed()
     assert ("radio", "current") in calls
     calls.clear()
@@ -537,7 +617,9 @@ async def test_poll_recovers_by_periodic_health_check():
         return statuses.pop(0) if len(statuses) > 1 else statuses[0]
 
     player.health = health
-    service = PearMusicService({"recovery_interval_s": 0.01}, player=player, searcher=FakeSearch())
+    service = PearMusicService(
+        {"recovery_interval_s": 0.01, "remark_every": [1, 1]}, player=player, searcher=FakeSearch()
+    )
     feed = service.events()
     assert (await asyncio.wait_for(anext(feed), 1)).kind == "music_track"
     await feed.aclose()
@@ -631,7 +713,7 @@ class ClearingPlayer(FakePlayer):
 
 async def test_genre_replaces_queue_with_shuffled_playlist_batch():
     player = ClearingPlayer()
-    dj = DJ(player, FakeSearch(), settings={"genre_batch": 4, "queue_top_up": 3})
+    dj = DJ(player, FakeSearch(), settings={"genre_batch": 4, "queue_top_up": 3}, rng=FixedRng())
     result = await dj.seed("70s disco classics", kind="genre")
     assert player.calls[:2] == ["clear", ("play", player.current.video_id)]
     assert result["playlist"] == "70s disco classics A" and result["queued"] == "3 more songs"
@@ -645,7 +727,7 @@ async def test_genre_replaces_queue_with_shuffled_playlist_batch():
 
 async def test_asking_again_picks_something_new():
     player = ClearingPlayer()
-    dj = DJ(player, FakeSearch())
+    dj = DJ(player, FakeSearch(), rng=FixedRng())
 
     class TwoSongs(FakeSearch):
         async def songs(self, query, limit):
@@ -745,3 +827,68 @@ async def test_more_like_this_drops_the_genre_reserve():
     assert dj.reserve == [] and any(
         v.startswith(f"{player.current.video_id}>") for v in player.queued
     )
+
+
+async def test_playlist_choice_varies_only_among_top_results():
+    class Many(FakeSearch):
+        async def playlists(self, query, limit):
+            return [Playlist(f"pl-{i}", str(i)) for i in range(6)]
+
+    chosen = set()
+    for seed in range(30):
+        dj = DJ(ClearingPlayer(), Many(), rng=random.Random(seed))
+        chosen.add((await dj.seed("disco", kind="genre"))["playlist"])
+    assert chosen == {"0", "1", "2"}
+
+
+def dj_service(player, now, **settings):
+    return PearMusicService(
+        {"remark_every": [9, 9], "dj_turn_every": [1, 1], "autonomy_hold_s": 100, **settings},
+        player=player,
+        searcher=FakeSearch(),
+        clock=lambda: now[0],
+        rng=FixedRng(),
+    )
+
+
+async def test_queued_dj_turn_cannot_undo_a_later_request():
+    player = FakePlayer()
+    now = [0]
+    service = dj_service(player, now)
+    assert (await change(service, player, "two")).kind == "music_dj_turn"
+    await service._execute("pause_music")  # the Commander spoke first
+    await service.speech_state(SpeechState(speaking=True, event_kind="music_dj_turn"))
+    result = await service._execute("play_music", query="disco", kind="genre")
+    assert "error" in result and player.current.paused
+    await service.aclose()
+
+
+async def test_externally_paused_player_gets_no_dj_turn():
+    player = FakePlayer()
+    service = dj_service(player, [0])
+    player.current = Track("two", "Two", paused=True)
+    assert await service.poll() is None
+    await service.aclose()
+
+
+async def test_skips_and_dislikes_are_not_natural_changes():
+    player = FakePlayer()
+    service = dj_service(player, [0], dj_turn_every=[9, 9], remark_every=[1, 1])
+    await service._execute("skip_track")
+    assert await service.poll() is None  # the skipped-to song
+    assert (await change(service, player, "natural")).kind == "music_track"
+    await service.aclose()
+
+
+async def test_one_turn_is_acknowledged_once():
+    player = FakePlayer()
+    service = dj_service(player, [0], dj_turn_every=[9, 9], remark_every=[3, 3])
+    speaking = SpeechState(speaking=True, event_kind="music_track")
+    await service.speech_state(speaking)
+    await change(service, player, "two")
+    await service.speech_state(SpeechState(listening=True, speaking=True, event_kind="music_track"))
+    assert service.remarks.count == 1  # push-to-talk mid-turn did not restart the count
+    await service.speech_state(SpeechState())
+    await service.speech_state(speaking)
+    assert service.remarks.count == 0  # a new turn does
+    await service.aclose()

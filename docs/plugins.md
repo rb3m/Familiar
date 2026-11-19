@@ -267,7 +267,13 @@ values with JSON-schema parameters, async dictionary-returning handlers and `car
 `describe()` must return cached prompt context quickly, or an empty string. `speech_state()`
 receives complete immutable listening/speaking/critical state and the spoken event kind;
 make repeated states idempotent and restore resources in `aclose()`. Core isolates failures.
-API 2.1 is additive and remains compatible with API major 2 plugins. `[music]` selects the first
+API 2.1 is additive and remains compatible with API major 2 plugins.
+API 2.2 (additive, ADR 0014): a service event may set `data["cue"]` (tied to a moment: skip the
+Director's quiet gaps, still wait for silence), `data["speaker"] = "carrier"` (route to the
+carrier), `data["tools"]` (tool names offered on that unprompted turn; only tools registered with
+`ServiceTool(autonomous=True)` are honoured, carrier-only rules still apply) and `data["taste"]`
+(a persona `tastes` topic added as hints). `speech_state()` seeing `speaking` with your event kind
+means the Director admitted that event; use it to restart schedules instead of counting emissions. `[music]` selects the first
 service; settings other than `enabled` and `service` pass through to its constructor. Core
 injects `dislike_read()` and `dislike_write(video_id, artists)` callbacks when memory is enabled;
 plugins must import only `familiar.interfaces`, never core memory or voice implementations.

@@ -64,6 +64,10 @@ Backend plugin classes expose `name`, `api_version` and `capabilities` (a set of
 - Pressing push-to-talk interrupts playback and cancels generation.
 - Queued interjections carry a deadline; stale ones are dropped, not spoken late.
 - Per-persona `chattiness` scales cooldowns for `ambient` and `notable`.
+- A `cue` event (e.g. a song change) skips those cooldowns and the per-kind gap but still waits
+  until nobody is speaking or holding push-to-talk; its short TTL drops it if the moment passes.
+- `speaker: carrier` routes an event to the carrier; `tools` offers named autonomous tools on
+  that one unprompted turn (other interjections stay tool-free). See ADR 0014.
 
 Game packs may attach `event.data["flavor"]`, a list of real quote candidates with `id`, `text`,
 `speaker`, `context` and `attribution` (`verified` or `attributed`). Packs supply candidates;
@@ -188,6 +192,8 @@ and pause gates. A service also creates a desk Director when there is no game or
 The optional `[music]` service is disabled by default. `familiar-music` owns Pear playback,
 threaded YouTube Music discovery, radio selection and a single duck/pause coordinator.
 Track remarks pause music; ordinary speech ducks against a separately remembered base volume.
+Remarks come every 3-4 natural song changes and the carrier gets a DJ turn (may call
+`play_music`) every 8-12, held back for 15 minutes after any music request and while paused.
 Critical pauses resume only while ownership survives explicit user controls and observed track
 or playback changes. An external pause command issued while playback is already paused cannot
 be distinguished through Pear's state-only API. Dislikes use injected MemoryStore callbacks,

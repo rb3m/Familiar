@@ -15,6 +15,7 @@ from .settings import music_settings
 # How far back "don't repeat" looks, for songs and for genre playlists.
 RECENT_TRACKS = 60
 RECENT_PLAYLISTS = 5
+PLAYLIST_CHOICES = 3
 
 
 @dataclass
@@ -97,7 +98,10 @@ class DJ:
     async def _pick_playlist(self, text):
         candidates = await self.searcher.playlists(text, self.settings["search_limit"])
         new = [p for p in candidates if p.playlist_id not in self.recent_playlists]
-        for playlist in new + candidates:
+        # Relevance falls off fast past the first few results, so vary only among those.
+        top = new[:PLAYLIST_CHOICES]
+        self.rng.shuffle(top)
+        for playlist in top + new[PLAYLIST_CHOICES:] + candidates:
             tracks = await self.searcher.playlist_tracks(
                 playlist.playlist_id, self.settings["playlist_tracks"]
             )

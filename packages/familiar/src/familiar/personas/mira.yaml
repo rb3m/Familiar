@@ -11,6 +11,12 @@ aliases:
 # Event kind or prefix -> nonnegative weight (exact wins, then longest prefix).
 # Effective event preference is weight * chattiness; omitted matches default to 1.
 interests: {}
+# Likes per topic, used as hints (e.g. the carrier's own music picks, ADR 0014).
+tastes:
+  music:
+  - synthwave and retro electronic
+  - ambient space music
+  - mellow lo-fi for long hauls
 # In user personas only: relationships: {another_persona_id: "One line about them."}
 # Role per game in the third person, shown to the rest of the crew (game_hooks speak to
 # this persona as "you", so they are not reused). Missing roles read "crew member".

@@ -219,11 +219,16 @@ class Conversation:
         facts = event.data.get("facts")
         if facts:
             text += "\nFacts you may use: - " + "\n- ".join(facts)
+        tastes = getattr(self.speaker, "tastes", None)
+        taste = tastes.get(event.data.get("taste", "")) if isinstance(tastes, dict) else None
+        if taste:
+            text += "\nYour taste (hints, not rules): " + "; ".join(taste)
         candidate = self.flavor.choose(event) if self.flavor is not None else None
         if candidate is not None:
             text += flavor_hint(candidate)
         recorded = False
-        async with aclosing(self._turn(text)) as sentences:
+        offered = tuple(event.data.get("tools", ()))
+        async with aclosing(self._turn(text, offered=offered)) as sentences:
             async for sentence in sentences:
                 yield sentence
                 if recorded or (spoken is not None and not spoken()):
@@ -378,15 +383,19 @@ class Conversation:
         if self.memory is not None:
             await self.memory.finish(self.llm, self.transcript)
 
-    async def _turn(self, text: str, player_turn: bool = False) -> AsyncIterator[str]:
+    async def _turn(
+        self, text: str, player_turn: bool = False, offered: tuple[str, ...] = ()
+    ) -> AsyncIterator[str]:
         kinds = {True: "player", False: "game_event"}
         self._record_message(Message("user", text), kind=kinds[player_turn])
         self._remember_many([])
-        async with aclosing(self._respond(text, player_turn)) as sentences:
+        async with aclosing(self._respond(text, player_turn, offered)) as sentences:
             async for sentence in sentences:
                 yield sentence
 
-    async def _respond(self, text: str, player_turn: bool) -> AsyncIterator[str]:
+    async def _respond(
+        self, text: str, player_turn: bool, offered: tuple[str, ...] = ()
+    ) -> AsyncIterator[str]:
         """Respond to the current request without recording another player turn."""
         system = ""
         context = self.context() if self.context is not None else ""
@@ -397,9 +406,10 @@ class Conversation:
             memories = self.memory.context(text)
         if memories:
             system += "\n\n" + memories
-        specs = []
+        carrier = self.speaker == self.crew.carrier
+        specs = self.tools.offered(offered, carrier=carrier)
         if player_turn:
-            specs = self.tools.specs(carrier=self.speaker == self.crew.carrier)
+            specs = self.tools.specs(carrier=carrier)
         handoff = player_turn and self.speaker != self.crew.carrier and self.tools.has_carrier_tools
         if handoff:
             specs.append(HANDOFF_SPEC)

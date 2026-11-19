@@ -89,7 +89,9 @@ class Crew:
         return self.carrier
 
     def pick_for_event(self, event: GameEvent) -> Persona:
-        if event.priority == "critical" or len(self.members) == 1:
+        # data["speaker"] == "carrier": the event is a job for whoever performs actions.
+        carrier = event.priority == "critical" or event.data.get("speaker") == "carrier"
+        if carrier or len(self.members) == 1:
             return self.carrier
         return max(
             self.members,

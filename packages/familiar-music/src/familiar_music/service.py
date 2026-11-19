@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import random
 import time
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -16,6 +17,40 @@ from .settings import music_settings, pear_settings
 
 _LOG = logging.getLogger(__name__)
 
+# Requests that choose what plays: they reset the DJ-turn count and start the autonomy hold.
+SELECTION_TOOLS = frozenset(
+    {"play_music", "skip_track", "more_like_this", "calmer_music", "dislike_track"}
+)
+# Pausing stops autonomous picks until music is resumed or chosen again.
+PICKS_PAUSED = {"pause_music": True, "resume_music": False, "play_music": False}
+# Tools an unprompted DJ turn may use.
+AUTONOMOUS_TOOLS = frozenset({"play_music"})
+DJ_TURN = (
+    "Music check: now playing {track}. You pick the crew's music. If something else would suit "
+    "this moment or your own taste better, call play_music (kind genre with a descriptive "
+    "playlist search, or an artist) and say one short line about your pick. Otherwise keep it "
+    "and make at most a brief remark about the song."
+)
+
+
+class Cadence:
+    """Due after a random number of song changes in [low, high]; restarts only once heard."""
+
+    def __init__(self, bounds, rng):
+        self.bounds, self.rng = bounds, rng
+        self.reset()
+
+    def reset(self):
+        self.count = 0
+        self.due = self.rng.randint(*self.bounds)
+
+    def tick(self):
+        self.count += 1
+
+    @property
+    def ready(self):
+        return self.count >= self.due
+
 
 class PearMusicService:
     name = "pear"
@@ -23,7 +58,14 @@ class PearMusicService:
     capabilities = frozenset({"tools", "events", "speech_state"})
 
     def __init__(
-        self, settings, *, player=None, searcher=None, clock=time.monotonic, sleeper=asyncio.sleep
+        self,
+        settings,
+        *,
+        player=None,
+        searcher=None,
+        clock=time.monotonic,
+        sleeper=asyncio.sleep,
+        rng=None,
     ):
         self.settings = music_settings(settings)
         self.player = player or PearPlayer(settings)
@@ -39,7 +81,14 @@ class PearMusicService:
         self.recovery_interval = pear_settings(settings)["recovery_interval_s"]
         self._current = None
         self._last_id = None
-        self._last_remark = float("-inf")
+        rng = rng or random.Random()
+        self.remarks = Cadence(self.settings["remark_every"], rng)
+        self.picks = Cadence(self.settings["dj_turn_every"], rng)
+        self._hold_until = float("-inf")
+        self._picks_paused = False
+        self._turn_valid = False  # the last DJ turn emitted is still the Commander's wish
+        self._speaking_kind = None  # our event kind being spoken right now, if any
+        self._uncounted = False  # the next song change came from a request
         self._hint_logged = False
         self._tools_lock = asyncio.Lock()
         self._available = False
@@ -70,10 +119,31 @@ class PearMusicService:
                 error = await self._health_error()
                 if error:
                     return error
-                return await self._dispatch(name, arguments)
+                if self._overruled(name):
+                    return {"error": "The Commander just chose the music; keep it this time"}
+                self._note_request(name)
+                result = await self._dispatch(name, arguments)
+                self._uncounted |= name in SELECTION_TOOLS and "error" not in result
+                return result
             except Exception as exc:
                 _LOG.debug("Music tool failed", exc_info=True)
                 return {"error": f"Music unavailable: {str(exc) or type(exc).__name__}"}
+
+    def _overruled(self, name):
+        """A DJ turn queued before a request or pause must not undo it once it gets to speak."""
+        dj_turn = self._speaking_kind == "music_dj_turn"
+        return dj_turn and not self._turn_valid and name in SELECTION_TOOLS
+
+    def _note_request(self, name):
+        """Whoever chose the music just now, the DJ waits before choosing again."""
+        self._picks_paused = PICKS_PAUSED.get(name, self._picks_paused)
+        if name not in SELECTION_TOOLS and name not in PICKS_PAUSED:
+            return
+        self._turn_valid = False
+        if name not in SELECTION_TOOLS:
+            return
+        self._hold_until = self.clock() + self.settings["autonomy_hold_s"]
+        self.picks.reset()
 
     async def _dispatch(self, name, arguments):
         handlers = {
@@ -147,6 +217,7 @@ class PearMusicService:
                 ),
                 partial(self._execute, name),
                 name != "now_playing",
+                name in AUTONOMOUS_TOOLS,
             )
             for name, (description, properties, required) in definitions.items()
         ]
@@ -166,20 +237,54 @@ class PearMusicService:
             return None
         self._last_id = video_id
         await self.dj.top_up()
-        if video_id in self.dj.announced:
-            self.dj.announced.discard(video_id)
+        uncounted = video_id in self.dj.announced or self._uncounted
+        self.dj.announced.discard(video_id)
+        self._uncounted = False
+        if uncounted:
+            # A request caused it (and the reply named it); it is not a natural change to count.
             return None
-        if self.clock() - self._last_remark < self.settings["track_remark_cooldown_s"]:
+        self.remarks.tick()
+        self.picks.tick()
+        return self._dj_turn() or self._remark()
+
+    def _may_pick(self):
+        return (
+            self.settings["autonomous_picks"]
+            and not self._picks_paused
+            and not self._current.paused
+            and self.clock() >= self._hold_until
+            and self.picks.ready
+        )
+
+    def _dj_turn(self):
+        if not self._may_pick():
             return None
-        self._last_remark = self.clock()
+        self._turn_valid = True
+        return self._cue(
+            "music_dj_turn",
+            DJ_TURN.format(track=self._current.summary()),
+            ttl_s=20,
+            speaker="carrier",
+            tools=sorted(AUTONOMOUS_TOOLS),
+            taste="music",
+        )
+
+    def _remark(self):
+        if not self.remarks.ready:
+            return None
+        return self._cue("music_track", f"Now playing: {self._current.summary()}.", ttl_s=15)
+
+    def _cue(self, kind, summary, **data):
+        """A moment-bound event: it waits for silence but skips the Director's quiet gaps."""
         return GameEvent(
-            "music_track",
+            kind,
             "ambient",
             {
-                "summary": f"Now playing: {self._current.summary()}.",
-                "ttl_s": 15,
-                "video_id": video_id,
+                "summary": summary,
+                "video_id": self._current.video_id,
                 "companion_service": True,
+                "cue": True,
+                **data,
             },
             datetime.now(UTC),
         )
@@ -209,7 +314,18 @@ class PearMusicService:
                 await self._wait_recovery()
             await self.sleep(self.poll_interval)
 
+    def _acknowledge(self, state):
+        """The Director let our event through: restart the counts it was due for."""
+        heard = {"music_track": (self.remarks,), "music_dj_turn": (self.remarks, self.picks)}
+        kind = state.event_kind if state.speaking and state.event_kind in heard else None
+        started = kind is not None and kind != self._speaking_kind
+        self._speaking_kind = kind
+        # Voice repeats states within one turn (e.g. push-to-talk); count each turn once.
+        for cadence in heard[kind] if started else ():
+            cadence.reset()
+
     async def speech_state(self, state):
+        self._acknowledge(state)
         if not self._available and not self.dj.interrupting:
             return
         try:

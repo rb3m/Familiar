@@ -214,7 +214,12 @@ class _Runtime:
             service = load("services", self.config.music["service"], settings)
             self.stack.push_async_callback(close_backend, service)
             for tool in service.service_tools():
-                conversation.tools.register(tool.spec, tool.handler, carrier_only=tool.carrier_only)
+                conversation.tools.register(
+                    tool.spec,
+                    tool.handler,
+                    carrier_only=tool.carrier_only,
+                    autonomous=tool.autonomous,
+                )
             self.services.append(service)
         except Exception:
             logging.getLogger(__name__).exception("Music service unavailable")
