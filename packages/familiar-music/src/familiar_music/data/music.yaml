@@ -20,3 +20,8 @@ playlist_tracks: 100
 # Volume (0-100, Pear's slider) when music starts, unless one was asked for; calmer music always.
 play_volume: 70
 calm_volume: 40
+
+# D1 persona lane shares library selection; taste and behaviour weighting follow in D2.
+blend: {library: 70, persona: 20, discovery: 10}
+local_min_matches: 8
+library_enrich: true

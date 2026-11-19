@@ -160,7 +160,12 @@ max_alerts = 8            # integer from 1 to 8
 
 [music]
 enabled = false          # companion DJ, beside any game or in desk voice mode
-service = "pear"         # familiar.services entry point
+service = "blend"        # familiar.services entry point; "pear" keeps YouTube-only playback
+# library_paths = []      # default: XDG Music dir
+# library_db = "~/.local/state/familiar/music/library.sqlite" # default follows XDG_STATE_HOME
+# blend = { library = 70, persona = 20, discovery = 10 } # D1 persona uses the library
+# local_min_matches = 8   # fewer local genre matches fall through to YouTube Music
+# library_enrich = true  # background MusicBrainz tags for pending artists
 # Optional service settings below override packaged YAML defaults.
 # base_url = "http://127.0.0.1:26538"
 # client_id = "familiar"  # approve this client once in Pear Desktop

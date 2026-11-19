@@ -4,25 +4,16 @@ import asyncio
 import random
 import time
 from collections import Counter, deque
-from dataclasses import dataclass, field
 from itertools import chain
 
 from familiar.interfaces import spoken
 
-from .player import Track
 from .settings import music_settings
+from .sources import LocalSource, Selection, YouTubeSource
 
 # How far back "don't repeat" looks, for songs and for genre playlists.
 RECENT_TRACKS = 60
 RECENT_PLAYLISTS = 5
-PLAYLIST_CHOICES = 3
-
-
-@dataclass
-class Selection:
-    tracks: list[Track]
-    reserve: list[Track] = field(default_factory=list)
-    playlist: str = ""
 
 
 class Dislikes:
@@ -53,9 +44,17 @@ class Dislikes:
 
 class DJ:
     def __init__(
-        self, player, searcher, *, settings=None, dislikes=None, clock=time.monotonic, rng=None
+        self,
+        player,
+        searcher,
+        *,
+        settings=None,
+        dislikes=None,
+        clock=time.monotonic,
+        rng=None,
+        index=None,
     ):
-        self.player, self.searcher = player, searcher
+        self.player = player
         self.rng = rng or random.Random()
         self.settings = music_settings(settings)
         self.dislikes = dislikes or Dislikes()
@@ -66,6 +65,15 @@ class DJ:
         self.reserve: list = []
         self.recent: deque[str] = deque(maxlen=RECENT_TRACKS)
         self.recent_playlists: deque[str] = deque(maxlen=RECENT_PLAYLISTS)
+        self.sources = {
+            "ytm": YouTubeSource(
+                searcher, self.settings, self.rng, self._fresh, self.dislikes, self.recent_playlists
+            )
+        }
+        if index is not None:
+            self.sources["local"] = LocalSource(index, self.settings, self.rng, self._fresh)
+        self._radio_count = 0
+        self._radio_track = None
         self.base_volume: float | None = None
         self.level: float | None = None
         self.volume_chosen = False
@@ -74,65 +82,95 @@ class DJ:
         self._pause_requested = False
         self._lock = asyncio.Lock()
 
-    async def seed(self, query, mood=None, *, kind="song", calm=False):
-        """Genres start a shuffled batch from a curated playlist; songs and artists start radio."""
+    def _available(self, prefix):
+        available = getattr(self.player, "available", lambda p: True)
+        return prefix in self.sources and available(prefix)
+
+    def draw_lane(self):
+        """D2 can supply persona selection without changing playback or batch ownership."""
+        weights = self.settings["blend"]
+        lane = self.rng.choices(list(weights), weights=list(weights.values()), k=1)[0]
+        return {"library": "local", "persona": "local", "discovery": "ytm"}[lane]
+
+    async def seed(
+        self, query, mood=None, *, kind="song", calm=False, genres=None, years=None, source=None
+    ):
         text = " ".join(filter(None, (query, mood)))
-        pickers = {"genre": self._pick_playlist, "artist": self._pick_song, "song": self._pick_song}
-        selection = await pickers.get(kind, self._pick_song)(text)
-        if selection is None:
-            return {"error": "No suitable music found"}
-        return await self._start(selection, calm)
+        forced = {"library": "local", "youtube": "ytm"}.get(source)
+        if source not in {None, "any", "library", "youtube"}:
+            return {"error": "Unknown music source"}
+        first = forced or "local"
+        if kind == "genre" and forced is None and "local" in self.sources:
+            first = self.draw_lane()
+        order = [first]
+        if forced is None:
+            order.append({"local": "ytm", "ytm": "local"}[first])
+        for prefix in order:
+            selection = await self._select(prefix, text, kind, genres, years)
+            if selection is None:
+                continue
+            matches = len(selection.tracks) + len(selection.reserve)
+            if (
+                prefix == "local"
+                and kind == "genre"
+                and not forced
+                and matches < self.settings["local_min_matches"]
+            ):
+                continue
+            return await self._start(selection, calm)
+        label = {"local": "library", "ytm": "YouTube Music"}.get(forced, "music")
+        return {"error": f"No suitable {label} found or source unavailable"}
+
+    async def _select(self, prefix, text, kind, genres=None, years=None):
+        if not self._available(prefix):
+            return None
+        provider = self.sources[prefix]
+        if kind == "genre":
+            return await provider.genre(text, genres, years)
+        picker = {"artist": provider.artist, "song": provider.song}.get(kind, provider.song)
+        return await picker(text)
 
     def _fresh(self, tracks):
         return [t for t in tracks if not self.dislikes.blocked(t) and t.uri not in self.recent]
 
-    async def _pick_song(self, text):
-        hits = await self.searcher.songs(text, self.settings["search_limit"])
-        allowed = [track for track in hits if not self.dislikes.blocked(track)]
-        # Asking again should not replay the same top hit; fall back to it only if nothing is new.
-        track = next(iter(self._fresh(allowed) + allowed), None)
-        if track is None:
-            return None
-        return Selection([track])
-
-    async def _pick_playlist(self, text):
-        candidates = await self.searcher.playlists(text, self.settings["search_limit"])
-        new = [p for p in candidates if p.playlist_id not in self.recent_playlists]
-        # Relevance falls off fast past the first few results, so vary only among those.
-        top = new[:PLAYLIST_CHOICES]
-        self.rng.shuffle(top)
-        for playlist in top + new[PLAYLIST_CHOICES:] + candidates:
-            tracks = await self.searcher.playlist_tracks(
-                playlist.playlist_id, self.settings["playlist_tracks"]
-            )
-            fresh = self._fresh(tracks)
-            if not fresh:
-                continue
-            self.rng.shuffle(fresh)
-            self.recent_playlists.append(playlist.playlist_id)
-            batch = self.settings["genre_batch"]
-            return Selection(fresh[:batch], fresh[batch:], playlist.title)
-        return None
-
-    async def _start(self, selection, calm):
+    async def _start(self, selection: Selection, calm, *, radio=False):
         first, *rest = selection.tracks
-        if "clear" in self.player.capabilities:
-            await self.player.clear_upcoming()
-        await self.player.play_now(first.uri)
-        for track in rest:
-            await self.player.enqueue(track.uri)
+        prefix = first.uri.partition(":")[0]
+        await self._play_selection(first, rest)
         self.recent.extend(track.uri for track in selection.tracks)
         self.reserve = list(selection.reserve)
-        self._pause_owner = None
         self.announced.add(first.uri)
         self.radio_seed = first.uri
+        self._radio_track = first
+        self._radio_count = {True: len(selection.tracks), False: 0}[radio]
         self.last_seed = self.clock()
         level = await self._default_volume(calm)
         await self.top_up(first.uri, force=not rest)
-        result = {"playing": first.summary(), "duration": spoken(first.duration_s, "s"), **level}
+        result = {
+            "playing": first.summary(),
+            "duration": spoken(first.duration_s, "s"),
+            "source": {"local": "library", "ytm": "YouTube Music"}[prefix],
+            **level,
+        }
         if selection.playlist:
             result |= {"playlist": selection.playlist, "queued": f"{len(rest)} more songs"}
         return result
+
+    async def _play_selection(self, first, rest):
+        async with self._lock:
+            prefix = first.uri.partition(":")[0]
+            active = getattr(self.player, "active", prefix)
+            if active == prefix and "clear" in self.player.capabilities:
+                await self.player.clear_upcoming()
+            await self.player.play_now(first.uri)
+            self._pause_owner = None
+            if self._pause_requested:
+                await self._pause_for_speech()
+            await self._queue_selection(rest)
+
+    async def _queue_selection(self, rest):
+        for track in rest:
+            await self.player.enqueue(track.uri)
 
     async def _default_volume(self, calm):
         """Calm music always settles at calm_volume; plain play keeps a volume someone chose."""
@@ -146,7 +184,8 @@ class DJ:
         seed = uri or self.radio_seed
         if seed is None:
             return
-        queued = set(await self.player.queue_ids())
+        upcoming = set(await self.player.queue_ids())
+        queued = set(upcoming)
         target = self.settings["queue_top_up"]
         needed = max(0, target - len(queued - {seed}))
         if force:
@@ -157,10 +196,56 @@ class DJ:
         self.reserve, needed = await self._enqueue_from(self.reserve, queued, needed)
         if not needed:
             return
-        radio = await self.searcher.radio(
-            seed, target + len(queued) + self.settings["search_limit"]
-        )
-        await self._enqueue_from(radio, queued, needed)
+        prefix = seed.partition(":")[0]
+        if not self._available(prefix):
+            return
+        batch = self.settings["genre_batch"]
+        if "local" in self.sources and self._radio_count >= batch:
+            await self._next_radio_batch(prefix, upcoming)
+            return
+        limit = target + len(queued) + self.settings["search_limit"]
+        selection = await self.sources[prefix].radio(seed, limit, queued | set(self.recent))
+        if selection is None:
+            return
+        remaining = needed
+        if "local" in self.sources:
+            remaining = min(needed, batch - self._radio_count)
+        _, left = await self._enqueue_from(selection.tracks, queued, remaining)
+        self._radio_count += remaining - left
+
+    async def _next_radio_batch(self, prefix, queued):
+        # Wait for the final song, not just the upcoming queue, to finish.
+        if queued or await self.player.now_playing() is not None:
+            return
+        chosen = self.draw_lane()
+        selection = await self._radio_batch(chosen, prefix)
+        if selection is None:
+            selection = await self._radio_batch(prefix, prefix)
+        if selection is None:
+            return
+        # An unrequested batch has its own boundary; no playlist reserve crosses it.
+        selection.reserve = []
+        await self._start(selection, False, radio=True)
+
+    async def _radio_batch(self, chosen, prefix):
+        if not self._available(chosen):
+            return None
+        if chosen == prefix:
+            return await self.sources[chosen].radio(
+                self.radio_seed, self.settings["genre_batch"], set(self.recent)
+            )
+        track = self._radio_track
+        if track is None:
+            return None
+        text = track.genre or ", ".join(track.artists)
+        kind = {True: "genre", False: "artist"}[bool(track.genre)]
+        selection = await self._select(chosen, text, kind)
+        if selection is None:
+            return None
+        matches = len(selection.tracks) + len(selection.reserve)
+        if chosen == "local" and kind == "genre" and matches < self.settings["local_min_matches"]:
+            return None
+        return selection
 
     async def _enqueue_from(self, pool, queued, needed):
         """Enqueue up to `needed` new tracks; returns (unused rest of the pool, still needed).
@@ -177,6 +262,7 @@ class DJ:
             queued.add(track.uri)
             self.recent.append(track.uri)
             self.radio_seed = track.uri
+            self._radio_track = track
             needed -= 1
         return [], needed
 
@@ -189,6 +275,8 @@ class DJ:
         if current is None:
             return {"error": "Nothing is playing"}
         self.radio_seed = current.uri
+        self._radio_track = current
+        self._radio_count = 0
         self.reserve = []  # "more like this" means the current song, not the last genre
         self.last_seed = self.clock()
         await self.top_up(current.uri, force=True)

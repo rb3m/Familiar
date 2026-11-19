@@ -19,6 +19,21 @@ def number(settings, key, *, minimum=0, maximum=float("inf"), positive=False, in
 
 def music_settings(overrides):
     settings = {**load_data("familiar_music", "music").value, **(overrides or {})}
+    blend = settings["blend"]
+    valid_blend = (
+        isinstance(blend, dict)
+        and set(blend) == {"library", "persona", "discovery"}
+        and all(type(value) is int and value >= 0 for value in blend.values())
+        and any(blend.values())
+    )
+    if not valid_blend:
+        raise ConfigError(
+            "Music blend needs non-negative integer library/persona/discovery weights; "
+            "at least one must be positive"
+        )
+    number(settings, "local_min_matches", integer=True, positive=True)
+    if not isinstance(settings["library_enrich"], bool):
+        raise ConfigError("Music library_enrich must be true or false")
     number(settings, "duck_level", maximum=1)
     number(settings, "volume_tolerance", maximum=100)
     number(settings, "play_volume", maximum=100)

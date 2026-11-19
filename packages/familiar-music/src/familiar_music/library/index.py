@@ -10,6 +10,8 @@ from typing import Any
 
 from familiar.interfaces import load_data
 
+from ..player import Track
+
 
 def accent_fold(text: str | None) -> str:
     """Casefold and strip combining accents for index matching."""
@@ -222,6 +224,58 @@ class LibraryIndex:
             if not row:
                 return None
             return dict(row)
+
+    @staticmethod
+    def track(row: dict) -> Track:
+        """Only file tag facts become playable track metadata."""
+        return Track(
+            f"local:{row['uuid']}",
+            row["title"],
+            tuple(filter(None, (row["artist"],))),
+            row.get("album") or "",
+            row.get("duration_s"),
+            year=row.get("year"),
+            genre=row.get("genre") or "",
+        )
+
+    def resolve(self, uri: str) -> tuple[Path, Track] | None:
+        """Resolve any non-missing UUID, including a non-preferred duplicate."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM tracks WHERE uuid = ? AND missing = 0",
+                (uri.removeprefix("local:"),),
+            ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        return Path(data["root"]) / data["relpath"], self.track(data)
+
+    def radio_candidates(self, uri: str, exclude=()) -> list[dict]:
+        """Find related tracks by artist, shared tags and a five-year window."""
+        seed = self.by_uuid(uri)
+        resolved = self.resolve(uri)
+        if resolved is None:
+            return []
+        if seed is None:
+            seed = {
+                "uuid": uri.removeprefix("local:"),
+                "artist_norm": accent_fold(primary_artist(next(iter(resolved[1].artists), ""))),
+                "year": resolved[1].year,
+            }
+        with self._connect() as conn:
+            tags = conn.execute(
+                "SELECT tag FROM track_genres WHERE uuid = ? UNION "
+                "SELECT tag FROM artist_tags WHERE name_norm = ?",
+                (seed["uuid"], seed["artist_norm"]),
+            ).fetchall()
+        genres = [row["tag"] for row in tags]
+        related = self.filter(artist=seed["artist_norm"], exclude=exclude)
+        if genres:
+            related += self.filter(genres=genres, exclude=exclude)
+        year = seed["year"]
+        if year is not None:
+            related += self.filter(years=(year - 5, year + 5), exclude=exclude)
+        return list({row["uuid"]: row for row in related}.values())
 
     def artists_matching(self, text: str) -> list[dict]:
         """Find artists matching text (casefold, accent-insensitive)."""

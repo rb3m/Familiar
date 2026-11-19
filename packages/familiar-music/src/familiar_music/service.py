@@ -1,4 +1,4 @@
-"""Pear companion service: spoken tools, rare track remarks and speech coordination."""
+"""Music companion service: spoken tools, rare track remarks and speech coordination."""
 
 import asyncio
 import logging
@@ -7,13 +7,20 @@ import time
 from contextlib import suppress
 from datetime import UTC, datetime
 from functools import partial
+from threading import Event
 
 from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ServiceTool, ToolSpec, spoken
 
 from .dj import DJ, Dislikes
+from .library.enrich import Enricher
+from .library.index import LibraryIndex
+from .library.paths import database_path, library_roots
+from .library.scanner import Scanner
+from .mpv import MpvPlayer
 from .pear import PearPlayer
 from .search import Searcher
 from .settings import music_settings, pear_settings
+from .sourced import SourcedPlayer
 
 _LOG = logging.getLogger(__name__)
 
@@ -52,7 +59,7 @@ class Cadence:
         return self.count >= self.due
 
 
-class PearMusicService:
+class MusicService:
     name = "pear"
     api_version = PLUGIN_API_VERSION
     capabilities = frozenset({"tools", "events", "speech_state"})
@@ -63,18 +70,29 @@ class PearMusicService:
         *,
         player=None,
         searcher=None,
+        index=None,
         clock=time.monotonic,
         sleeper=asyncio.sleep,
         rng=None,
     ):
         self.settings = music_settings(settings)
-        self.player = player or PearPlayer(settings)
+        self.index = index
+        self.vocabulary = []
+        self._library_task = None
+        self._library_started = False
+        self._library_stop = Event()
+        if index is not None:
+            self.vocabulary = [row["tag"] for row in index.tag_vocabulary(limit=40)]
+        self.player = player or self._build_player(settings)
+        rng = rng or random.Random()
         self.dj = DJ(
             self.player,
             searcher or Searcher(timeout=self.settings["search_timeout_s"]),
             settings=self.settings,
             dislikes=Dislikes(settings.get("dislike_read"), settings.get("dislike_write")),
             clock=clock,
+            rng=rng,
+            index=index,
         )
         self.clock, self.sleep = clock, sleeper
         self.poll_interval = pear_settings(settings)["poll_interval_s"]
@@ -93,6 +111,58 @@ class PearMusicService:
         self._tools_lock = asyncio.Lock()
         self._available = False
         self._recovered = asyncio.Event()
+
+    def _build_player(self, settings):
+        if self.index is None:
+            return PearPlayer(settings)
+        return SourcedPlayer(
+            {
+                "ytm": PearPlayer(settings),
+                "local": MpvPlayer(settings, resolver=self.index.resolve),
+            }
+        )
+
+    async def _refresh_library(self):
+        await asyncio.to_thread(self._scan_and_enrich)
+
+    def _scan_and_enrich(self):
+        try:
+            Scanner(self.index).scan(library_roots(self.settings))
+            if not self.settings["library_enrich"] or self._library_stop.is_set():
+                return
+            self._enrich_library()
+        except InterruptedError:
+            return
+        except Exception:
+            _LOG.warning("Music library refresh failed", exc_info=True)
+
+    def _enrich_library(self):
+        enricher = Enricher(self.index)
+        try:
+            enricher.enrich_all(progress_cb=self._enrich_progress)
+        finally:
+            enricher.client.close()
+
+    def _enrich_progress(self, *_):
+        # The worker owns its client until the in-flight lookup finishes.
+        if self._library_stop.is_set():
+            raise InterruptedError("Music library enrichment stopped")
+
+    def _track_facts(self):
+        if self._current is None:
+            return {}
+        facts = {"album": self._current.album, "year": self._current.year}
+        return {key: value for key, value in facts.items() if value}
+
+    def _remark_summary(self):
+        summary = self._current.summary()
+        if not self._current.uri.startswith("local:"):
+            return summary
+        if self._current.album:
+            summary += f", from {self._current.album}"
+        if self._current.year is not None:
+            summary += f" ({self._current.year})"
+        return summary
 
     def describe(self):
         if self._current is None:
@@ -162,6 +232,7 @@ class PearMusicService:
             self._current = await self.player.now_playing()
             return {
                 "playing": self.describe() or "Nothing is playing",
+                **self._track_facts(),
                 "duration": spoken(
                     self._current.duration_s if self._current is not None else None, "s"
                 ),
@@ -171,6 +242,11 @@ class PearMusicService:
         await self.player.like()
         return {"status": "Liked track"}
 
+    def _vocabulary_description(self):
+        if not self.vocabulary:
+            return ""
+        return " Library tags for genres: " + ", ".join(self.vocabulary) + "."
+
     def service_tools(self):
         string = {"type": "string"}
         definitions = {
@@ -178,10 +254,18 @@ class PearMusicService:
                 "Play music. kind=genre for a genre, era or mood: write the query as a "
                 "descriptive playlist search such as '70s disco classics' or 'late night jazz "
                 "bar'; it queues several songs. kind=artist or song plays that, then similar "
-                "music.",
+                "music." + self._vocabulary_description(),
                 {
                     "query": string,
                     "mood": string,
+                    "genres": {"type": "array", "items": string},
+                    "years": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                    },
+                    "source": {"type": "string", "enum": ["library", "youtube", "any"]},
                     "kind": {"type": "string", "enum": ["genre", "artist", "song"]},
                 },
                 ["query", "kind"],
@@ -229,6 +313,9 @@ class PearMusicService:
 
     async def _poll(self):
         self._current = await self.dj.current_track()
+        if self._current is None:
+            await self.dj.top_up()
+            self._current = await self.dj.current_track()
         self._available = self._current is not None
         if self._current is None:
             return None
@@ -272,7 +359,7 @@ class PearMusicService:
     def _remark(self):
         if not self.remarks.ready:
             return None
-        return self._cue("music_track", f"Now playing: {self._current.summary()}.", ttl_s=15)
+        return self._cue("music_track", f"Now playing: {self._remark_summary()}.", ttl_s=15)
 
     def _cue(self, kind, summary, **data):
         """A moment-bound event: it waits for silence but skips the Director's quiet gaps."""
@@ -298,6 +385,9 @@ class PearMusicService:
             await self._health_error()
 
     async def events(self):
+        if self.index is not None and not self._library_started:
+            self._library_started = True
+            self._library_task = asyncio.create_task(self._refresh_library())
         # A failure parks polling until a tool succeeds or a periodic health check passes.
         if await self._health_error():
             await self._wait_recovery()
@@ -335,7 +425,27 @@ class PearMusicService:
             raise
 
     async def aclose(self):
+        self._library_stop.set()
+        if self._library_task is not None:
+            self._library_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._library_task
         try:
             await self.dj.aclose()
         finally:
             await self.player.aclose()
+
+
+# Keep existing integrations and the pear entry point YouTube-only.
+PearMusicService = MusicService
+
+
+def build_blend(settings, **kwargs):
+    try:
+        index = LibraryIndex(database_path(settings))
+    except Exception:
+        _LOG.warning("Music library unavailable; using YouTube Music", exc_info=True)
+        index = None
+    service = MusicService(settings, index=index, **kwargs)
+    service.name = "blend"
+    return service

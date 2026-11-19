@@ -137,7 +137,8 @@ class FakePlayer:
 
     async def pause(self):
         self.calls.append("pause")
-        self.current = replace(self.current, paused=True)
+        if self.current is not None:
+            self.current = replace(self.current, paused=True)
 
     async def resume(self):
         self.calls.append("resume")
@@ -202,6 +203,7 @@ async def test_seed_top_up_and_artist_dislikes():
     result = await dj.seed("music")
     assert result == {
         "playing": "Seed by Good",
+        "source": "YouTube Music",
         "duration": "4 minutes 45 seconds",
         "volume": "70 percent",
     }
@@ -740,7 +742,7 @@ async def test_asking_again_picks_something_new():
         async def songs(self, query, limit):
             return [Track("ytm:top", "Top", ("A",)), Track("ytm:second", "Second", ("A",))]
 
-    dj.searcher = TwoSongs()
+    dj.sources["ytm"].searcher = TwoSongs()
     assert (await dj.seed("classic rock", kind="song"))["playing"] == "Top by A"
     assert (await dj.seed("classic rock", kind="song"))["playing"] == "Second by A"
     assert (await dj.seed("disco", kind="genre"))["playlist"] == "disco A"
@@ -923,3 +925,375 @@ async def test_pear_enqueue_sends_bare_video_id(tmp_path):
     await player.enqueue("ytm:queued-song")
     assert payloads == [{"videoId": "queued-song", "insertPosition": "INSERT_AT_END"}]
     await player.aclose()
+
+
+@pytest.fixture
+def library(tmp_path):
+    from familiar_music.library.index import LibraryIndex
+
+    index = LibraryIndex(tmp_path / "library.sqlite")
+    with index._connect() as conn:
+        conn.executemany(
+            "INSERT INTO tracks "
+            "(uuid, root, relpath, size, mtime, header_hash, title, artist, artist_norm, "
+            "search_text, album, year, genre, duration_s, codec, lossless) "
+            "VALUES (?, ?, ?, 1, 0, '', ?, ?, ?, ?, 'Album', 1985, 'New Wave', 180, 'mp3', 0)",
+            [
+                (
+                    str(i),
+                    str(tmp_path),
+                    f"{i}.mp3",
+                    f"Song {i}",
+                    f"Band {i % 3}",
+                    f"band {i % 3}",
+                    f"band {i % 3} song {i}",
+                )
+                for i in range(18)
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO track_genres VALUES (?, 'newwave')", [(str(i),) for i in range(18)]
+        )
+        conn.execute("INSERT INTO tag_display VALUES ('newwave', 'new wave')")
+    return index
+
+
+class LocalPlayer(ClearingPlayer):
+    capabilities = frozenset({"clear", "volume"})
+
+    def __init__(self, index):
+        super().__init__()
+        self.index = index
+        self.current = None
+        self.queued = []
+
+    async def play_now(self, uri):
+        self.calls.append(("play", uri))
+        self.current = self.index.resolve(uri)[1]
+
+    async def pause(self):
+        self.calls.append("pause")
+        if self.current is not None:
+            self.current = replace(self.current, paused=True)
+
+    async def skip(self):
+        self.current = None
+        if self.queued:
+            await self.play_now(self.queued.pop(0))
+
+
+def blend_dj(library, **settings):
+    from familiar_music.sourced import SourcedPlayer
+
+    pear, local = ClearingPlayer(), LocalPlayer(library)
+    player = SourcedPlayer({"ytm": pear, "local": local})
+    dj = DJ(player, FakeSearch(), index=library, settings=settings, rng=random.Random(3))
+    return dj, pear, local
+
+
+async def test_sourced_switches_pauses_routes_and_rejects_mismatched_enqueue(library):
+    dj, pear, local = blend_dj(library)
+    player = dj.player
+    await player.set_volume(37)
+    await player.play_now("local:0")
+    assert "pause" in pear.calls and player.active == "local"
+    assert local.volume == 37 and player.capabilities == local.capabilities
+    with pytest.raises(ValueError, match="active source"):
+        await player.enqueue("ytm:wrong")
+    await player.enqueue("local:1")
+    assert await player.queue_ids() == ["local:1"]
+    await player.clear_upcoming()
+    await player.pause()
+    assert (await player.now_playing()).paused
+    await player.resume()
+    assert not (await player.now_playing()).paused
+    await player.play_now("ytm:next")
+    assert local.current.paused and player.active == "ytm" and pear.volume == 37
+    await player.like()
+    await player.dislike()
+    assert pear.calls[-2:] == ["like", "dislike"]
+    await player.aclose()
+    assert pear.closed and local.closed
+
+
+@pytest.mark.parametrize("ducked", [False, True])
+async def test_blend_carries_logical_volume_across_switches(library, ducked):
+    dj, pear, local = blend_dj(library)
+    await dj.volume(level=52)
+    await dj.speech_state(SpeechState(listening=ducked))
+    result = await dj.seed("Song 1", source="library")
+    assert result["source"] == "library"
+    assert local.volume == 52 * (0.25 if ducked else 1)
+    assert dj.level == 52
+    await dj.speech_state(SpeechState())
+    assert local.volume == 52
+    await dj.seed("something", source="youtube")
+    assert pear.volume == 52
+
+
+async def test_blend_switch_preserves_speech_pause_owner(library):
+    dj, _, local = blend_dj(library)
+    await dj.speech_state(SpeechState(critical=True))
+    await dj.seed("Song 1", source="library")
+    assert local.current.paused and dj.interrupting
+    await dj.speech_state(SpeechState())
+    assert not local.current.paused and not dj.interrupting
+
+
+async def test_blend_source_forcing_and_local_first_requests(library):
+    dj, _, _ = blend_dj(library)
+    assert (await dj.seed("Song 1"))["source"] == "library"
+    assert "error" in await dj.seed("absent", source="library")
+    assert (await dj.seed("absent"))["source"] == "YouTube Music"
+    assert (await dj.seed("Band 2", kind="artist"))["source"] == "library"
+    assert (await dj.seed("Song 2", source="youtube"))["source"] == "YouTube Music"
+
+
+async def test_local_genre_spacing_filters_and_minimum_fallback(library):
+    dj, _, _ = blend_dj(
+        library, genre_batch=8, blend={"library": 100, "persona": 0, "discovery": 0}
+    )
+    source = dj.sources["local"]
+    selection = await source.genre("80s new wave")
+    tracks = selection.tracks + selection.reserve
+    assert len(selection.tracks) == 8 and len(tracks) == 18
+    assert all(a.artists != b.artists for a, b in zip(tracks, tracks[1:], strict=False))
+    assert all(t.year == 1985 and t.genre == "New Wave" for t in tracks)
+    assert await source.genre("unrecognised") is None
+    assert await source.genre("new wave", years=[1990, 1999]) is None
+    assert await source.genre("words", genres=["new wave"], years=[1980, 1989])
+    dj.settings["local_min_matches"] = 19
+    assert (await dj.seed("80s new wave", kind="genre"))["source"] == "YouTube Music"
+    assert (await dj.seed("80s new wave", kind="genre", source="library"))["source"] == "library"
+
+
+async def test_local_radio_excludes_recent_dislikes_and_explicit_exclusions(library):
+    dj, _, _ = blend_dj(library)
+    dj.recent.append("local:1")
+    dj.dislikes.add(library.resolve("local:2")[1])
+    selection = await dj.sources["local"].radio("local:0", 30, {"local:3"})
+    assert selection is not None
+    uris = {t.uri for t in selection.tracks}
+    assert uris.isdisjoint({"local:0", "local:1", "local:2", "local:3"})
+    assert len(uris) == 14
+
+
+@pytest.mark.parametrize("down,expected", [("ytm", "library"), ("local", "YouTube Music")])
+async def test_one_backend_down_does_not_block_other_source(library, down, expected):
+    dj, pear, local = blend_dj(library, blend={"library": 0, "persona": 0, "discovery": 1})
+    backend = {"ytm": pear, "local": local}[down]
+
+    async def unavailable():
+        return Health("unavailable", "closed")
+
+    async def pause_fails():
+        raise ConnectionError("closed")
+
+    backend.health = unavailable
+    backend.pause = pause_fails
+    assert (await dj.player.health()).status == "ok"
+    assert not dj.player.available(down)
+    result = await dj.seed("80s new wave", kind="genre")
+    assert result["source"] == expected
+    forced = {"ytm": "youtube", "local": "library"}[down]
+    assert "error" in await dj.seed("anything", source=forced)
+
+
+def test_blend_lane_draw_uses_seeded_weights(library):
+    dj, _, _ = blend_dj(library)
+    dj.rng = random.Random(17)
+    expected_rng = random.Random(17)
+    weights = dj.settings["blend"]
+    expected = expected_rng.choices(list(weights), weights=list(weights.values()), k=30)
+    mapping = {"library": "local", "persona": "local", "discovery": "ytm"}
+    assert [dj.draw_lane() for _ in range(30)] == [mapping[lane] for lane in expected]
+
+
+async def test_radio_changes_lane_only_after_batch_finishes(library):
+    dj, pear, local = blend_dj(
+        library, genre_batch=2, queue_top_up=1, blend={"library": 1, "persona": 0, "discovery": 0}
+    )
+    await dj.player.play_now("ytm:seed")
+    pear.queued.clear()
+    dj.radio_seed = "ytm:seed"
+    await dj.top_up()
+    assert dj._radio_count == 1
+    pear.queued.clear()
+    await dj.top_up()
+    assert dj._radio_count == 2
+    pear.queued.clear()
+    await dj.top_up()
+    assert dj.player.active == "ytm"  # the last radio song is still playing
+    pear.current = None
+    dj._radio_track = Track("ytm:last", "Last", ("Band 0",))
+    await dj.top_up()
+    assert dj.player.active == "local" and local.current is not None
+
+
+async def test_local_remark_facts_and_tool_vocabulary(library):
+    from familiar_music.service import MusicService
+
+    dj, _, local = blend_dj(library)
+    service = MusicService(
+        {"remark_every": [1, 1]}, player=dj.player, searcher=FakeSearch(), index=library
+    )
+    await dj.player.play_now("local:0")
+    event = await service.poll()
+    assert event.data["summary"] == "Now playing: Song 0 by Band 0, from Album (1985)."
+    result = await service._execute("now_playing")
+    assert result["album"] == "Album" and result["year"] == 1985
+    tool = next(t for t in service.service_tools() if t.spec.name == "play_music")
+    assert "new wave" in tool.spec.description
+    # ToolSpec's schema is exercised through the registry below as well as by service execution.
+    registry = ToolRegistry()
+    registry.register(tool.spec, tool.handler)
+    result = await registry.execute(
+        ToolCall(
+            "pick",
+            "play_music",
+            {
+                "query": "80s new wave",
+                "kind": "genre",
+                "source": "library",
+                "genres": ["new wave"],
+                "years": [1980, 1989],
+            },
+        ),
+    )
+    assert "error" not in str(result)
+    local.current = replace(local.current, album="", year=None)
+    service._current = local.current
+    assert service._remark_summary() == local.current.summary()
+    await service.aclose()
+
+
+async def test_resolver_includes_nonpreferred_duplicates_but_not_missing(library):
+    with library._connect() as conn:
+        conn.execute("UPDATE tracks SET dup_group = '1' WHERE uuid = '0'")
+    assert library.by_uuid("0") is None
+    path, track = library.resolve("local:0")
+    assert path.name == "0.mp3" and track.album == "Album" and track.year == 1985
+    with library._connect() as conn:
+        conn.execute("UPDATE tracks SET missing = 1 WHERE uuid = '0'")
+    assert library.resolve("local:0") is None
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"blend": {"library": 0, "persona": 0, "discovery": 0}},
+        {"blend": {"library": -1, "persona": 2, "discovery": 0}},
+        {"blend": {"library": 1.5, "persona": 2, "discovery": 0}},
+        {"blend": {"library": True, "persona": 2, "discovery": 0}},
+        {"blend": {"library": 1}},
+        {"blend": []},
+        {"local_min_matches": 0},
+        {"local_min_matches": 1.5},
+        {"library_enrich": "false"},
+    ],
+)
+def test_invalid_blend_settings(settings):
+    from familiar.interfaces import ConfigError
+    from familiar_music.settings import music_settings
+
+    with pytest.raises(ConfigError):
+        music_settings(settings)
+
+
+@pytest.mark.parametrize("enrich", [True, False])
+async def test_library_startup_worker_does_not_block_tools(library, monkeypatch, enrich):
+    from threading import Event
+
+    import familiar_music.service as module
+
+    started, release, finished = Event(), Event(), Event()
+    calls = []
+
+    class Scanner:
+        def __init__(self, index):
+            assert index is library
+
+        def scan(self, roots):
+            calls.append("scan")
+            started.set()
+            release.wait(3)
+            finished.set()
+
+    class Enricher:
+        def __init__(self, index):
+            assert index is library
+            self.client = self
+
+        def enrich_all(self, **kwargs):
+            calls.append("enrich")
+
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(module, "Scanner", Scanner)
+    monkeypatch.setattr(module, "Enricher", Enricher)
+    service = module.MusicService(
+        {"library_enrich": enrich, "poll_interval_s": 0.001, "remark_every": [1, 1]},
+        player=FakePlayer(),
+        searcher=FakeSearch(),
+        index=library,
+    )
+    feed = service.events()
+    await anext(feed)
+    assert await asyncio.to_thread(started.wait, 1)
+    result = await asyncio.wait_for(service._execute("now_playing"), 1)
+    assert "playing" in result and not finished.is_set()
+    release.set()
+    await service._library_task
+    assert calls == (["scan", "enrich", "close"] if enrich else ["scan"])
+    await feed.aclose()
+    await service.aclose()
+
+
+async def test_library_refresh_failure_logged_once(library, monkeypatch, caplog):
+    import familiar_music.service as module
+
+    class Scanner:
+        def __init__(self, index):
+            pass
+
+        def scan(self, roots):
+            raise OSError("scan failed")
+
+    monkeypatch.setattr(module, "Scanner", Scanner)
+    service = module.MusicService(
+        {"remark_every": [1, 1]}, player=FakePlayer(), searcher=FakeSearch(), index=library
+    )
+    feed = service.events()
+    await anext(feed)
+    await service._library_task
+    assert caplog.text.count("Music library refresh failed") == 1
+    assert "playing" in await service._execute("now_playing")
+    await feed.aclose()
+    await service.aclose()
+
+
+async def test_empty_library_keeps_youtube_behavior(tmp_path):
+    from familiar_music.library.index import LibraryIndex
+    from familiar_music.service import MusicService
+
+    index = LibraryIndex(tmp_path / "empty.sqlite")
+    service = MusicService({}, player=FakePlayer(), searcher=FakeSearch(), index=index)
+    result = await service._execute("play_music", query="disco", kind="genre")
+    assert result["source"] == "YouTube Music"
+    tool = next(t for t in service.service_tools() if t.spec.name == "play_music")
+    assert "Library tags" not in tool.spec.description
+    await service.aclose()
+
+
+async def test_radio_starts_next_batch_on_same_source_after_idle(library):
+    dj, _, local = blend_dj(
+        library, genre_batch=2, queue_top_up=1, blend={"library": 1, "persona": 0, "discovery": 0}
+    )
+    await dj.seed("Song 1", source="library")
+    dj._radio_count = 2
+    local.current = None
+    local.queued.clear()
+    await dj.top_up()
+    assert local.current is not None and dj.player.active == "local"
+    assert dj._radio_count == 2 and len(local.queued) == 1
