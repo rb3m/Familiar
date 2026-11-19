@@ -8,7 +8,7 @@ import pytest
 from familiar.alerts import AlertKeeper
 from familiar.config import load_config
 from familiar.director import Director
-from familiar.interfaces import ConfigError, GameEvent, ToolCall, WatchSample, WatchSpec
+from familiar.interfaces import ConfigError, GameEvent, ToolCall, WatchSample, WatchSpec, spoken
 from familiar.tools import ToolRegistry
 
 
@@ -59,10 +59,16 @@ async def test_conversions_and_confirmation(unit, si, factor):
     keeper = AlertKeeper(Adapter(unit=si))
     result = await keeper.set_alert("q", "above", 25, unit, "watch this")
     assert result["status"] == "created"
-    assert result["si_value"] == pytest.approx(25 * factor)
-    assert (result["value"], result["unit"], result["si_unit"]) == (25, unit, si)
+    expected_si = 25 * factor
+    expected_value = 25
+    if unit != "count":
+        expected_si = spoken(expected_si, si)
+        expected_value = spoken(25, unit)
+    assert result["si_value"] == expected_si
+    assert (result["value"], result["unit"], result["si_unit"]) == (expected_value, unit, si)
     assert result["label"] == "watch this"
     assert keeper.adapter.reads == 1
+    assert keeper.alerts[result["alert_id"]].threshold == pytest.approx(25 * factor)
 
 
 @pytest.mark.parametrize(
@@ -97,7 +103,7 @@ async def test_already_satisfied(direction, current):
     keeper = AlertKeeper(Adapter(current))
     result = await keeper.set_alert("q", direction, 10, "m")
     assert result["status"] == "already_satisfied"
-    assert result["current_value"] == current
+    assert result["current_value"] == spoken(current, "m")
     assert not keeper.alerts
 
 

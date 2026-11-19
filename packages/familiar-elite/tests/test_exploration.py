@@ -4,7 +4,7 @@ import math
 
 import httpx
 import pytest
-from familiar.interfaces import load_data
+from familiar.interfaces import load_data, spoken
 from familiar_elite import adapter as adapter_module
 from familiar_elite.adapter import EliteAdapter
 from familiar_elite.edsm import EdsmClient
@@ -198,7 +198,7 @@ async def test_focus_ranking_and_details(client_factory, focus, expected):
     assert by_name["Port"]["station_count"] == 2
     assert by_name["Port"]["best_station"]["name"] == "Big"
     assert by_name["Port"]["population"] == 100
-    assert by_name["Scenic"]["distance_ly"] == 3
+    assert by_name["Scenic"]["distance"] == "3 light-years"
     assert by_name["Scenic"]["body_count"] == 4
     assert len(by_name["Scenic"]["notable_bodies"]) == 3
     assert by_name["Scenic"]["scoopable"]
@@ -230,8 +230,9 @@ async def test_jump_range_fallback_cap(client_factory, jump, arguments, settings
     current = state()
     current.max_jump_range = jump
     result = await Explorer(settings, client).perform("nearby_systems", arguments, current)
-    assert result["radius_ly"] == radius
+    assert result["radius"] == spoken(radius, "ly")
     assert result["radius_source"] == source
+    assert f"radius {spoken(radius, 'ly')}" in result["detail"]
     assert float(requests[0].url.params["radius"]) == radius
     await client.aclose()
 
@@ -284,7 +285,7 @@ async def test_direction_density_normalisation_waypoint_and_offline(client_facto
     assert len(requests) == 6
     assert result["directions"][0]["direction"] == "coreward"
     assert result["directions"][0]["waypoint"]["name"] == "Centre"
-    assert result["directions"][0]["waypoint"]["distance_ly"] == 150
+    assert result["directions"][0]["waypoint"]["distance"] == "150 light-years"
     galaxy = load_data("familiar_elite", "galaxy").value
     assert result["directions"][0]["report_ratio"] == pytest.approx(
         2 / (density([0, 0, 150], galaxy) * 100**3)
@@ -295,7 +296,7 @@ async def test_direction_density_normalisation_waypoint_and_offline(client_facto
     result = await explorer.perform("exploration_hint", {}, state())
     assert result["offline"] and "offline" in result["detail"]
     assert "directions" not in result
-    assert result["offline_note"]["distance_from_sol_ly"] == 0
+    assert result["offline_note"]["distance_from_sol"] == "0 light-years"
     await client.aclose()
 
 
@@ -311,7 +312,11 @@ async def test_empty_cube_waypoint_maximum_and_disabled_no_network(client_factor
     result = await Explorer({}, client).perform(
         "exploration_hint", {"max_distance_ly": 40}, state()
     )
-    assert result["directions"][0]["waypoint"]["coordinates"] == [20, 0, 0]
+    assert result["directions"][0]["waypoint"]["coordinates"] == [
+        "20 light-years",
+        "0 light-years",
+        "0 light-years",
+    ]
     assert all(float(r.url.params["size"]) <= 40 / math.sqrt(3) for r in calls)
     client.enabled = False
     calls.clear()
@@ -514,13 +519,13 @@ async def test_system_info_reports_scans_services_and_offline_cache(client_facto
     assert result["edsm"]["bodies"][0]["notable"] == "Earthlike body"
     assert result["edsm"]["bodies"][1]["landable"]
     assert result["edsm"]["bodies"][1]["rings"] == [{}]
-    assert result["edsm"]["bodies"][0]["distance_ls"] == 500
+    assert result["edsm"]["bodies"][0]["distance_to_arrival"] == "500 light-seconds"
     assert result["local"]["fss_body_count"] == 9
     assert result["local"]["bodies"][0]["first_discovery"]
     assert result["local"]["bodies"][0]["source"] == "our scans"
     assert "WasDiscovered" not in result["edsm"]["bodies"][0]
     station = result["edsm"]["stations"][0]
-    assert station["distance_ls"] == 600 and station["largest_pad"] == "M"
+    assert station["distance_to_arrival"] == "600 light-seconds" and station["largest_pad"] == "M"
     assert station["body"] == {"name": "Sol 4"}
     assert station["haveMarket"] and not station["haveShipyard"] and station["haveOutfitting"]
     assert station["otherServices"] == ["Search and Rescue", "Interstellar Factors Contact"]
@@ -626,5 +631,49 @@ async def test_nearby_service_filter_no_extra_fanout(client_factory, service, ex
     assert len(result["systems"]) == 3
     assert all(s["best_station"]["name"] == expected for s in result["systems"])
     assert all(s["station_count"] == 1 for s in result["systems"])
-    assert result["systems"][0]["distance_ly"] == 1
+    assert result["systems"][0]["distance"] == "1 light-year"
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_distance_ranking_stays_numeric_until_result(client_factory):
+    def handler(request):
+        if request.url.path.endswith("sphere-systems"):
+            return httpx.Response(200, json=[system("Far", 10), system("Near", 2)])
+        return httpx.Response(200, json={"bodies": []})
+
+    client, _ = client_factory(handler)
+    result = await Explorer({}, client).perform("nearby_systems", {}, state())
+    assert [entry["name"] for entry in result["systems"]] == ["Near", "Far"]
+    assert [entry["distance"] for entry in result["systems"]] == ["2 light-years", "10 light-years"]
+    assert all("distance_ly" not in entry for entry in result["systems"])
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "ring,expected",
+    [
+        (
+            {"massMT": 1.234, "innerRadius": 1234.5, "outerRadius": 2345.6},
+            {
+                "mass": "1.2 megatonnes",
+                "inner_radius": "1,235 kilometres",
+                "outer_radius": "2,346 kilometres",
+            },
+        ),
+        (
+            {"MassMT": 1, "InnerRad": 1234500, "OuterRad": 2345600},
+            {
+                "mass": "1 megatonne",
+                "inner_radius": "1,234,500 metres",
+                "outer_radius": "2,345,600 metres",
+            },
+        ),
+    ],
+)
+def test_ring_quantities_at_result_boundary(ring, expected):
+    from familiar_elite.exploration import spoken_result
+
+    raw = {"bodies": [{"rings": [ring]}]}
+    assert spoken_result(raw)["bodies"][0]["rings"] == [expected]
+    assert all(isinstance(value, (int, float)) for value in ring.values())

@@ -8,7 +8,7 @@ from contextlib import suppress
 from typing import Any
 
 import krpc
-from familiar.interfaces import ActionSpec
+from familiar.interfaces import ActionSpec, spoken
 
 from .telemetry import enum_name, positive
 
@@ -337,12 +337,15 @@ def _act_throttle(conn: Any, sc: Any, vessel: Any, args: dict) -> dict:
     value = float(args["value"])
     current = float(getattr(vessel.control, "throttle", 0.0))
     if math.isclose(current, value, abs_tol=0.005):
-        return {"status": "already", "detail": f"throttle already {value:.2f}"}
+        return {"status": "already", "detail": f"throttle already {spoken(100 * value, '%')}"}
     vessel.control.throttle = value
     observed = float(getattr(vessel.control, "throttle", 0.0))
     if not math.isclose(observed, value, abs_tol=0.005):
-        return {"status": "unknown", "detail": f"throttle state unknown (observed {observed:.2f})"}
-    return {"status": "done", "detail": f"throttle set to {observed:.2f}"}
+        return {
+            "status": "unknown",
+            "detail": f"throttle state unknown (observed {spoken(100 * observed, '%')})",
+        }
+    return {"status": "done", "detail": f"throttle set to {spoken(100 * observed, '%')}"}
 
 
 def _act_time_warp(conn: Any, sc: Any, vessel: Any, args: dict) -> dict:

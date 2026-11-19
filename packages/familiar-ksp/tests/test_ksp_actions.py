@@ -427,10 +427,12 @@ async def test_throttle_action(controller, fake_connection):
         res = await controller.perform("throttle", {"value": 0.5})
         assert res["status"] == "done"
         assert fake_connection.control.throttle == 0.5
+        assert res["detail"] == "throttle set to 50 percent"
 
         # Already at 0.5
         res = await controller.perform("throttle", {"value": 0.5})
         assert res["status"] == "already"
+        assert res["detail"] == "throttle already 50 percent"
 
         # Read back mismatch -> unknown
         class BrokenThrottle(FakeVesselControl):

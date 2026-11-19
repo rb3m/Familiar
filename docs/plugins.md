@@ -96,6 +96,12 @@ vessel ID, job source/destination identity or `"free roam"`; a change cancels bo
 Disconnected/paused/out-of-flight samples are invalid, and warp must disable prediction.
 Core converts m/km/ft/mi/nmi, m/s/km/h/mph/kn, s/min/h and percentages deterministically.
 
+### Quantities in tool results
+
+Tool results give quantities as `spoken(value, unit)` strings in the game's native units.
+Never return bare numbers with unit suffixes; format only after filtering and ranking.
+Internal telemetry and GameEvents stay numeric; Watchables stay numeric SI.
+
 ## Personas
 
 Personas are YAML, not plugins: copy `packages/familiar/src/familiar/personas/mira.yaml`, change the prompt and voices, and pick

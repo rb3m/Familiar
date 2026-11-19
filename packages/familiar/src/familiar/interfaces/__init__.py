@@ -13,6 +13,7 @@ from .errors import BackendError, ConfigError, PluginError
 from .game import GameAdapter
 from .llm import LLMProvider
 from .ptt import PushToTalk
+from .quantity import spoken
 from .service import CompanionService, ServiceTool, SpeechState
 from .stt import SpeechToText
 from .tts import TextToSpeech
@@ -29,6 +30,7 @@ __all__ = [
     "read_user_data",
     "save_user_data",
     "user_data_path",
+    "spoken",
     "ACTION_STATUSES",
     "ActionSpec",
     "Actuator",
