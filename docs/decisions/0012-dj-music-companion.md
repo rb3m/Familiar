@@ -10,7 +10,7 @@ for the moment, comment on it now and then, and take voice commands (skip, "I do
 more like this, who sings this, something calmer, volume). The rest of the crew react through
 banter. Music shares the speakers with the game and the voices, so it must duck when anyone
 speaks, never have a remark land on vocals, and stop for critical events. The design direction
-is in `docs/roadmap.md` (DJ entry). The local library (~4000 files) is still being copied, so
+is in `docs/roadmap.md` (DJ entry). The local library (~4000 files, later counted at ~12,000) was still being copied, so
 phase 1 uses YouTube Music; the Commander has Premium (no ads) and accepted a desktop app.
 
 Pear Desktop (formerly th-ch/youtube-music, x86_64 rpm 3.12.1) has an `api-server` plugin:

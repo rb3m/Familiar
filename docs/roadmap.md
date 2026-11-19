@@ -84,7 +84,7 @@ Nice to have: **the companion as DJ** (in every game; design agreed with the Com
 via `ytmusicapi`, seed + radio, duck/pause, voice commands, dislikes in memory; later phases
 add the local library (MPD), taste weighting, history import and tag fingerprinting. The action-carrier is the DJ: picks music for the moment and comments
 on it; the rest of the crew react through banter. Play, skip and queue are carrier-only actions.
-- **Sources:** a local library on this PC (~4000 tracks: MP3, some FLAC, Apple-bought AAC; some
+- **Sources:** a local library on this PC (~12,000 tracks: MP3, FLAC, Apple-bought AAC; some
   old CD rips lack tags) through a local player such as MPD; YouTube Music for discovery, in the
   browser if MPRIS plus opening a track link covers playing a chosen song, else a desktop
   YouTube Music app (YouTube Music only). No Spotify. Apple Music: now-playing only.
