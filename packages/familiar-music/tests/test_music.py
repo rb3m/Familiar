@@ -24,7 +24,7 @@ def isolated_data(monkeypatch, tmp_path):
 
 
 def queued(video_id):
-    """A Pear queue response where `video_id` has landed right after the current song."""
+    """A Pear queue response where the bare video ID has landed after the current song."""
     items = [{"videoId": "now", "selected": True}, {"videoId": video_id}]
     return httpx.Response(200, json={"items": items})
 
@@ -47,7 +47,7 @@ async def test_token_storage_reauth_and_play_order(tmp_path):
         return httpx.Response(204)
 
     player = PearPlayer(transport=httpx.MockTransport(handle))
-    await player.play_now("seed")
+    await player.play_now("ytm:seed")
     assert [path for _, path, _ in calls] == [
         "/auth/familiar",
         "/api/v1/queue",
@@ -108,9 +108,9 @@ class FakePlayer:
     capabilities = frozenset({"like", "dislike"})
 
     def __init__(self):
-        self.current = Track("current", "Current", ("Artist",))
+        self.current = Track("ytm:current", "Current", ("Artist",))
         self.volume = 80
-        self.queued = ["already"]
+        self.queued = ["ytm:already"]
         self.calls = []
         self.fail_volume = False
         self.closed = False
@@ -121,19 +121,19 @@ class FakePlayer:
     async def now_playing(self):
         return self.current
 
-    async def play_now(self, video_id):
-        self.calls.append(("play", video_id))
-        self.current = Track(video_id, video_id, ("New",))
+    async def play_now(self, uri):
+        self.calls.append(("play", uri))
+        self.current = Track(uri, uri.removeprefix("ytm:"), ("New",))
 
     async def queue_ids(self):
         return self.queued.copy()
 
-    async def enqueue(self, video_id):
-        self.queued.append(video_id)
+    async def enqueue(self, uri):
+        self.queued.append(uri)
 
     async def skip(self):
         self.calls.append("skip")
-        self.current = Track("next", "Next", ("Other",))
+        self.current = Track("ytm:next", "Next", ("Other",))
 
     async def pause(self):
         self.calls.append("pause")
@@ -164,25 +164,28 @@ class FakePlayer:
 
 class FakeSearch:
     async def songs(self, query, limit):
-        return [Track("bad", "Bad", ("Bad",)), Track("seed", "Seed", ("Good",), duration_s=285)]
+        return [
+            Track("ytm:bad", "Bad", ("Bad",)),
+            Track("ytm:seed", "Seed", ("Good",), duration_s=285),
+        ]
 
     async def playlists(self, query, limit):
         return [Playlist("pl-a", f"{query} A"), Playlist("pl-b", f"{query} B")]
 
     async def playlist_tracks(self, playlist_id, limit):
-        return [Track(f"{playlist_id}-{i}", f"Song {i}", ("Band",)) for i in range(limit)][:30]
+        return [Track(f"ytm:{playlist_id}-{i}", f"Song {i}", ("Band",)) for i in range(limit)][:30]
 
-    async def radio(self, video_id, limit):
+    async def radio(self, uri, limit):
         return [
             Track(i, i, (a,))
             for i, a in [
-                ("bad", "Bad"),
-                ("artist-blocked", "Banned"),
-                ("already", "Good"),
-                (video_id, "Good"),
-                ("one", "Good"),
-                ("one", "Good"),
-                ("two", "Good"),
+                ("ytm:bad", "Bad"),
+                ("ytm:artist-blocked", "Banned"),
+                ("ytm:already", "Good"),
+                (uri, "Good"),
+                ("ytm:one", "Good"),
+                ("ytm:one", "Good"),
+                ("ytm:two", "Good"),
             ]
         ]
 
@@ -190,11 +193,11 @@ class FakeSearch:
 async def test_seed_top_up_and_artist_dislikes():
     player = FakePlayer()
     dislikes = Dislikes()
-    dislikes.add(Track("bad", "Bad", ("Bad",)))
-    dislikes.add(Track("b1", "B1", ("Banned",)))
-    dislikes.add(Track("b1", "B1", ("Banned",)))
+    dislikes.add(Track("ytm:bad", "Bad", ("Bad",)))
+    dislikes.add(Track("ytm:b1", "B1", ("Banned",)))
+    dislikes.add(Track("ytm:b1", "B1", ("Banned",)))
     assert "banned" not in dislikes.values()[1]
-    dislikes.add(Track("b2", "B2", ("BANNED",)))
+    dislikes.add(Track("ytm:b2", "B2", ("BANNED",)))
     dj = DJ(player, FakeSearch(), dislikes=dislikes, settings={"queue_top_up": 2})
     result = await dj.seed("music")
     assert result == {
@@ -202,23 +205,23 @@ async def test_seed_top_up_and_artist_dislikes():
         "duration": "4 minutes 45 seconds",
         "volume": "70 percent",
     }
-    assert player.calls == [("play", "seed")]
-    assert player.queued == ["already", "one", "two"]
+    assert player.calls == [("play", "ytm:seed")]
+    assert player.queued == ["ytm:already", "ytm:one", "ytm:two"]
     await dj.dislike()
     assert player.calls[-2:] == ["dislike", "skip"]
-    assert "seed" in dislikes.values()[0]
+    assert "ytm:seed" in dislikes.values()[0]
 
 
 def test_dislikes_persist_without_game(tmp_path):
     path = tmp_path / "memory.db"
     store = MemoryStore(path)
-    store.dislike_music("one", ("Artist",))
-    store.dislike_music("one", ("Artist",))
-    assert store.music_dislikes() == ({"one"}, set())
-    store.dislike_music("two", ("ARTIST",))
+    store.dislike_music("ytm:one", ("Artist",))
+    store.dislike_music("ytm:one", ("Artist",))
+    assert store.music_dislikes() == ({"ytm:one"}, set())
+    store.dislike_music("ytm:two", ("ARTIST",))
     store.close()
     store = MemoryStore(path)
-    assert store.music_dislikes() == ({"one", "two"}, {"artist"})
+    assert store.music_dislikes() == ({"ytm:one", "ytm:two"}, {"artist"})
     store.close()
 
 
@@ -281,8 +284,8 @@ class FixedRng:
         pass
 
 
-async def change(service, player, video_id):
-    player.current = Track(video_id, video_id.title(), ("Band",))
+async def change(service, player, uri):
+    player.current = Track(uri, uri.removeprefix("ytm:").title(), ("Band",))
     return await service.poll()
 
 
@@ -296,13 +299,15 @@ async def test_remark_every_few_songs_and_only_once_heard():
     )
     assert await service.poll() is None
     assert await service.poll() is None  # same song: not a change
-    assert await change(service, player, "two") is None
-    event = await change(service, player, "three")
+    assert await change(service, player, "ytm:two") is None
+    event = await change(service, player, "ytm:three")
     assert event.kind == "music_track" and event.data["cue"] and event.data["ttl_s"] == 15
+    assert event.data["uri"] == player.current.uri
+    assert "video_id" not in event.data
     # Dropped by the Director (never acknowledged): the next change tries again.
-    assert (await change(service, player, "four")).kind == "music_track"
+    assert (await change(service, player, "ytm:four")).kind == "music_track"
     await service.speech_state(SpeechState(speaking=True, event_kind="music_track"))
-    assert await change(service, player, "five") is None
+    assert await change(service, player, "ytm:five") is None
     await service.dj.seed("music")
     assert await service.poll() is None  # a requested song is not counted
     assert "bad" in service.describe()
@@ -321,7 +326,7 @@ async def test_dj_turn_goes_to_the_carrier_with_play_music_only():
         rng=FixedRng(),
     )
     await service.poll()
-    event = await change(service, player, "two")
+    event = await change(service, player, "ytm:two")
     assert event.kind == "music_dj_turn"
     assert event.data["speaker"] == "carrier" and event.data["tools"] == ["play_music"]
     assert event.data["taste"] == "music" and event.data["cue"] and "Two" in event.data["summary"]
@@ -343,14 +348,14 @@ async def test_user_requests_and_pause_hold_back_autonomous_picks():
         rng=FixedRng(),
     )
     await service._execute("skip_track")
-    assert await change(service, player, "two") is None  # inside the hold
+    assert await change(service, player, "ytm:two") is None  # inside the hold
     now[0] = 200
     await service._execute("pause_music")
-    assert await change(service, player, "three") is None  # paused: no picks
+    assert await change(service, player, "ytm:three") is None  # paused: no picks
     await service._execute("resume_music")
-    assert (await change(service, player, "four")).kind == "music_dj_turn"
+    assert (await change(service, player, "ytm:four")).kind == "music_dj_turn"
     await service._execute("set_music_volume", level=50)  # volume is not a selection
-    assert (await change(service, player, "five")).kind == "music_dj_turn"
+    assert (await change(service, player, "ytm:five")).kind == "music_dj_turn"
     await service.aclose()
 
 
@@ -406,12 +411,13 @@ async def test_search_conversion_and_deadline():
             ]
 
         def get_watch_playlist(self, **kwargs):
+            assert kwargs == {"videoId": "one", "limit": 2}
             return {"tracks": self.search("")}
 
     search = Searcher(Client(), timeout=1)
     tracks = await search.songs("query", 2)
-    assert tracks == [Track("one", "One", ("A",), "Album", 182)]
-    assert await search.radio("one", 2) == tracks
+    assert tracks == [Track("ytm:one", "One", ("A",), "Album", 182)]
+    assert await search.radio("ytm:one", 2) == tracks
 
 
 async def test_handshake_storage_reauth_and_play_order(tmp_path):
@@ -433,12 +439,13 @@ async def test_handshake_storage_reauth_and_play_order(tmp_path):
         return httpx.Response(204)
 
     player = PearPlayer(transport=httpx.MockTransport(handle), state_dir=tmp_path)
-    assert (await player.now_playing()).title == "Song"
+    track = await player.now_playing()
+    assert track.title == "Song" and track.uri == "ytm:song"
     assert auth_count == 2
     assert player.token_path.read_text() == "token-2"
     assert player.token_path.stat().st_mode & 0o777 == 0o600
     requests.clear()
-    await player.play_now("new")
+    await player.play_now("ytm:new")
     assert [r.url.path for r in requests] == ["/api/v1/queue", "/api/v1/queue", "/api/v1/next"]
     assert json.loads(requests[0].content) == {
         "videoId": "new",
@@ -508,9 +515,9 @@ async def test_reseed_uses_current_radio_and_cooldown():
     calls = []
 
     class Search(FakeSearch):
-        async def radio(self, video_id, limit):
-            calls.append(("radio", video_id))
-            return await super().radio(video_id, limit)
+        async def radio(self, uri, limit):
+            calls.append(("radio", uri))
+            return await super().radio(uri, limit)
 
         async def songs(self, query, limit):
             calls.append(("search", query))
@@ -519,7 +526,7 @@ async def test_reseed_uses_current_radio_and_cooldown():
     now = [0]
     dj = DJ(player, Search(), clock=lambda: now[0], rng=FixedRng())
     await dj.reseed()
-    assert ("radio", "current") in calls
+    assert ("radio", "ytm:current") in calls
     calls.clear()
     assert "already" in (await dj.reseed(calmer=True))["status"]
     assert not calls
@@ -587,7 +594,7 @@ async def test_pear_volume_and_queue_response_shapes(tmp_path):
     player = PearPlayer(transport=httpx.MockTransport(handle), state_dir=tmp_path)
     player.token = "saved"
     assert await player.get_volume() == 70  # read on Pear's curve, reported as written
-    assert await player.queue_ids() == ["wrapped", "flat"]
+    assert await player.queue_ids() == ["ytm:wrapped", "ytm:flat"]
     await player.aclose()
 
 
@@ -715,10 +722,10 @@ async def test_genre_replaces_queue_with_shuffled_playlist_batch():
     player = ClearingPlayer()
     dj = DJ(player, FakeSearch(), settings={"genre_batch": 4, "queue_top_up": 3}, rng=FixedRng())
     result = await dj.seed("70s disco classics", kind="genre")
-    assert player.calls[:2] == ["clear", ("play", player.current.video_id)]
+    assert player.calls[:2] == ["clear", ("play", player.current.uri)]
     assert result["playlist"] == "70s disco classics A" and result["queued"] == "3 more songs"
-    assert len(player.queued) == 3 and "already" not in player.queued
-    assert all(v.startswith("pl-a-") for v in player.queued + [player.current.video_id])
+    assert len(player.queued) == 3 and "ytm:already" not in player.queued
+    assert all(v.startswith("ytm:pl-a-") for v in player.queued + [player.current.uri])
     reserve = len(dj.reserve)
     player.queued = player.queued[:1]
     await dj.top_up()
@@ -731,7 +738,7 @@ async def test_asking_again_picks_something_new():
 
     class TwoSongs(FakeSearch):
         async def songs(self, query, limit):
-            return [Track("top", "Top", ("A",)), Track("second", "Second", ("A",))]
+            return [Track("ytm:top", "Top", ("A",)), Track("ytm:second", "Second", ("A",))]
 
     dj.searcher = TwoSongs()
     assert (await dj.seed("classic rock", kind="song"))["playing"] == "Top by A"
@@ -760,7 +767,7 @@ async def test_pear_upcoming_queue_and_clear(tmp_path):
 
     player = PearPlayer(transport=httpx.MockTransport(handle), state_dir=tmp_path)
     player.token = "saved"
-    assert await player.queue_ids() == ["wrapped", "last"]
+    assert await player.queue_ids() == ["ytm:wrapped", "ytm:last"]
     await player.clear_upcoming()
     assert deleted == [3, 2]
     await player.aclose()
@@ -778,7 +785,7 @@ async def test_play_now_waits_for_pear_to_add_the_song(tmp_path):
 
     player = PearPlayer({"insert_poll_s": 0.001}, transport=httpx.MockTransport(handle))
     player.token = "saved"
-    await player.play_now("new")
+    await player.play_now("ytm:new")
     assert [c for c in calls if c[0] == "GET"] == [("GET", "/api/v1/queue")] * 3
     assert calls[-1] == ("POST", "/api/v1/next")
     await player.aclose()
@@ -787,15 +794,15 @@ async def test_play_now_waits_for_pear_to_add_the_song(tmp_path):
 class StableRadio(FakeSearch):
     """Radio that returns the same numbered list per seed, like a real recommendation list."""
 
-    async def radio(self, video_id, limit):
-        return [Track(f"{video_id}>{i}", str(i), ("Band",)) for i in range(limit)]
+    async def radio(self, uri, limit):
+        return [Track(f"{uri}>{i}", str(i), ("Band",)) for i in range(limit)]
 
 
 async def test_radio_keeps_replenishing_with_stable_results():
     player = FakePlayer()
     player.queued = []
     dj = DJ(player, StableRadio())
-    dj.radio_seed = "seed"
+    dj.radio_seed = "ytm:seed"
     await dj.top_up()
     played = 0
     while player.queued and played < 200:
@@ -809,12 +816,12 @@ async def test_unusable_reserve_falls_through_to_radio():
     player = FakePlayer()
     player.queued = []
     dj = DJ(player, StableRadio(), settings={"queue_top_up": 2})
-    blocked = Track("blocked", "Blocked", ("Nope",))
+    blocked = Track("ytm:blocked", "Blocked", ("Nope",))
     dj.dislikes.add(blocked)
     dj.reserve = [blocked]
-    dj.radio_seed = "seed"
+    dj.radio_seed = "ytm:seed"
     await dj.top_up()
-    assert player.queued == ["seed>0", "seed>1"] and dj.reserve == []
+    assert player.queued == ["ytm:seed>0", "ytm:seed>1"] and dj.reserve == []
 
 
 async def test_more_like_this_drops_the_genre_reserve():
@@ -824,9 +831,7 @@ async def test_more_like_this_drops_the_genre_reserve():
     assert dj.reserve
     dj.last_seed = float("-inf")
     await dj.reseed()
-    assert dj.reserve == [] and any(
-        v.startswith(f"{player.current.video_id}>") for v in player.queued
-    )
+    assert dj.reserve == [] and any(v.startswith(f"{player.current.uri}>") for v in player.queued)
 
 
 async def test_playlist_choice_varies_only_among_top_results():
@@ -855,7 +860,7 @@ async def test_queued_dj_turn_cannot_undo_a_later_request():
     player = FakePlayer()
     now = [0]
     service = dj_service(player, now)
-    assert (await change(service, player, "two")).kind == "music_dj_turn"
+    assert (await change(service, player, "ytm:two")).kind == "music_dj_turn"
     await service._execute("pause_music")  # the Commander spoke first
     await service.speech_state(SpeechState(speaking=True, event_kind="music_dj_turn"))
     result = await service._execute("play_music", query="disco", kind="genre")
@@ -866,7 +871,7 @@ async def test_queued_dj_turn_cannot_undo_a_later_request():
 async def test_externally_paused_player_gets_no_dj_turn():
     player = FakePlayer()
     service = dj_service(player, [0])
-    player.current = Track("two", "Two", paused=True)
+    player.current = Track("ytm:two", "Two", paused=True)
     assert await service.poll() is None
     await service.aclose()
 
@@ -876,7 +881,7 @@ async def test_skips_and_dislikes_are_not_natural_changes():
     service = dj_service(player, [0], dj_turn_every=[9, 9], remark_every=[1, 1])
     await service._execute("skip_track")
     assert await service.poll() is None  # the skipped-to song
-    assert (await change(service, player, "natural")).kind == "music_track"
+    assert (await change(service, player, "ytm:natural")).kind == "music_track"
     await service.aclose()
 
 
@@ -885,10 +890,36 @@ async def test_one_turn_is_acknowledged_once():
     service = dj_service(player, [0], dj_turn_every=[9, 9], remark_every=[3, 3])
     speaking = SpeechState(speaking=True, event_kind="music_track")
     await service.speech_state(speaking)
-    await change(service, player, "two")
+    await change(service, player, "ytm:two")
     await service.speech_state(SpeechState(listening=True, speaking=True, event_kind="music_track"))
     assert service.remarks.count == 1  # push-to-talk mid-turn did not restart the count
     await service.speech_state(SpeechState())
     await service.speech_state(speaking)
     assert service.remarks.count == 0  # a new turn does
     await service.aclose()
+
+
+@pytest.mark.parametrize("method", ["play_now", "enqueue"])
+@pytest.mark.parametrize("uri", ["local:track-uuid", "bare-video-id"])
+async def test_pear_rejects_unsupported_uris(method, uri, tmp_path):
+    def unexpected_request(request):
+        pytest.fail("Unsupported URIs must be rejected before contacting Pear")
+
+    player = PearPlayer(transport=httpx.MockTransport(unexpected_request), state_dir=tmp_path)
+    with pytest.raises(ValueError, match="Pear only supports ytm:"):
+        await getattr(player, method)(uri)
+    await player.aclose()
+
+
+async def test_pear_enqueue_sends_bare_video_id(tmp_path):
+    payloads = []
+
+    def handle(request):
+        payloads.append(json.loads(request.content))
+        return httpx.Response(204)
+
+    player = PearPlayer(transport=httpx.MockTransport(handle), state_dir=tmp_path)
+    player.token = "saved"
+    await player.enqueue("ytm:queued-song")
+    assert payloads == [{"videoId": "queued-song", "insertPosition": "INSERT_AT_END"}]
+    await player.aclose()

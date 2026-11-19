@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .text import words
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 CREW_MOMENT_CAP = 300
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
@@ -66,7 +66,7 @@ class MemoryStore:
             self.db.execute("PRAGMA foreign_keys=OFF")
             self.db.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
             version = self.db.execute("SELECT version FROM schema_version").fetchone()
-            if version is not None and version[0] not in {1, 2, 3, SCHEMA_VERSION}:
+            if version is not None and version[0] not in {1, 2, 3, 4, SCHEMA_VERSION}:
                 raise ValueError(f"Unsupported memory schema version: {version[0]}")
             self.db.executescript(_SCHEMA)
             self.db.executescript(_FLAVOR_SCHEMA)
@@ -81,6 +81,11 @@ class MemoryStore:
                 self.db.execute("BEGIN")
                 self._migrate_attribution()
                 self._migrate_moments()
+                if version is not None and version[0] < 5:
+                    self.db.execute(
+                        "UPDATE music_dislikes SET video_id = 'ytm:' || video_id "
+                        "WHERE instr(video_id, ':') = 0"
+                    )
                 if version is None:
                     self.db.execute("INSERT INTO schema_version VALUES (?)", (SCHEMA_VERSION,))
                 if version is not None and version[0] < SCHEMA_VERSION:
@@ -140,12 +145,12 @@ class MemoryStore:
             return
         self.db.execute(f"UPDATE {table} SET speaker = persona")
 
-    def dislike_music(self, video_id: str, artists: tuple[str, ...]) -> None:
+    def dislike_music(self, uri: str, artists: tuple[str, ...]) -> None:
         """Record distinct tracks per artist, independently of game/session."""
         with self.db:
             self.db.executemany(
                 "INSERT OR IGNORE INTO music_dislikes VALUES (?, ?)",
-                [(video_id, artist.casefold()) for artist in artists] or [(video_id, "")],
+                [(uri, artist.casefold()) for artist in artists] or [(uri, "")],
             )
 
     def music_dislikes(self) -> tuple[set[str], set[str]]:

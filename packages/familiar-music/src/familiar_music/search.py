@@ -21,7 +21,7 @@ def _track(item):
             duration = None
     album = item.get("album") or {}
     return Track(
-        item["videoId"],
+        f"ytm:{item['videoId']}",
         item.get("title", "Unknown track"),
         tuple(artist["name"] for artist in item.get("artists", []) if artist.get("name")),
         album.get("name", ""),
@@ -42,8 +42,10 @@ class Searcher:
         results = await self._call(self.client.search, query, filter="songs", limit=limit)
         return [_track(item) for item in results if item.get("videoId")][:limit]
 
-    async def radio(self, video_id, limit):
-        result = await self._call(self.client.get_watch_playlist, videoId=video_id, limit=limit)
+    async def radio(self, uri, limit):
+        result = await self._call(
+            self.client.get_watch_playlist, videoId=uri.removeprefix("ytm:"), limit=limit
+        )
         return [_track(item) for item in result.get("tracks", []) if item.get("videoId")][:limit]
 
     async def playlists(self, query, limit):

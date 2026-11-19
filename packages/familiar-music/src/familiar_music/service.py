@@ -80,7 +80,7 @@ class PearMusicService:
         self.poll_interval = pear_settings(settings)["poll_interval_s"]
         self.recovery_interval = pear_settings(settings)["recovery_interval_s"]
         self._current = None
-        self._last_id = None
+        self._last_uri = None
         rng = rng or random.Random()
         self.remarks = Cadence(self.settings["remark_every"], rng)
         self.picks = Cadence(self.settings["dj_turn_every"], rng)
@@ -232,13 +232,13 @@ class PearMusicService:
         self._available = self._current is not None
         if self._current is None:
             return None
-        video_id = self._current.video_id
-        if video_id == self._last_id:
+        uri = self._current.uri
+        if uri == self._last_uri:
             return None
-        self._last_id = video_id
+        self._last_uri = uri
         await self.dj.top_up()
-        uncounted = video_id in self.dj.announced or self._uncounted
-        self.dj.announced.discard(video_id)
+        uncounted = uri in self.dj.announced or self._uncounted
+        self.dj.announced.discard(uri)
         self._uncounted = False
         if uncounted:
             # A request caused it (and the reply named it); it is not a natural change to count.
@@ -281,7 +281,7 @@ class PearMusicService:
             "ambient",
             {
                 "summary": summary,
-                "video_id": self._current.video_id,
+                "uri": self._current.uri,
                 "companion_service": True,
                 "cue": True,
                 **data,

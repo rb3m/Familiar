@@ -42,13 +42,13 @@ class Dislikes:
     def add(self, track):
         artists = tuple(dict.fromkeys(artist.casefold() for artist in track.artists))
         if self.write is not None:
-            self.write(track.video_id, artists)
+            self.write(track.uri, artists)
             return
-        self.tracks[track.video_id] = artists
+        self.tracks[track.uri] = artists
 
     def blocked(self, track):
         tracks, artists = self.values()
-        return track.video_id in tracks or any(a.casefold() in artists for a in track.artists)
+        return track.uri in tracks or any(a.casefold() in artists for a in track.artists)
 
 
 class DJ:
@@ -84,7 +84,7 @@ class DJ:
         return await self._start(selection, calm)
 
     def _fresh(self, tracks):
-        return [t for t in tracks if not self.dislikes.blocked(t) and t.video_id not in self.recent]
+        return [t for t in tracks if not self.dislikes.blocked(t) and t.uri not in self.recent]
 
     async def _pick_song(self, text):
         hits = await self.searcher.songs(text, self.settings["search_limit"])
@@ -118,17 +118,17 @@ class DJ:
         first, *rest = selection.tracks
         if "clear" in self.player.capabilities:
             await self.player.clear_upcoming()
-        await self.player.play_now(first.video_id)
+        await self.player.play_now(first.uri)
         for track in rest:
-            await self.player.enqueue(track.video_id)
-        self.recent.extend(track.video_id for track in selection.tracks)
+            await self.player.enqueue(track.uri)
+        self.recent.extend(track.uri for track in selection.tracks)
         self.reserve = list(selection.reserve)
         self._pause_owner = None
-        self.announced.add(first.video_id)
-        self.radio_seed = first.video_id
+        self.announced.add(first.uri)
+        self.radio_seed = first.uri
         self.last_seed = self.clock()
         level = await self._default_volume(calm)
-        await self.top_up(first.video_id, force=not rest)
+        await self.top_up(first.uri, force=not rest)
         result = {"playing": first.summary(), "duration": spoken(first.duration_s, "s"), **level}
         if selection.playlist:
             result |= {"playlist": selection.playlist, "queued": f"{len(rest)} more songs"}
@@ -141,9 +141,9 @@ class DJ:
         key = {True: "calm_volume", False: "play_volume"}[calm]
         return await self._locked_volume(self.settings[key], None)
 
-    async def top_up(self, video_id=None, *, force=False):
+    async def top_up(self, uri=None, *, force=False):
         """Keep a few songs queued: the genre playlist's reserve first, then radio."""
-        seed = video_id or self.radio_seed
+        seed = uri or self.radio_seed
         if seed is None:
             return
         queued = set(await self.player.queue_ids())
@@ -171,12 +171,12 @@ class DJ:
         for position, track in enumerate(pool):
             if not needed:
                 return pool[position:], 0
-            if track.video_id in queued or not self._fresh([track]):
+            if track.uri in queued or not self._fresh([track]):
                 continue
-            await self.player.enqueue(track.video_id)
-            queued.add(track.video_id)
-            self.recent.append(track.video_id)
-            self.radio_seed = track.video_id
+            await self.player.enqueue(track.uri)
+            queued.add(track.uri)
+            self.recent.append(track.uri)
+            self.radio_seed = track.uri
             needed -= 1
         return [], needed
 
@@ -188,10 +188,10 @@ class DJ:
         current = await self.player.now_playing()
         if current is None:
             return {"error": "Nothing is playing"}
-        self.radio_seed = current.video_id
+        self.radio_seed = current.uri
         self.reserve = []  # "more like this" means the current song, not the last genre
         self.last_seed = self.clock()
-        await self.top_up(current.video_id, force=True)
+        await self.top_up(current.uri, force=True)
         return {"status": "Queued more like this"}
 
     async def dislike(self):
@@ -207,7 +207,7 @@ class DJ:
         current = await self.player.now_playing()
         self.radio_seed = None
         if current is not None:
-            self.radio_seed = current.video_id
+            self.radio_seed = current.uri
         self._pause_owner = None
         await self.top_up(force=True)
         return {"status": f"Disliked and skipped {track.title}"}
@@ -319,7 +319,7 @@ class DJ:
         if current is None or current.paused:
             return
         # Remember ownership before the request: a cancelled request may have taken effect.
-        self._pause_owner = current.video_id
+        self._pause_owner = current.uri
         await self.player.pause()
 
     async def _resume_owned(self):
@@ -328,7 +328,7 @@ class DJ:
             self._pause_requested = False
             return
         current = await self.player.now_playing()
-        if current is not None and current.video_id == owner and current.paused:
+        if current is not None and current.uri == owner and current.paused:
             await self.player.resume()
         # Keep ownership on failure so a later state transition/shutdown can restore it.
         self._pause_owner = None
@@ -337,7 +337,7 @@ class DJ:
     def observe(self, current):
         if self._pause_owner is None or current is None:
             return
-        if current.video_id != self._pause_owner or not current.paused:
+        if current.uri != self._pause_owner or not current.paused:
             self._pause_owner = None
 
     async def speech_state(self, state):

@@ -96,3 +96,31 @@ def test_unknown_schema_is_rejected(tmp_path):
     store.close()
     with pytest.raises(ValueError, match="Unsupported memory schema"):
         MemoryStore(path)
+
+
+def test_music_dislike_uri_migration(tmp_path):
+    path = tmp_path / "memory.db"
+    store = MemoryStore(path)
+    with store.db:
+        store.db.execute("UPDATE schema_version SET version = 4")
+        store.db.executemany(
+            "INSERT INTO music_dislikes VALUES (?, ?)",
+            [
+                ("old-one", "artist"),
+                ("old-two", "artist"),
+                ("ytm:qualified", "other"),
+                ("local:track-uuid", ""),
+            ],
+        )
+    store.close()
+
+    expected = ({"ytm:old-one", "ytm:old-two", "ytm:qualified", "local:track-uuid"}, {"artist"})
+    store = MemoryStore(path)
+    assert store.music_dislikes() == expected
+    assert store.db.execute("SELECT version FROM schema_version").fetchone()[0] == SCHEMA_VERSION
+    store.dislike_music("local:another-uuid", ())
+    store.close()
+
+    store = MemoryStore(path)
+    assert store.music_dislikes() == (expected[0] | {"local:another-uuid"}, expected[1])
+    store.close()

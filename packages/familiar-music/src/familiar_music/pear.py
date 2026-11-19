@@ -112,7 +112,7 @@ class PearPlayer:
         if not data or not data.get("videoId"):
             return None
         return Track(
-            data["videoId"],
+            f"ytm:{data['videoId']}",
             data.get("title", "Unknown track"),
             tuple(a.strip() for a in data.get("artist", "").split(",") if a.strip()),
             data.get("album", ""),
@@ -120,30 +120,30 @@ class PearPlayer:
             data.get("isPaused", False),
         )
 
-    async def play_now(self, video_id):
+    async def play_now(self, uri):
         await self._request(
             "POST",
             "queue",
             {
-                "videoId": video_id,
+                "videoId": _video_id(uri),
                 "insertPosition": self.data["insert_now"],
             },
         )
-        await self._until_queued(video_id)
+        await self._until_queued(uri)
         await self.skip()
 
-    async def _until_queued(self, video_id):
+    async def _until_queued(self, uri):
         """Pear adds songs asynchronously; skipping before one lands plays the wrong song."""
         async with asyncio.timeout(self.data["insert_wait_s"]):
-            while video_id not in await self.queue_ids():
+            while uri not in await self.queue_ids():
                 await asyncio.sleep(self.data["insert_poll_s"])
 
-    async def enqueue(self, video_id):
+    async def enqueue(self, uri):
         await self._request(
             "POST",
             "queue",
             {
-                "videoId": video_id,
+                "videoId": _video_id(uri),
                 "insertPosition": self.data["insert_end"],
             },
         )
@@ -185,7 +185,7 @@ class PearPlayer:
     async def queue_ids(self):
         """Songs still to play after the current one; played history is not counted."""
         renderers, current = await self._queue()
-        return [video for r in renderers[current + 1 :] if (video := r.get("videoId"))]
+        return [f"ytm:{video}" for r in renderers[current + 1 :] if (video := r.get("videoId"))]
 
     async def clear_upcoming(self):
         """Drop what was queued after the current song, last first so indices stay valid."""
@@ -213,3 +213,10 @@ def _renderer(entry):
     """Pear queue items wrap YouTube's playlistPanelVideoRenderer, sometimes twice."""
     wrapper = entry.get("playlistPanelVideoWrapperRenderer", {}).get("primaryRenderer", entry)
     return wrapper.get("playlistPanelVideoRenderer", wrapper)
+
+
+def _video_id(uri):
+    """Translate a supported track URI at the Pear API boundary."""
+    if not uri.startswith("ytm:"):
+        raise ValueError(f"Pear only supports ytm: URIs: {uri}")
+    return uri.removeprefix("ytm:")
