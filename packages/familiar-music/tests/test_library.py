@@ -1,5 +1,6 @@
 """Tests for music library paths, index, scanner, deduplication, enrichment, and query."""
 
+import argparse
 import datetime
 import sqlite3
 import subprocess
@@ -8,6 +9,7 @@ from pathlib import Path
 import httpx
 import mutagen
 import pytest
+from familiar_music.commands import MusicCommand, _run_enrich
 from familiar_music.library.enrich import Enricher
 from familiar_music.library.index import LibraryIndex, primary_artist, store_artist_tags, tag_key
 from familiar_music.library.paths import database_path, library_roots, xdg_music_dir
@@ -347,8 +349,7 @@ def test_enrich_with_mocked_httpx_and_rate_limiting(tmp_path):
         row = conn.execute("SELECT * FROM artists WHERE name_norm = 'queen'").fetchone()
         assert row["mbid"] == "0383dadf-2a4e-4d10-a46a-e6e041da9180"
         tags = dict(conn.execute("SELECT tag, count FROM artist_tags WHERE name_norm = 'queen'"))
-        assert tags["rock"] == 100
-        assert tags["classicrock"] == 80
+        assert tags == {"classicrock": 80}
         assert row["enriched_at"] is not None
         assert row["enrich_error"] is None
 
@@ -482,9 +483,9 @@ def test_enrichment_503_backoff(tmp_path, recover, throttle_details):
     assert result["enriched"] == int(recover)
     with index._connect() as conn:
         row = conn.execute("SELECT * FROM artists").fetchone()
-        assert row["enrich_error_at"] is None
-        assert row["enrich_error"] is None
-        assert enricher._should_process(row, datetime.datetime.now(datetime.UTC)) == (not recover)
+        assert bool(row["enrich_error_at"]) == (not recover)
+        assert bool(row["enrich_error"]) == (not recover)
+        assert not enricher._should_process(row, datetime.datetime.now(datetime.UTC))
 
 
 def test_enrichment_error_timestamp_column(tmp_path):
@@ -581,3 +582,226 @@ def test_query_relevance_keeps_distinct_requested_terms():
         frozenset(["cumbia"]),
         frozenset(["ska"]),
     ]
+
+
+@pytest.mark.parametrize(
+    "name,queries",
+    [
+        ("B-52's", ['artist:"B-52\'s"', "B\\-52's"]),
+        ("Shakespear's Sister", ['artist:"Shakespear\'s Sister"', "Shakespear's Sister"]),
+        (
+            "Tom Jones & The Cardigans",
+            [
+                'artist:"Tom Jones & The Cardigans"',
+                "Tom Jones \\& The Cardigans",
+                'artist:"Tom Jones"',
+                "Tom Jones",
+            ],
+        ),
+        (
+            "Idina Menzel/Kristin Chenoweth",
+            [
+                'artist:"Idina Menzel/Kristin Chenoweth"',
+                "Idina Menzel\\/Kristin Chenoweth",
+                'artist:"Idina Menzel"',
+                "Idina Menzel",
+            ],
+        ),
+        (
+            "Iggy Pop and the Stooges",
+            ['artist:"Iggy Pop and the Stooges"', "Iggy Pop and the Stooges"],
+        ),
+        ("Simon & Garfunkel", ['artist:"Simon & Garfunkel"']),
+    ],
+)
+def test_enrichment_cascade(tmp_path, name, queries):
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    with index._connect() as conn:
+        conn.execute("INSERT INTO artists (name_norm, display) VALUES ('artist', ?)", (name,))
+    searches = []
+
+    def handler(request):
+        if not request.url.path.endswith("/artist"):
+            return httpx.Response(200, json={"genres": [{"name": "rock", "count": 7}]})
+        searches.append(request.url.params["query"])
+        score = 89 + int(len(searches) == len(queries))
+        return httpx.Response(200, json={"artists": [{"id": "mbid", "score": score}]})
+
+    enricher = Enricher(
+        index, client=httpx.Client(transport=httpx.MockTransport(handler)), sleeper=lambda _: None
+    )
+    assert enricher.enrich_all()["enriched"] == 1
+    assert searches == queries
+
+
+@pytest.mark.parametrize("success_step", [1, 2, 3, 4, None])
+def test_collaboration_search_stops_at_first_match(tmp_path, success_step):
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    with index._connect() as conn:
+        conn.execute(
+            "INSERT INTO artists (name_norm, display) VALUES ('artist', 'Prince & The Revolution')"
+        )
+    searches = []
+
+    def handler(request):
+        if not request.url.path.endswith("/artist"):
+            return httpx.Response(200, json={})
+        searches.append(request.url.params["query"])
+        if len(searches) == success_step:
+            return httpx.Response(200, json={"artists": [{"id": "mbid", "score": 100}]})
+        return httpx.Response(200, json={"artists": []})
+
+    enricher = Enricher(
+        index, client=httpx.Client(transport=httpx.MockTransport(handler)), sleeper=lambda _: None
+    )
+    assert enricher.enrich_all()["enriched"] == int(success_step is not None)
+    assert (
+        searches
+        == [
+            'artist:"Prince & The Revolution"',
+            "Prince \\& The Revolution",
+            'artist:"Prince"',
+            "Prince",
+        ][:success_step]
+    )
+    with index._connect() as conn:
+        row = conn.execute("SELECT * FROM artists").fetchone()
+    assert bool(row["enrich_error"]) == (success_step is None)
+
+
+@pytest.mark.parametrize(
+    "genres,expected", [([], {"synthpop": 5}), ([{"name": "British", "count": 3}], {"british": 3})]
+)
+def test_enrichment_genres_and_stoplist(tmp_path, genres, expected):
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    with index._connect() as conn:
+        conn.execute("INSERT INTO artists (name_norm, display) VALUES ('artist', 'Artist')")
+    tags = [
+        {"name": name, "count": 5}
+        for name in ["BRITISH", "Seen Live", "female-vocalists", "80s", "Synth-Pop", ""]
+    ]
+
+    def handler(request):
+        if request.url.path.endswith("/artist"):
+            return httpx.Response(200, json={"artists": [{"id": "mbid", "score": 100}]})
+        return httpx.Response(200, json={"tags": tags, "genres": genres})
+
+    enricher = Enricher(
+        index, client=httpx.Client(transport=httpx.MockTransport(handler)), sleeper=lambda _: None
+    )
+    assert enricher.enrich_all()["enriched"] == 1
+    with index._connect() as conn:
+        assert dict(conn.execute("SELECT tag, count FROM artist_tags")) == expected
+
+
+@pytest.mark.parametrize(
+    "failure,kind,hours",
+    [
+        ("empty", "not_found", 168),
+        ("low", "not_found", 168),
+        ("network", "transient", 6),
+        ("503", "transient", 6),
+        ("404", "transient", 6),
+        ("json", "transient", 6),
+    ],
+)
+def test_enrichment_error_retry_timing(tmp_path, failure, kind, hours):
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    with index._connect() as conn:
+        conn.execute("INSERT INTO artists (name_norm, display) VALUES ('artist', 'Artist')")
+
+    def handler(request):
+        if failure == "network":
+            raise httpx.ConnectError("offline", request=request)
+        responses = {
+            "empty": httpx.Response(200, json={"artists": []}),
+            "low": httpx.Response(200, json={"artists": [{"id": "mbid", "score": 89}]}),
+            "503": httpx.Response(503),
+            "404": httpx.Response(404),
+            "json": httpx.Response(200, json={"error": "try later"}),
+        }
+        return responses[failure]
+
+    enricher = Enricher(
+        index, client=httpx.Client(transport=httpx.MockTransport(handler)), sleeper=lambda _: None
+    )
+    assert enricher.enrich_all()["failed"] == 1
+    with index._connect() as conn:
+        row = conn.execute("SELECT * FROM artists").fetchone()
+    assert row["enrich_error"].startswith(f"{kind}:")
+    at = datetime.datetime.fromisoformat(row["enrich_error_at"])
+    boundary = at + datetime.timedelta(hours=hours)
+    assert not enricher._should_process(row, boundary - datetime.timedelta(seconds=1))
+    assert enricher._should_process(row, boundary)
+    assert enricher.enrich_all()["processed"] == 0
+
+
+@pytest.mark.parametrize(
+    "flags,expected",
+    [
+        ([], ["Pending"]),
+        (["--retry-failed"], ["Failed", "Pending"]),
+        (["--refresh"], ["Enriched", "Failed", "Pending"]),
+        (["--refresh", "--retry-failed"], ["Enriched", "Failed", "Pending"]),
+    ],
+)
+def test_enrichment_cli_selection(tmp_path, monkeypatch, capsys, flags, expected):
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    with index._connect() as conn:
+        conn.executemany(
+            "INSERT INTO artists (name_norm, display, enriched_at, enrich_error, enrich_error_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [
+                ("enriched", "Enriched", now, None, None),
+                ("failed", "Failed", None, "not_found: missing", now),
+                ("pending", "Pending", None, None, None),
+            ],
+        )
+    selected = []
+
+    def handler(request):
+        if not request.url.path.endswith("/artist"):
+            return httpx.Response(200, json={})
+        selected.append(request.url.params["query"].removeprefix('artist:"').removesuffix('"'))
+        return httpx.Response(200, json={"artists": [{"id": "mbid", "score": 100}]})
+
+    enricher = Enricher(
+        index, client=httpx.Client(transport=httpx.MockTransport(handler)), sleeper=lambda _: None
+    )
+    monkeypatch.setattr("familiar_music.commands.Enricher", lambda _: enricher)
+    parser = argparse.ArgumentParser()
+    MusicCommand().add_arguments(parser)
+    args = parser.parse_args(["enrich", *flags])
+    assert _run_enrich(index, args) == 0
+    assert selected == expected
+    output = capsys.readouterr().out
+    assert f"Enriching ({len(expected)}/{len(expected)})" in output
+    assert f"Enrichment complete: {len(expected)} enriched, 0 failed" in output
+
+
+def test_refresh_replaces_old_tags_and_clears_errors(tmp_path):
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    with index._connect() as conn:
+        conn.execute(
+            "INSERT INTO artists (name_norm, display, mbid, enriched_at, enrich_error) "
+            "VALUES ('artist', 'Artist', 'old', '2026-01-01', 'transient: offline')"
+        )
+        store_artist_tags(conn, "artist", {"british": 20, "rock": 9})
+
+    def handler(request):
+        if request.url.path.endswith("/artist"):
+            return httpx.Response(200, json={"artists": [{"id": "new", "score": 100}]})
+        return httpx.Response(200, json={"genres": [{"name": "rock", "count": 2}]})
+
+    enricher = Enricher(
+        index, client=httpx.Client(transport=httpx.MockTransport(handler)), sleeper=lambda _: None
+    )
+    assert enricher.enrich_all(refresh=True)["enriched"] == 1
+    with index._connect() as conn:
+        row = conn.execute("SELECT * FROM artists").fetchone()
+        assert row["mbid"] == "new"
+        assert row["enrich_error"] is None
+        assert row["enrich_error_at"] is None
+        assert dict(conn.execute("SELECT tag, count FROM artist_tags")) == {"rock": 2}
+    assert enricher.enrich_all()["processed"] == 0

@@ -47,7 +47,12 @@ def _run_scan(index: LibraryIndex, roots: list[Path], args: argparse.Namespace) 
 
 def _run_enrich(index: LibraryIndex, args: argparse.Namespace) -> int:
     enricher = Enricher(index)
-    res = enricher.enrich_all(limit=args.limit, progress_cb=_enrich_progress)
+    res = enricher.enrich_all(
+        limit=args.limit,
+        retry_failed=args.retry_failed,
+        refresh=args.refresh,
+        progress_cb=_enrich_progress,
+    )
     sys.stdout.write("\n")
     sys.stdout.flush()
     print(
@@ -104,6 +109,15 @@ class MusicCommand:
             type=int,
             default=None,
             help="Limit number of artists to enrich",
+        )
+
+        enrich_parser.add_argument(
+            "--retry-failed", action="store_true", help="Retry failed artists ignoring retry delays"
+        )
+        enrich_parser.add_argument(
+            "--refresh",
+            action="store_true",
+            help="Re-fetch all artists, including enriched artists",
         )
 
         subparsers.add_parser("status", help="Show library statistics")

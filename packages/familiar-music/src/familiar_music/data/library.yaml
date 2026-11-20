@@ -25,6 +25,103 @@ musicbrainz:
   rate_limit_s: 1.0
   match_threshold: 90
   retry_error_days: 7
+  retry_transient_hours: 6
+  # Tried only after both full-name searches fail. Do not split "and the".
+  collaboration_separators:
+    - " & "
+    - " / "
+    - "/"
+    - " vs. "
+    - " vs "
+    - " y "
+    - " with "
+  # Used only when curated MusicBrainz genres are absent.
+  tag_stoplist:
+    - british
+    - american
+    - english
+    - uk
+    - usa
+    - united kingdom
+    - united states
+    - german
+    - germany
+    - spanish
+    - spain
+    - mexican
+    - mexico
+    - argentine
+    - argentinian
+    - argentina
+    - japanese
+    - japan
+    - french
+    - france
+    - italian
+    - italy
+    - canadian
+    - canada
+    - australian
+    - australia
+    - swedish
+    - sweden
+    - finnish
+    - finland
+    - norwegian
+    - norway
+    - dutch
+    - netherlands
+    - brazilian
+    - brazil
+    - portuguese
+    - portugal
+    - russian
+    - russia
+    - korean
+    - chinese
+    - irish
+    - ireland
+    - scottish
+    - welsh
+    - latin american
+    - european
+    - english language
+    - spanish language
+    - seen live
+    - female vocalists
+    - male vocalists
+    - female vocalist
+    - male vocalist
+    - female vocals
+    - male vocals
+    - favorites
+    - favourite
+    - favorites artists
+    - best
+    - albums i own
+    - owned
+    - singer
+    - band
+    - group
+    - duo
+    - solo
+    - instrumentalist
+    - 50s
+    - 60s
+    - 70s
+    - 80s
+    - 90s
+    - 00s
+    - 10s
+    - 20s
+    - 1950s
+    - 1960s
+    - 1970s
+    - 1980s
+    - 1990s
+    - 2000s
+    - 2010s
+    - 2020s
   search_limit: 3
 
 # Remove guest credits, but keep band names containing & or and.

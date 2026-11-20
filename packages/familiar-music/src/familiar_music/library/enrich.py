@@ -2,14 +2,15 @@
 
 import datetime
 import logging
+import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import httpx
 from familiar.interfaces import load_data
 
-from .index import LibraryIndex, primary_artist, store_artist_tags
+from .index import LibraryIndex, primary_artist, store_artist_tags, tag_key
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,9 @@ class Enricher:
         )
         self.match_threshold = int(mb_conf.get("match_threshold", 90))
         self.retry_error_days = float(mb_conf.get("retry_error_days", 7.0))
+        self.retry_transient_hours = float(mb_conf.get("retry_transient_hours", 6))
+        self.collaboration_separators = mb_conf.get("collaboration_separators", [])
+        self.tag_stoplist = {tag_key(tag) for tag in mb_conf.get("tag_stoplist", [])}
         self.search_limit = int(mb_conf.get("search_limit", 3))
 
         rate_limit_s = float(mb_conf.get("rate_limit_s", 1.0))
@@ -69,32 +73,63 @@ class Enricher:
             timeout=15.0,
         )
 
-    def _should_process(self, row: Any, now_dt: datetime.datetime) -> bool:
-        if row["enriched_at"]:
-            return False
+    def _should_process(
+        self,
+        row: Any,
+        now_dt: datetime.datetime,
+        *,
+        retry_failed: bool = False,
+        refresh: bool = False,
+    ) -> bool:
+        if refresh:
+            return True
         error = row["enrich_error"]
-        if not error:
+        if error and retry_failed:
             return True
-        err_dt = (
-            datetime.datetime.fromisoformat(row["enrich_error_at"])
-            if row["enrich_error_at"]
-            else None
-        )
-        if not err_dt:
+        if row["enriched_at"] and not error:
+            return False
+        if not error or not row["enrich_error_at"]:
             return True
+        err_dt = datetime.datetime.fromisoformat(row["enrich_error_at"])
         if err_dt.tzinfo is None:
             err_dt = err_dt.replace(tzinfo=datetime.UTC)
-        age_seconds = (now_dt - err_dt).total_seconds()
-        return age_seconds >= self.retry_error_days * 86400
+        retry_seconds = self.retry_error_days * 86400
+        if error.startswith("transient:"):
+            retry_seconds = self.retry_transient_hours * 3600
+        return (now_dt - err_dt).total_seconds() >= retry_seconds
 
-    def _fetch_artist_search(self, artist_name: str) -> dict | None:
+    @staticmethod
+    def _name_queries(name: str) -> tuple[str, str]:
+        escaped = re.sub(r'([+\-!(){}\[\]^"~*?:\\/&|])', r"\\\1", name)
+        phrase = re.sub(r'(["\\])', r"\\\1", name)
+        return f'artist:"{phrase}"', escaped
+
+    def _search_queries(self, display: str) -> Iterator[str]:
+        name = primary_artist(display)
+        yield from self._name_queries(name)
+        if not self.collaboration_separators:
+            return
+        pattern = "|".join(re.escape(s) for s in self.collaboration_separators)
+        first = re.split(pattern, name, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        if first and first != name:
+            yield from self._name_queries(first)
+
+    def _find_artist(self, display: str) -> dict | None:
+        for query in self._search_queries(display):
+            result = self._fetch_artist_search(query)
+            artists = result.get("artists", [])
+            best = max(artists, key=lambda a: int(a.get("score", 0)), default={})
+            if int(best.get("score", 0)) >= self.match_threshold:
+                return best
+        return None
+
+    def _fetch_artist_search(self, query: str) -> dict:
         self.limiter.wait()
-        escaped_name = artist_name.replace('"', '\\"')
         url = f"{self.endpoint}/artist"
-        params = {"query": f'artist:"{escaped_name}"', "fmt": "json", "limit": self.search_limit}
+        params = {"query": query, "fmt": "json", "limit": self.search_limit}
         return self._request(url, params)
 
-    def _fetch_artist_details(self, mbid: str) -> dict | None:
+    def _fetch_artist_details(self, mbid: str) -> dict:
         self.limiter.wait()
         url = f"{self.endpoint}/artist/{mbid}"
         params = {"inc": "tags+genres", "fmt": "json"}
@@ -107,45 +142,27 @@ class Enricher:
             self.limiter.wait()
             resp = self.client.get(url, params=params)
         resp.raise_for_status()
-        return resp.json()
+        body = resp.json()
+        if "error" in body:
+            raise ValueError(f"MusicBrainz error: {body['error']}")
+        return body
 
     def enrich_artist(self, name_norm: str, display: str) -> tuple[bool, str | None]:
         """Perform lookup for a single artist and commit result. Returns (success, error)."""
         now_str = datetime.datetime.now(datetime.UTC).isoformat()
         try:
-            search_res = self._fetch_artist_search(primary_artist(display))
-            artists = search_res.get("artists", []) if search_res else []
-            if not artists:
-                err = "No search results"
-                self._record_error(name_norm, err)
-                return False, err
-
-            best = max(artists, key=lambda a: int(a.get("score", 0)))
-            score = int(best.get("score", 0))
-            if score < self.match_threshold:
-                err = f"Best match score {score} < {self.match_threshold}"
-                self._record_error(name_norm, err)
+            best = self._find_artist(display)
+            if best is None:
+                err = "No search candidate above match threshold"
+                self._record_error(name_norm, err, kind="not_found")
                 return False, err
 
             mbid = best.get("id")
             if not mbid:
-                err = "Missing mbid in search result"
-                self._record_error(name_norm, err)
-                return False, err
+                raise ValueError("Missing mbid in search result")
 
             details = self._fetch_artist_details(mbid)
-            tags_map: dict[str, int] = {}
-            for item in (details or {}).get("tags", []):
-                t_name = str(item.get("name", "")).strip()
-                t_count = int(item.get("count", 1))
-                if t_name:
-                    tags_map[t_name] = max(tags_map.get(t_name, 0), t_count)
-
-            for item in (details or {}).get("genres", []):
-                g_name = str(item.get("name", "")).strip()
-                g_count = int(item.get("count", 1))
-                if g_name:
-                    tags_map[g_name] = max(tags_map.get(g_name, 0), g_count)
+            tags_map = self._artist_tags(details)
 
             with self.index._connect() as conn:
                 conn.execute(
@@ -159,39 +176,52 @@ class Enricher:
                 store_artist_tags(conn, name_norm, tags_map)
             return True, None
 
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 503:
-                logger.warning("MusicBrainz remains throttled for %s", display)
-                return False, str(exc)
-            self._record_error(name_norm, str(exc))
-            return False, str(exc)
         except Exception as exc:
             err = str(exc)
             logger.warning("Error enriching artist %s: %s", display, exc)
-            self._record_error(name_norm, err)
+            self._record_error(name_norm, err, kind="transient")
             return False, err
 
-    def _record_error(self, name_norm: str, error_msg: str) -> None:
+    def _artist_tags(self, details: dict) -> dict[str, int]:
+        genres = details.get("genres", [])
+        items = genres or details.get("tags", [])
+        tags: dict[str, int] = {}
+        for item in items:
+            name = str(item.get("name", "")).strip()
+            if not name or (not genres and tag_key(name) in self.tag_stoplist):
+                continue
+            tags[name] = max(tags.get(name, 0), int(item.get("count", 1)))
+        return tags
+
+    def _record_error(self, name_norm: str, error_msg: str, *, kind: str) -> None:
         with self.index._connect() as conn:
             conn.execute(
                 "UPDATE artists SET enrich_error = ?, enrich_error_at = ? WHERE name_norm = ?",
-                (error_msg, datetime.datetime.now(datetime.UTC).isoformat(), name_norm),
+                (
+                    f"{kind}: {error_msg}",
+                    datetime.datetime.now(datetime.UTC).isoformat(),
+                    name_norm,
+                ),
             )
 
     def enrich_all(
         self,
         *,
         limit: int | None = None,
+        retry_failed: bool = False,
+        refresh: bool = False,
         progress_cb: Callable[[int, int, str], None] | None = None,
     ) -> dict[str, int]:
-        """Enrich pending artists up to limit."""
+        """Enrich eligible artists, optionally overriding retry delays and prior success."""
         now_dt = datetime.datetime.now(datetime.UTC)
         with self.index._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM artists WHERE enriched_at IS NULL ORDER BY display"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM artists ORDER BY display").fetchall()
 
-        candidates = [r for r in rows if self._should_process(r, now_dt)]
+        candidates = [
+            r
+            for r in rows
+            if self._should_process(r, now_dt, retry_failed=retry_failed, refresh=refresh)
+        ]
         if limit is not None and limit >= 0:
             candidates = candidates[:limit]
 
