@@ -81,8 +81,10 @@ du vs Sie. English mostly changes tone.
 
 Nice to have: **the companion as DJ** (in every game; design agreed with the Commander
 2026-11-18, ADR 0012). Phase 1 (built 2026-11-18, live OK 2026-11-19 with ADR 0014 remarks and carrier picks): YouTube Music through Pear Desktop's API, search
-via `ytmusicapi`, seed + radio, duck/pause, voice commands, dislikes in memory; later phases
-add the local library (MPD), taste weighting, history import and tag fingerprinting. The action-carrier is the DJ: picks music for the moment and comments
+via `ytmusicapi`, seed + radio, duck/pause, voice commands, dislikes in memory. Phase 2 (built
+2026-11-19, ADR 0015, awaiting live test): local library via mpv, SQLite index, MusicBrainz
+genres, 70/20/10 blend, taste weighting from plays. Later: ListenBrainz similar artists,
+regional flavour, YouTube Music history import and tag fingerprinting. The action-carrier is the DJ: picks music for the moment and comments
 on it; the rest of the crew react through banter. Play, skip and queue are carrier-only actions.
 - **Sources:** a local library on this PC (~12,000 tracks: MP3, FLAC, Apple-bought AAC; some
   old CD rips lack tags) through a local player such as MPD; YouTube Music for discovery, in the

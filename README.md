@@ -165,11 +165,24 @@ MIT, see `LICENSE`.
 
 ### Companion DJ (optional)
 
-Install **Pear Desktop** (YouTube Music), enable its **API Server** plugin, set the hostname to
-`127.0.0.1`, then fully restart the app and **play a song once**. Enable `[music]` with
-`enabled = true` and `service = "pear"` in Familiar's config. On first use, click **Allow** for
-the `familiar` client in YouTube Music. The token stays private in the user state directory.
-Ask for music, a skip, calmer music, more like this, likes/dislikes or volume changes in any
-game or desk voice mode. The carrier controls playback; everyone can ask what's playing.
+The DJ blends your **local music library** (played by **mpv**) with **YouTube Music** (played by
+Pear Desktop), roughly 70% library, 20% the carrier persona's own taste, 10% discovery
+(`blend` in `familiar_music/music.yaml`). Ask for a source by voice ("from my library",
+"something new on YouTube").
+
+- **Local library:** install `mpv`. The library is your XDG Music folder unless you set
+  `[music] library_paths = ["..."]`. Familiar scans it in the background at start-up; run
+  `familiar music scan` to index it by hand, `familiar music enrich` to fetch genre tags for new
+  artists from MusicBrainz (1 request/s, cached; `--retry-failed`, `--refresh`), and
+  `familiar music status` for counts, top tags and your most played/skipped artists. Files are
+  never modified; Apple DRM (`.m4p`) files are skipped.
+- **YouTube Music:** install **Pear Desktop**, enable its **API Server** plugin, set the
+  hostname to `127.0.0.1`, then fully restart the app and **play a song once**. On first use,
+  click **Allow** for the `familiar` client. The token stays private in the user state directory.
+
+Enable `[music]` with `enabled = true` and `service = "blend"` (or `"pear"` for YouTube Music
+only). Ask for music, a skip, calmer music, more like this, likes/dislikes or volume changes in
+any game or desk voice mode. The carrier controls playback; everyone can ask what's playing.
 Music ducks during speech, pauses for critical events and rare track remarks, and remembers
-dislikes when memory is enabled. See `config.example.toml` for tuning and data overrides.
+dislikes when memory is enabled. Local picks learn from what you play through or skip early;
+remarks use only facts from your tags. See `config.example.toml` for tuning and data overrides.
