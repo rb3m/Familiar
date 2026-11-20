@@ -113,12 +113,11 @@ class DJ:
             selection = await self._select(prefix, text, kind, genres, years)
             if selection is None:
                 continue
-            matches = selection.matches
             if (
                 prefix == "local"
                 and kind == "genre"
                 and not forced
-                and matches < self.settings["local_min_matches"]
+                and not self._enough_local_matches(selection)
             ):
                 continue
             return await self._start(selection, calm)
@@ -267,12 +266,16 @@ class DJ:
             return await self._lane_batch("library", prefix)
         return await self._persona_batch(self.rng.choice(tastes))
 
+    def _enough_local_matches(self, selection):
+        return (
+            selection is not None
+            and selection.matches >= self.settings["local_min_matches"]
+            and selection.match_artists >= self.settings["local_min_artists"]
+        )
+
     async def _persona_batch(self, text):
         selection = await self._select("local", text, "genre")
-        matches = 0
-        if selection is not None:
-            matches = selection.matches
-        if matches >= self.settings["local_min_matches"]:
+        if self._enough_local_matches(selection):
             return selection
         return await self._select("ytm", text, "genre")
 
@@ -291,8 +294,7 @@ class DJ:
         selection = await self._select(chosen, text, kind)
         if selection is None:
             return None
-        matches = selection.matches
-        if chosen == "local" and kind == "genre" and matches < self.settings["local_min_matches"]:
+        if chosen == "local" and kind == "genre" and not self._enough_local_matches(selection):
             return None
         return selection
 

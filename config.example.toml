@@ -165,6 +165,8 @@ service = "blend"        # familiar.services entry point; "pear" keeps YouTube-o
 # library_db = "~/.local/state/familiar/music/library.sqlite" # default follows XDG_STATE_HOME
 # blend = { library = 70, persona = 20, discovery = 10 } # persona follows the current carrier taste
 # local_min_matches = 8   # fewer local genre matches fall through to YouTube Music
+# local_min_artists = 4   # minimum distinct primary artists for automatic local genres
+# artist_tag_min_share = 0.25 # fraction of highest artist-tag count; file genres always match
 # skip_early_s = 30       # early player-UI changes count as skips
 # played_fraction = 0.8  # natural changes after this fraction count as played
 # taste_half_life_days = 60 # exponential decay of behaviour signals

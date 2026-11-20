@@ -88,6 +88,7 @@ def _apply_genres_filter(
     genres: list[str] | tuple[str, ...] | str | None,
     conditions: list[str],
     params: list[Any],
+    artist_tag_min_share: float,
 ) -> None:
     if not genres:
         return
@@ -99,9 +100,11 @@ def _apply_genres_filter(
     placeholders = ",".join("?" for _ in keys)
     conditions.append(
         f"(t.uuid IN (SELECT uuid FROM track_genres WHERE tag IN ({placeholders})) "
-        f"OR t.artist_norm IN (SELECT name_norm FROM artist_tags WHERE tag IN ({placeholders})))"
+        f"OR t.artist_norm IN (SELECT a.name_norm FROM artist_tags a "
+        f"WHERE a.tag IN ({placeholders}) AND a.count >= ? * "
+        "(SELECT MAX(top.count) FROM artist_tags top WHERE top.name_norm = a.name_norm)))"
     )
-    params.extend(keys + keys)
+    params.extend([*keys, *keys, artist_tag_min_share])
 
 
 class LibraryIndex:
@@ -345,6 +348,7 @@ class LibraryIndex:
         years: tuple[int, int] | list[int] | set[int] | int | None = None,
         artist: str | None = None,
         exclude: collections.abc.Iterable[str] = (),
+        artist_tag_min_share: float | None = None,
     ) -> list[dict]:
         """Filter tracks by genres, years, artist, and exclusions with parameterised SQL."""
         conditions = ["t.missing = 0", "(t.dup_group IS NULL OR t.dup_group = t.uuid)"]
@@ -362,7 +366,11 @@ class LibraryIndex:
             params.extend([folded_artist, folded_artist])
 
         _apply_years_filter(years, conditions, params)
-        _apply_genres_filter(genres, conditions, params)
+        if artist_tag_min_share is None:
+            artist_tag_min_share = load_data("familiar_music", "music").value[
+                "artist_tag_min_share"
+            ]
+        _apply_genres_filter(genres, conditions, params, artist_tag_min_share)
 
         sql = f"""
             SELECT t.* FROM tracks t

@@ -1082,7 +1082,9 @@ async def test_local_radio_excludes_recent_dislikes_and_explicit_exclusions(libr
 
 @pytest.mark.parametrize("down,expected", [("ytm", "library"), ("local", "YouTube Music")])
 async def test_one_backend_down_does_not_block_other_source(library, down, expected):
-    dj, pear, local = blend_dj(library, blend={"library": 0, "persona": 0, "discovery": 1})
+    dj, pear, local = blend_dj(
+        library, local_min_artists=3, blend={"library": 0, "persona": 0, "discovery": 1}
+    )
     backend = {"ytm": pear, "local": local}[down]
 
     async def unavailable():
@@ -1478,7 +1480,7 @@ async def test_local_cooldown_batch_share_occasional_and_minimum_duration(librar
     [(["80s new wave"], 8, "local:"), (["80s new wave"], 100, "ytm:"), ([], 8, "local:")],
 )
 async def test_persona_lane_local_fallback_and_empty_taste(library, taste, minimum, prefix):
-    dj, _, _ = blend_dj(library, local_min_matches=minimum)
+    dj, _, _ = blend_dj(library, local_min_matches=minimum, local_min_artists=3)
     dj.taste_read = lambda: taste
     selection = await dj._lane_batch("persona", "ytm")
     assert selection.tracks[0].uri.startswith(prefix)
@@ -1541,6 +1543,16 @@ def test_play_stats_both_sources_last_90_days(library, capsys):
         ("occasional_weight", 0),
         ("occasional_weight", float("nan")),
         ("min_track_s", -1),
+        ("local_min_artists", 0),
+        ("local_min_artists", -1),
+        ("local_min_artists", 1.5),
+        ("local_min_artists", True),
+        ("local_min_artists", float("inf")),
+        ("artist_tag_min_share", 0),
+        ("artist_tag_min_share", -0.1),
+        ("artist_tag_min_share", 1.1),
+        ("artist_tag_min_share", True),
+        ("artist_tag_min_share", float("nan")),
     ],
 )
 def test_invalid_taste_settings(key, value):
@@ -1608,9 +1620,67 @@ async def test_behaviour_observation_failure_does_not_fail_skip(library, monkeyp
 async def test_persona_match_threshold_counts_candidates_before_batch_constraints(library):
     with library._connect() as conn:
         conn.execute("UPDATE tracks SET artist = 'Solo', artist_norm = 'solo'")
-    dj, _, _ = blend_dj(library)
+    dj, _, _ = blend_dj(library, local_min_artists=1)
     dj.taste_read = lambda: ["new wave"]
     selection = await dj._lane_batch("persona", "ytm")
     assert selection.tracks[0].uri.startswith("local:")
     assert selection.matches == 18
+    assert selection.match_artists == 1
     assert len(selection.tracks) == 1
+
+
+@pytest.mark.parametrize("artists", [3, 4])
+@pytest.mark.parametrize("lane", ["request", "persona", "radio"])
+async def test_local_genre_requires_artist_variety(library, artists, lane):
+    with library._connect() as conn:
+        conn.execute(
+            "UPDATE tracks SET artist = 'Band ' || (CAST(uuid AS INTEGER) % ?), "
+            "artist_norm = 'band ' || (CAST(uuid AS INTEGER) % ?)",
+            (artists, artists),
+        )
+    dj, _, _ = blend_dj(library, genre_batch=2, playlist_tracks=2)
+    # Both counts describe all eligible tracks, even when the queue is capped at two.
+    eligible = await dj.sources["local"].genre("new wave")
+    assert eligible.matches == 18 and eligible.match_artists == artists
+    if lane == "request":
+        result = await dj.seed("new wave", kind="genre")
+        assert result["source"] == {3: "YouTube Music", 4: "library"}[artists]
+        return
+    if lane == "persona":
+        dj.taste_read = lambda: ["new wave"]
+        selection = await dj._lane_batch("persona", "ytm")
+        assert selection.tracks[0].uri.startswith({3: "ytm:", 4: "local:"}[artists])
+        return
+    dj._radio_track = Track("ytm:seed", "Seed", genre="New Wave")
+    selection = await dj._radio_batch("local", "ytm")
+    assert (selection is not None) == (artists == 4)
+
+
+async def test_forced_library_genre_ignores_both_minimums(library):
+    dj, _, _ = blend_dj(library, local_min_matches=100, local_min_artists=100)
+    result = await dj.seed("new wave", kind="genre", source="library")
+    assert result["source"] == "library"
+
+
+async def test_genre_artist_count_uses_primary_artists_and_eligible_tracks(library):
+    with library._connect() as conn:
+        conn.execute(
+            "UPDATE tracks SET artist = 'Band 0 feat. Guest', artist_norm = 'band 0' "
+            "WHERE artist_norm = 'band 1'"
+        )
+        conn.execute("UPDATE tracks SET duration_s = 20 WHERE artist_norm = 'band 2'")
+    dj, _, _ = blend_dj(library)
+    dj.recent.append("local:0")
+    dj.dislikes.add(library.resolve("local:1")[1])
+    selection = await dj.sources["local"].genre("new wave")
+    assert selection.match_artists == 1
+    assert selection.matches == 10
+
+
+async def test_local_genre_passes_artist_tag_share_override(library):
+    from familiar_music.library.index import store_artist_tags
+
+    with library._connect() as conn:
+        store_artist_tags(conn, "band 0", {"rock": 100, "jazz": 25})
+    dj, _, _ = blend_dj(library, artist_tag_min_share=0.5)
+    assert await dj.sources["local"].genre("jazz") is None

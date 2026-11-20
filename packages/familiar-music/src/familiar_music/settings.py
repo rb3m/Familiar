@@ -32,6 +32,8 @@ def music_settings(overrides):
             "at least one must be positive"
         )
     number(settings, "local_min_matches", integer=True, positive=True)
+    number(settings, "local_min_artists", integer=True, positive=True)
+    number(settings, "artist_tag_min_share", positive=True, maximum=1)
     for key in ("skip_early_s", "played_gain", "skip_penalty", "min_track_s"):
         number(settings, key)
     for key in ("played_fraction", "artist_batch_share", "occasional_weight"):

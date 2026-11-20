@@ -24,6 +24,10 @@ calm_volume: 40
 # Unrequested batches draw library, carrier taste, or YouTube discovery.
 blend: {library: 70, persona: 20, discovery: 10}
 local_min_matches: 8
+# Automatic genre choices also need this many distinct primary artists.
+local_min_artists: 4
+# Artist tags need this fraction of the artist's highest vote count; file genres always match.
+artist_tag_min_share: 0.25
 library_enrich: true
 
 # Behaviour: early player-UI changes are skips; a mostly heard song counts as played.

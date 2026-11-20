@@ -22,6 +22,7 @@ class Selection:
     reserve: list[Track] = field(default_factory=list)
     playlist: str = ""
     match_count: int | None = None
+    match_artists: int = 0
 
     @property
     def matches(self):
@@ -166,7 +167,10 @@ class LocalSource:
         if not batches:
             return None
         return Selection(
-            batches[0], list(chain.from_iterable(batches[1:])), match_count=len(tracks)
+            batches[0],
+            list(chain.from_iterable(batches[1:])),
+            match_count=len(tracks),
+            match_artists=len(set(artists.values()) - {""}),
         )
 
     def _sample(self, pending, weights, artists, occasional_ids, size, previous):
@@ -219,7 +223,12 @@ class LocalSource:
         bounds = years or inferred_years
         if not merged and bounds is None:
             return None
-        rows = await asyncio.to_thread(self.index.filter, genres=merged, years=bounds)
+        rows = await asyncio.to_thread(
+            self.index.filter,
+            genres=merged,
+            years=bounds,
+            artist_tag_min_share=self.settings["artist_tag_min_share"],
+        )
         return await self._batch(self._tracks(rows, automatic=True), terms=terms, years=bounds)
 
     async def radio(self, seed_track, limit, exclude):

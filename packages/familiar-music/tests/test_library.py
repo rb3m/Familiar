@@ -424,6 +424,22 @@ def test_normalized_tag_tables_and_featured_credits(tmp_path):
     assert len(index.filter(genres=["country"])) == 1
 
 
+@pytest.mark.parametrize("share,expected", [(None, {"jazz", "blues"}), (0.5, {"blues"})])
+def test_genre_filter_requires_strong_artist_tags_but_keeps_file_genres(tmp_path, share, expected):
+    root = tmp_path / "music"
+    _make_audio(root / "song.mp3", artist="Band", genre="Blues")
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    Scanner(index).scan([root])
+    with index._connect() as conn:
+        store_artist_tags(conn, "band", {"Rock": 100, "Jazz": 25, "Pop": 24, "Blues": 1})
+    matches = {
+        genre
+        for genre in ("jazz", "pop", "blues")
+        if index.filter(genres=[genre], artist_tag_min_share=share)
+    }
+    assert matches == expected
+
+
 def test_unversioned_migration_preserves_enrichment_and_rescans(tmp_path):
     db = tmp_path / "lib.sqlite"
     with sqlite3.connect(db) as conn:
