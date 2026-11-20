@@ -538,12 +538,23 @@ class MusicService:
 PearMusicService = MusicService
 
 
-def build_blend(settings, **kwargs):
+class BlendMusicService(MusicService):
+    """Local library (mpv) blended with YouTube Music; the `blend` entry point."""
+
+    name = "blend"
+
+    def __init__(self, settings, **kwargs):
+        kwargs.setdefault("index", _library_index(settings))
+        super().__init__(settings, **kwargs)
+
+
+def _library_index(settings):
     try:
-        index = LibraryIndex(database_path(settings))
+        return LibraryIndex(database_path(settings))
     except Exception:
         _LOG.warning("Music library unavailable; using YouTube Music", exc_info=True)
-        index = None
-    service = MusicService(settings, index=index, **kwargs)
-    service.name = "blend"
-    return service
+        return None
+
+
+# Kept for scripts written against the earlier factory.
+build_blend = BlendMusicService

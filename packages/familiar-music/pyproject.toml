@@ -17,7 +17,7 @@ familiar = { workspace = true }
 
 [project.entry-points."familiar.services"]
 pear = "familiar_music.service:MusicService"
-blend = "familiar_music.service:build_blend"
+blend = "familiar_music.service:BlendMusicService"
 
 [project.entry-points."familiar.commands"]
 music = "familiar_music.commands:MusicCommand"

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
-from familiar.interfaces import SpeechState, ToolCall
+from familiar.interfaces import PLUGIN_API_VERSION, SpeechState, ToolCall
 from familiar.memory.store import MemoryStore
 from familiar.tools import ToolRegistry
 from familiar_music.dj import DJ, Dislikes
@@ -1684,3 +1684,11 @@ async def test_local_genre_passes_artist_tag_share_override(library):
         store_artist_tags(conn, "band 0", {"rock": 100, "jazz": 25})
     dj, _, _ = blend_dj(library, artist_tag_min_share=0.5)
     assert await dj.sources["local"].genre("jazz") is None
+
+
+@pytest.mark.parametrize("name", ["pear", "blend"])
+def test_entry_points_pass_the_core_plugin_check(name):
+    """The launcher loads services through familiar.plugins; a bare factory fails its check."""
+    from familiar.plugins import load_class
+
+    assert load_class("services", name).api_version == PLUGIN_API_VERSION
