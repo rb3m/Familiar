@@ -64,6 +64,10 @@ def _run_status(index: LibraryIndex) -> int:
     print(f"Total rows: {stats['total_tracks']}")
     print(f"Duplicate groups: {stats['dup_groups']}")
     print(f"Artists: {stats['artists_enriched']} enriched, {stats['artists_pending']} pending")
+    print(f"Plays recorded: {stats['plays_recorded']}")
+    for outcome in ("played", "skipped"):
+        artists = ", ".join(f"{a['artist']} ({a['count']})" for a in stats[f"top_{outcome}"])
+        print(f"Top 5 artists by {outcome} (last 90 days): {artists or '(none)'}")
 
     tags: Iterable = stats.get("top_tags", [])
     formatted_tags = [f"{item['tag']} ({item['count']})" for item in tags]

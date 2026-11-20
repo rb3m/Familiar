@@ -32,6 +32,20 @@ def music_settings(overrides):
             "at least one must be positive"
         )
     number(settings, "local_min_matches", integer=True, positive=True)
+    for key in ("skip_early_s", "played_gain", "skip_penalty", "min_track_s"):
+        number(settings, key)
+    for key in ("played_fraction", "artist_batch_share", "occasional_weight"):
+        number(settings, key, positive=True, maximum=1)
+    number(settings, "artist_cooldown_weight", maximum=1, positive=True)
+    number(settings, "taste_half_life_days", positive=True)
+    number(settings, "taste_min", positive=True)
+    number(settings, "taste_max", minimum=settings["taste_min"], positive=True)
+    number(settings, "artist_cooldown_songs", integer=True)
+    occasional = settings["occasional_genres"]
+    if not isinstance(occasional, list) or any(
+        not isinstance(term, str) or not term.strip() for term in occasional
+    ):
+        raise ConfigError("Music occasional_genres must be a list of nonempty strings")
     if not isinstance(settings["library_enrich"], bool):
         raise ConfigError("Music library_enrich must be true or false")
     number(settings, "duck_level", maximum=1)

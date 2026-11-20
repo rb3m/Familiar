@@ -3,7 +3,9 @@
 import asyncio
 import json
 import random
+from collections import Counter
 from dataclasses import replace
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -1105,8 +1107,7 @@ def test_blend_lane_draw_uses_seeded_weights(library):
     expected_rng = random.Random(17)
     weights = dj.settings["blend"]
     expected = expected_rng.choices(list(weights), weights=list(weights.values()), k=30)
-    mapping = {"library": "local", "persona": "local", "discovery": "ytm"}
-    assert [dj.draw_lane() for _ in range(30)] == [mapping[lane] for lane in expected]
+    assert [dj.draw_lane() for _ in range(30)] == expected
 
 
 async def test_radio_changes_lane_only_after_batch_finishes(library):
@@ -1122,6 +1123,7 @@ async def test_radio_changes_lane_only_after_batch_finishes(library):
     await dj.top_up()
     assert dj._radio_count == 2
     pear.queued.clear()
+    dj._radio_track = Track("ytm:last", "Last", ("Band 0",))
     await dj.top_up()
     assert dj.player.active == "ytm"  # the last radio song is still playing
     pear.current = None
@@ -1297,3 +1299,318 @@ async def test_radio_starts_next_batch_on_same_source_after_idle(library):
     await dj.top_up()
     assert local.current is not None and dj.player.active == "local"
     assert dj._radio_count == 2 and len(local.queued) == 1
+
+
+@pytest.mark.parametrize("uri", ["local:0", "ytm:external"])
+@pytest.mark.parametrize(
+    "seconds,tool,expected",
+    [
+        (10, "skip_track", "skipped"),
+        (90, "skip_track", None),  # a late skip is not a judgement on the song
+        (160, "skip_track", "played"),  # nearly finished: counts as played through
+        (160, "dislike_track", "skipped"),
+        (20, None, "skipped"),
+        (150, None, "played"),
+        (180, None, "played"),
+        (90, None, None),
+        (10, "play_music", None),
+        (10, "calmer_music", None),
+    ],
+)
+async def test_behaviour_classifies_previous_track(library, uri, seconds, tool, expected):
+    player, now = FakePlayer(), [0]
+    player.current = Track(uri, "Original", ("Band 0",), duration_s=180)
+    service = PearMusicService(
+        {}, player=player, searcher=FakeSearch(), index=library, clock=lambda: now[0]
+    )
+    await service.poll()
+    now[0] = seconds
+    arguments = {"play_music": {"query": "something", "source": "youtube"}}.get(tool, {})
+    if tool is not None:
+        assert "error" not in await service._execute(tool, **arguments)
+    if tool is None:
+        player.current = Track("ytm:next", "Next")
+        await service.poll()
+    await service.aclose()
+    with library._connect() as conn:
+        rows = conn.execute("SELECT * FROM plays WHERE uri = ?", (uri,)).fetchall()
+    assert [r["outcome"] for r in rows] == list(filter(None, [expected]))
+    if expected:
+        assert rows[0]["listened_s"] == seconds
+        assert datetime.fromisoformat(rows[0]["at"]).utcoffset().total_seconds() == 0
+
+
+async def test_behaviour_excludes_paused_time(library):
+    player, now = FakePlayer(), [0]
+    player.current = Track("ytm:original", "Original", duration_s=100)
+    service = PearMusicService(
+        {}, player=player, searcher=FakeSearch(), index=library, clock=lambda: now[0]
+    )
+    await service.poll()
+    now[0] = 10
+    await service._execute("pause_music")
+    now[0] = 210
+    await service._execute("resume_music")
+    now[0] = 220
+    player.current = Track("ytm:next", "Next")
+    await service.poll()
+    await service.aclose()
+    with library._connect() as conn:
+        row = conn.execute("SELECT * FROM plays").fetchone()
+    assert row["outcome"] == "skipped" and row["listened_s"] == 20
+
+
+async def test_behaviour_ignores_remark_interruption_and_short_track(library):
+    player, now = FakePlayer(), [0]
+    player.current = Track("ytm:intro", "Intro", duration_s=20)
+    service = PearMusicService(
+        {}, player=player, searcher=FakeSearch(), index=library, clock=lambda: now[0]
+    )
+    await service.poll()
+    now[0] = 5
+    await service.speech_state(SpeechState(speaking=True, event_kind="music_track"))
+    now[0] = 50
+    await service.speech_state(SpeechState())
+    now[0] = 65
+    player.current = Track("ytm:next", "Next")
+    await service.poll()
+    await service.aclose()
+    assert library.play_stats()["plays_recorded"] == 0
+
+
+async def test_behaviour_records_short_song_that_ends_naturally(library):
+    player, now = FakePlayer(), [0]
+    player.current = Track("ytm:intro", "Intro", duration_s=20)
+    service = PearMusicService(
+        {}, player=player, searcher=FakeSearch(), index=library, clock=lambda: now[0]
+    )
+    await service.poll()
+    now[0] = 20
+    player.current = None
+    await service.poll()
+    await service.aclose()
+    with library._connect() as conn:
+        assert conn.execute("SELECT outcome FROM plays").fetchone()[0] == "played"
+
+
+async def test_behaviour_write_is_off_loop_and_does_not_fail_tool(library, monkeypatch):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+    loop_thread = threading.get_ident()
+
+    def blocked_write(*args):
+        assert threading.get_ident() != loop_thread
+        started.set()
+        release.wait(2)
+        raise OSError("read only")
+
+    monkeypatch.setattr(library, "record_play", blocked_write)
+    player = FakePlayer()
+    service = PearMusicService({}, player=player, searcher=FakeSearch(), index=library)
+    await service.poll()
+    assert "error" not in await asyncio.wait_for(service._execute("skip_track"), 1)
+    assert await asyncio.to_thread(started.wait, 1)
+    assert "playing" in await asyncio.wait_for(service._execute("now_playing"), 1)
+    release.set()
+    await service.aclose()
+
+
+async def test_local_weighting_seeded_and_artist_signals_decay(library):
+    from datetime import timedelta
+
+    from familiar_music.sources import artist_key
+
+    now = datetime.now(UTC)
+    liked = Track("ytm:liked", "Liked", ("Band 0",))
+    skipped = Track("ytm:skipped", "Skipped", ("Band 1",))
+    for _ in range(20):
+        library.record_play(liked, now.isoformat(), "played", 180)
+        library.record_play(skipped, now.isoformat(), "skipped", 5)
+    _, _, scores = library.selection_facts(60, now + timedelta(days=60))
+    assert scores["band 0", "played"] == pytest.approx(10)
+    dj, _, _ = blend_dj(library, genre_batch=6)
+    source = dj.sources["local"]
+    source.rng = random.Random(21)
+    tracks = source._tracks(library.filter())
+    picks = [(await source._batch(tracks, size=1, reserve=False)).tracks[0] for _ in range(120)]
+    counts = Counter(artist_key(t) for t in picks)
+    assert counts["band 0"] > counts["band 2"] > counts["band 1"] > 0
+    source.rng = random.Random(21)
+    assert [t.uri for t in picks] == [
+        (await source._batch(tracks, size=1, reserve=False)).tracks[0].uri for _ in range(120)
+    ]
+
+
+async def test_local_cooldown_batch_share_occasional_and_minimum_duration(library):
+    from familiar_music.sources import artist_key
+
+    with library._connect() as conn:
+        conn.execute("UPDATE tracks SET duration_s = 27 WHERE uuid = '0'")
+        conn.execute("UPDATE tracks SET artist = 'Short', artist_norm = 'short' WHERE uuid = '0'")
+        conn.execute("INSERT INTO artist_tags VALUES ('band 1', 'salsa', 1)")
+    dj, _, _ = blend_dj(library, genre_batch=8)
+    source = dj.sources["local"]
+    selection = await source.genre("80s new wave")
+    assert all(t.duration_s >= 90 for t in selection.tracks + selection.reserve)
+    assert (await source.song("Song 0")).tracks[0].duration_s == 27
+    assert (await source.artist("Short")).tracks[0].duration_s == 27
+    assert sum(t.artists == ("Band 1",) for t in selection.tracks) <= 1
+    assert max(Counter(artist_key(t) for t in selection.tracks).values()) <= 3
+    assert all(
+        a.artists != b.artists for a, b in zip(selection.tracks, selection.tracks[1:], strict=False)
+    )
+    radio = await source.radio("local:3", 10, set())
+    assert all(t.duration_s >= 90 for t in radio.tracks)
+    assert max(Counter(artist_key(t) for t in radio.tracks).values()) <= 3
+    source.rng = random.Random(2)
+    normal = [(await source.genre("new wave")).tracks[0] for _ in range(60)]
+    dj.recent_artists.append("band 0")
+    source.rng = random.Random(2)
+    cooled = [(await source.genre("new wave")).tracks[0] for _ in range(60)]
+    assert sum(t.artists == ("Band 0",) for t in cooled) < sum(
+        t.artists == ("Band 0",) for t in normal
+    )
+
+
+@pytest.mark.parametrize(
+    "taste,minimum,prefix",
+    [(["80s new wave"], 8, "local:"), (["80s new wave"], 100, "ytm:"), ([], 8, "local:")],
+)
+async def test_persona_lane_local_fallback_and_empty_taste(library, taste, minimum, prefix):
+    dj, _, _ = blend_dj(library, local_min_matches=minimum)
+    dj.taste_read = lambda: taste
+    selection = await dj._lane_batch("persona", "ytm")
+    assert selection.tracks[0].uri.startswith(prefix)
+    if prefix == "ytm:":
+        assert "80s new wave" in selection.playlist
+
+
+async def test_same_source_boundary_enqueues_while_last_song_plays(library):
+    dj, _, local = blend_dj(
+        library, genre_batch=2, queue_top_up=1, blend={"library": 1, "persona": 0, "discovery": 0}
+    )
+    await dj.seed("Song 1", source="library")
+    dj._radio_count = 2
+    dj.reserve.clear()
+    local.queued.clear()
+    playing = local.current
+    plays = list(local.calls)
+    await dj.top_up()
+    assert local.current == playing and local.calls == plays
+    assert len(local.queued) == 2 and dj._radio_count == 2
+
+
+def test_play_stats_both_sources_last_90_days(library, capsys):
+    from datetime import timedelta
+
+    from familiar_music.commands import _run_status
+
+    now = datetime.now(UTC)
+    library.record_play(library.resolve("local:0")[1], now.isoformat(), "played", 180)
+    library.record_play(Track("ytm:id", "Video", ("Other",)), now.isoformat(), "skipped", 5)
+    library.record_play(
+        Track("ytm:old", "Old", ("Old",)), (now - timedelta(days=91)).isoformat(), "played", 180
+    )
+    _run_status(library)
+    output = capsys.readouterr().out
+    assert "Plays recorded: 3" in output
+    assert "by played (last 90 days): Band 0 (1)" in output
+    assert "by skipped (last 90 days): Other (1)" in output
+    assert "Old" not in output
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("skip_early_s", -1),
+        ("played_fraction", 0),
+        ("played_fraction", 1.1),
+        ("taste_half_life_days", 0),
+        ("played_gain", -1),
+        ("skip_penalty", -1),
+        ("taste_min", 0),
+        ("taste_max", 0.1),
+        ("artist_cooldown_songs", 1.5),
+        ("artist_cooldown_songs", True),
+        ("artist_batch_share", 0),
+        ("artist_batch_share", 1.1),
+        ("artist_cooldown_weight", 1.1),
+        ("occasional_genres", "salsa"),
+        ("occasional_genres", [""]),
+        ("occasional_weight", 0),
+        ("occasional_weight", float("nan")),
+        ("min_track_s", -1),
+    ],
+)
+def test_invalid_taste_settings(key, value):
+    from familiar.interfaces import ConfigError
+    from familiar_music.settings import music_settings
+
+    with pytest.raises(ConfigError):
+        music_settings({key: value})
+
+
+async def test_track_weight_and_relevance_from_distinct_terms(library):
+    from familiar_music.library.query import expand
+    from familiar_music.sources import artist_key
+
+    now = datetime.now(UTC)
+    track = library.resolve("local:0")[1]
+    for _ in range(5):
+        library.record_play(track, now.isoformat(), "played", 180)
+    dj, _, _ = blend_dj(library)
+    source = dj.sources["local"]
+    facts = library.selection_facts(60, now)
+    _, years, terms = expand("80s new wave")
+    weighted = source._weight(track, facts, terms, years, None, artist_key(track), False)
+    assert weighted == pytest.approx(2 * 1.75**1.5)
+    other = library.resolve("local:3")[1]
+    assert source._weight(other, facts, terms, years, None, artist_key(other), False) == (
+        pytest.approx(2 * 1.75**0.5)
+    )
+    assert source._behaviour("never", {}) == 1
+    assert source._behaviour(track.uri, {(track.uri, "skipped"): 1000}) == 0.2
+    assert source._behaviour(track.uri, {(track.uri, "played"): 1000}) == 3
+
+
+async def test_familiar_more_like_this_change_is_ignored(library, monkeypatch):
+    player, now = FakePlayer(), [0]
+    service = PearMusicService(
+        {}, player=player, searcher=FakeSearch(), index=library, clock=lambda: now[0]
+    )
+    await service.poll()
+
+    async def changing_pick():
+        player.current = Track("ytm:other", "Other")
+        return {"status": "picked"}
+
+    monkeypatch.setattr(service.dj, "reseed", changing_pick)
+    now[0] = 10
+    await service._execute("more_like_this")
+    await service.aclose()
+    assert library.play_stats()["plays_recorded"] == 0
+
+
+async def test_behaviour_observation_failure_does_not_fail_skip(library, monkeypatch):
+    player = FakePlayer()
+    service = PearMusicService({}, player=player, searcher=FakeSearch(), index=library)
+
+    async def broken_observation():
+        raise OSError("player metadata temporarily unavailable")
+
+    monkeypatch.setattr(player, "now_playing", broken_observation)
+    assert await service._execute("skip_track") == {"status": "Skipped track"}
+    assert player.calls == ["skip"]
+    await service.aclose()
+
+
+async def test_persona_match_threshold_counts_candidates_before_batch_constraints(library):
+    with library._connect() as conn:
+        conn.execute("UPDATE tracks SET artist = 'Solo', artist_norm = 'solo'")
+    dj, _, _ = blend_dj(library)
+    dj.taste_read = lambda: ["new wave"]
+    selection = await dj._lane_batch("persona", "ytm")
+    assert selection.tracks[0].uri.startswith("local:")
+    assert selection.matches == 18
+    assert len(selection.tracks) == 1

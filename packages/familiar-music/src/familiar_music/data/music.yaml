@@ -21,7 +21,26 @@ playlist_tracks: 100
 play_volume: 70
 calm_volume: 40
 
-# D1 persona lane shares library selection; taste and behaviour weighting follow in D2.
+# Unrequested batches draw library, carrier taste, or YouTube discovery.
 blend: {library: 70, persona: 20, discovery: 10}
 local_min_matches: 8
 library_enrich: true
+
+# Behaviour: early player-UI changes are skips; a mostly heard song counts as played.
+skip_early_s: 30
+played_fraction: 0.8
+# Decayed track and artist signals; artist influence uses the square root of its factor.
+taste_half_life_days: 60
+played_gain: 0.15
+skip_penalty: 0.35
+taste_min: 0.2
+taste_max: 3.0
+# Artist spacing and share of each local batch (rounded up to a whole song).
+artist_cooldown_songs: 8
+artist_cooldown_weight: 0.3
+artist_batch_share: 0.3
+# Occasional styles stay discoverable, with at most one per local batch.
+occasional_genres: [cumbia, salsa, merengue, banda, reggaeton]
+occasional_weight: 0.25
+# Automatic local picks exclude short intros; explicit songs/artists may play them.
+min_track_s: 90

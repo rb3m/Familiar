@@ -47,30 +47,48 @@ def _merge_years(current, incoming):
     return incoming
 
 
+def _collect_term(entry, tags, era_tags, terms):
+    incoming = entry.get("tags", [])
+    if entry.get("years"):
+        era_tags.extend(incoming)
+        return
+    tags.extend(incoming)
+    terms.append(frozenset(tag_key(tag) for tag in incoming))
+
+
 def expand(
     text: str, vocabulary: set[str] | None = None
-) -> tuple[list[str], tuple[int, int] | None]:
-    """Match phrases before words; union tags and intersect compatible year ranges."""
+) -> tuple[list[str], tuple[int, int] | None, list[frozenset[str]]]:
+    """Return tags, years, and distinct genre-term tag groups for relevance.
+
+    Aliases and synonyms for one requested term count once. Eras keep broad tags
+    only when no genre term matched, so a decade cannot dilute a specific genre.
+    """
     data = load_data("familiar_music", "genre_synonyms").value or {}
     entries = _entries(data.get("terms", {}))
     tokens = list(_tokens(text))
     tags = []
+    era_tags = []
+    terms = []
     years = None
     while tokens:
         length, entry = _match_term(tokens, entries)
         if entry is not None:
-            tags.extend(entry.get("tags", []))
+            _collect_term(entry, tags, era_tags, terms)
             years = _merge_years(years, entry.get("years"))
             del tokens[:length]
             continue
         length, key = _match_vocabulary(tokens, vocabulary or set())
         if key:
             tags.append(key)
+            terms.append(frozenset([key]))
             del tokens[:length]
             continue
         token = tokens.pop(0)
         years = _merge_years(years, _year_range(token))
-    return list(dict.fromkeys(tags)), years
+    if not terms:
+        tags.extend(era_tags)
+    return list(dict.fromkeys(tags)), years, list(dict.fromkeys(terms))
 
 
 def _match_term(tokens: list[str], entries: dict) -> tuple[int, dict | None]:

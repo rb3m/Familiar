@@ -130,3 +130,10 @@ terms:
     tags:
     - soundtrack
     - score
+  two thousands:
+    tags: [pop, rock, hip hop, electronic]
+    years: [2000, 2009]
+    aliases: [2000s, noughties, aughts]
+  new wave:
+    tags: [new wave]
+    aliases: [newwave]

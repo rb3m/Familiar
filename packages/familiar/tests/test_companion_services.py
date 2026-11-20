@@ -2,6 +2,7 @@
 
 import argparse
 from contextlib import AsyncExitStack
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -75,6 +76,11 @@ async def test_runtime_loads_service_and_registers_carrier_tools(monkeypatch, tm
         assert {s.name for s in conversation.tools.specs()} == {"play_music", "now_playing"}
         assert "Now playing: Music" in conversation.context()
         settings = next(settings for kind, settings in loaded if kind == "services")
+        assert settings["taste_read"]() == conversation.crew.carrier.tastes.get("music", [])
+        conversation.crew.carrier = replace(conversation.crew.carrier, tastes={"music": ["jazz"]})
+        assert settings["taste_read"]() == ["jazz"]
+        conversation.crew.carrier = replace(conversation.crew.carrier, tastes={})
+        assert settings["taste_read"]() == []
         settings["dislike_write"]("track", ("Artist",))
         assert settings["dislike_read"]()[0] == {"track"}
     assert service.closed

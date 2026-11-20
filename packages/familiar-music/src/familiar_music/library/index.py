@@ -5,12 +5,22 @@ import json
 import re
 import sqlite3
 import unicodedata
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from familiar.interfaces import load_data
 
 from ..player import Track
+
+# Local rows also resolve artist identity for plays written before artist metadata existed.
+PLAY_ARTISTS = """
+    SELECT uri, artist_norm, MIN(display) AS display FROM (
+        SELECT 'local:' || uuid AS uri, artist_norm, artist AS display FROM tracks
+        UNION ALL SELECT uri, artist_norm, display FROM play_artists
+    ) WHERE artist_norm != '' GROUP BY uri, artist_norm
+"""
 
 
 def accent_fold(text: str | None) -> str:
@@ -182,6 +192,10 @@ class LibraryIndex:
                     at TEXT NOT NULL,
                     outcome TEXT NOT NULL CHECK(outcome IN ('played', 'skipped')),
                     listened_s REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS play_artists (
+                    uri TEXT NOT NULL, artist_norm TEXT NOT NULL, display TEXT NOT NULL,
+                    PRIMARY KEY (uri, artist_norm)
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_tracks_root_relpath ON tracks (root, relpath);
@@ -413,4 +427,69 @@ class LibraryIndex:
             "artists_enriched": artists_enriched,
             "artists_pending": artists_pending,
             "top_tags": top_tags,
+            **self.play_stats(),
         }
+
+    def record_play(self, track: Track, at: str, outcome: str, listened_s: float) -> None:
+        """Persist both sources; retain artist identity even without a local track row."""
+        artists = [(track.uri, accent_fold(primary_artist(a)), a) for a in track.artists]
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO plays VALUES (?, ?, ?, ?)", (track.uri, at, outcome, listened_s)
+            )
+            conn.executemany("INSERT OR REPLACE INTO play_artists VALUES (?, ?, ?)", artists)
+
+    def selection_facts(self, half_life_days: float, now=None):
+        """Read one snapshot of tags and decaying signals for a selection worker."""
+        now = now or datetime.now(UTC)
+        with self._connect() as conn:
+            tags = conn.execute(
+                "SELECT t.uuid, g.tag FROM tracks t JOIN track_genres g ON t.uuid = g.uuid "
+                "UNION SELECT t.uuid, a.tag FROM tracks t "
+                "JOIN artist_tags a ON t.artist_norm = a.name_norm"
+            ).fetchall()
+            plays = conn.execute("SELECT * FROM plays").fetchall()
+            artists = conn.execute(PLAY_ARTISTS).fetchall()
+        track_tags = defaultdict(set)
+        for row in tags:
+            track_tags["local:" + row["uuid"]].add(row["tag"])
+        by_uri = defaultdict(set)
+        for row in artists:
+            by_uri[row["uri"]].add(row["artist_norm"])
+        track_scores, artist_scores = defaultdict(float), defaultdict(float)
+        for row in plays:
+            self._decay_play(row, by_uri, track_scores, artist_scores, half_life_days, now)
+        return track_tags, track_scores, artist_scores
+
+    @staticmethod
+    def _decay_play(row, artists, tracks, scores, half_life_days, now):
+        age = max(0, (now - datetime.fromisoformat(row["at"])).total_seconds() / 86400)
+        decay = 2 ** (-age / half_life_days)
+        key = row["uri"], row["outcome"]
+        tracks[key] += decay
+        for artist in artists[row["uri"]]:
+            scores[artist, row["outcome"]] += decay
+
+    def play_stats(self):
+        since = (datetime.now(UTC) - timedelta(days=90)).isoformat()
+        with self._connect() as conn:
+            total = conn.execute("SELECT COUNT(*) FROM plays").fetchone()[0]
+            rows = conn.execute(
+                f"WITH names AS ({PLAY_ARTISTS}) "
+                "SELECT a.artist_norm, MIN(a.display) AS artist, p.outcome, COUNT(*) AS n "
+                "FROM plays p JOIN names a ON p.uri = a.uri "
+                "WHERE julianday(p.at) >= julianday(?) "
+                "GROUP BY a.artist_norm, p.outcome ORDER BY n DESC, artist",
+                (since,),
+            ).fetchall()
+        return {
+            "plays_recorded": total,
+            "top_played": self._top_artists(rows, "played"),
+            "top_skipped": self._top_artists(rows, "skipped"),
+        }
+
+    @staticmethod
+    def _top_artists(rows, outcome):
+        return [{"artist": r["artist"], "count": r["n"]} for r in rows if r["outcome"] == outcome][
+            :5
+        ]

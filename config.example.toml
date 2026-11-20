@@ -163,8 +163,21 @@ enabled = false          # companion DJ, beside any game or in desk voice mode
 service = "blend"        # familiar.services entry point; "pear" keeps YouTube-only playback
 # library_paths = []      # default: XDG Music dir
 # library_db = "~/.local/state/familiar/music/library.sqlite" # default follows XDG_STATE_HOME
-# blend = { library = 70, persona = 20, discovery = 10 } # D1 persona uses the library
+# blend = { library = 70, persona = 20, discovery = 10 } # persona follows the current carrier taste
 # local_min_matches = 8   # fewer local genre matches fall through to YouTube Music
+# skip_early_s = 30       # early player-UI changes count as skips
+# played_fraction = 0.8  # natural changes after this fraction count as played
+# taste_half_life_days = 60 # exponential decay of behaviour signals
+# played_gain = 0.15
+# skip_penalty = 0.35
+# taste_min = 0.2
+# taste_max = 3.0
+# artist_cooldown_songs = 8
+# artist_cooldown_weight = 0.3
+# artist_batch_share = 0.3 # rounded up to a whole song per batch
+# occasional_genres = ["cumbia", "salsa", "merengue", "banda", "reggaeton"]
+# occasional_weight = 0.25 # at most one occasional-style track per batch
+# min_track_s = 90        # automatic local picks; explicit songs/artists may be shorter
 # library_enrich = true  # background MusicBrainz tags for pending artists
 # Optional service settings below override packaged YAML defaults.
 # base_url = "http://127.0.0.1:26538"

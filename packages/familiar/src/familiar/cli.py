@@ -205,6 +205,7 @@ class _Runtime:
             for key, value in self.config.music.items()
             if key not in {"enabled", "service"}
         }
+        settings["taste_read"] = lambda: list(conversation.crew.carrier.tastes.get("music", []))
         if conversation.memory is not None:
             settings.update(
                 dislike_read=conversation.memory.store.music_dislikes,

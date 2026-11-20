@@ -1,9 +1,15 @@
 """Selection sources; lane policy and playback ownership stay in the DJ."""
 
+import asyncio
+import math
+from collections import Counter
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import Protocol
 
-from .library.index import LibraryIndex, tag_key
+from familiar.interfaces import load_data
+
+from .library.index import LibraryIndex, accent_fold, primary_artist, tag_key
 from .library.query import expand
 from .player import Track
 
@@ -15,6 +21,13 @@ class Selection:
     tracks: list[Track]
     reserve: list[Track] = field(default_factory=list)
     playlist: str = ""
+    match_count: int | None = None
+
+    @property
+    def matches(self):
+        if self.match_count is not None:
+            return self.match_count
+        return len(self.tracks) + len(self.reserve)
 
 
 class Source(Protocol):
@@ -51,7 +64,7 @@ class YouTubeSource:
             tracks = await self.searcher.playlist_tracks(
                 playlist.playlist_id, self.settings["playlist_tracks"]
             )
-            fresh = self._fresh(tracks)
+            fresh = self._automatic(self._fresh(tracks))
             if not fresh:
                 continue
             self.rng.shuffle(fresh)
@@ -60,71 +73,178 @@ class YouTubeSource:
             return Selection(fresh[:batch], fresh[batch:], playlist.title)
         return None
 
+    def _automatic(self, tracks):
+        return [
+            t
+            for t in tracks
+            if t.duration_s is None or t.duration_s >= self.settings["min_track_s"]
+        ]
+
     async def radio(self, seed_track, limit, exclude):
         tracks = await self.searcher.radio(seed_track, limit)
-        fresh = [t for t in self._fresh(tracks) if t.uri not in exclude]
+        fresh = [t for t in self._automatic(self._fresh(tracks)) if t.uri not in exclude]
         if not fresh:
             return None
         return Selection(fresh)
 
 
-def space_artists(tracks):
-    """Spread the largest artist groups first, randomising ties before this step."""
-    groups = {}
-    for track in tracks:
-        groups.setdefault(tuple(a.casefold() for a in track.artists), []).append(track)
-    result = []
-    previous = None
-    while groups:
-        candidates = [key for key in groups if key != previous] or list(groups)
-        key = max(candidates, key=lambda artist: len(groups[artist]))
-        result.append(groups[key].pop())
-        previous = key
-        if not groups[key]:
-            del groups[key]
-    return result
+def artist_key(track, patterns=None):
+    return accent_fold(primary_artist(next(iter(track.artists), ""), patterns))
 
 
 class LocalSource:
-    def __init__(self, index, settings, rng, fresh):
+    def __init__(self, index, settings, rng, fresh, recent_artists=()):
         self.index, self.settings, self.rng = index, settings, rng
         self._fresh = fresh
+        self.recent_artists = recent_artists
 
-    def _tracks(self, rows):
-        return self._fresh([LibraryIndex.track(row) for row in rows])
+    def _tracks(self, rows, *, automatic=False):
+        tracks = self._fresh([LibraryIndex.track(row) for row in rows])
+        if not automatic:
+            return tracks
+        return [t for t in tracks if (t.duration_s or 0) >= self.settings["min_track_s"]]
 
-    def _batch(self, tracks):
+    def _behaviour(self, key, scores):
+        played = scores.get((key, "played"), 0)
+        skipped = scores.get((key, "skipped"), 0)
+        factor = 1 + self.settings["played_gain"] * played - self.settings["skip_penalty"] * skipped
+        return min(self.settings["taste_max"], max(self.settings["taste_min"], factor))
+
+    def _weight(self, track, facts, terms, years, artist, key, occasional):
+        tags, track_scores, artist_scores = facts
+        relevant = sum(bool(term & tags[track.uri]) for term in terms)
+        relevant += int(
+            years is not None and track.year is not None and years[0] <= track.year <= years[1]
+        )
+        relevant += int(artist is not None and key == artist)
+        behaviour = self._behaviour(track.uri, track_scores)
+        behaviour *= math.sqrt(self._behaviour(key, artist_scores))
+        cooldown = self.settings["artist_cooldown_songs"]
+        recent = list(self.recent_artists)[max(0, len(self.recent_artists) - cooldown) :]
+        recency = 1.0
+        if key in recent:
+            recency = self.settings["artist_cooldown_weight"]
+        occasional_factor = 1.0
+        if occasional:
+            occasional_factor = self.settings["occasional_weight"]
+        return max(1, relevant) * behaviour * recency * occasional_factor
+
+    async def _batch(self, tracks, *, terms=(), years=None, artist=None, size=None, reserve=True):
         if not tracks:
             return None
-        self.rng.shuffle(tracks)
-        spaced = space_artists(tracks)
-        batch = self.settings["genre_batch"]
-        return Selection(spaced[:batch], spaced[batch:])
+        facts = await asyncio.to_thread(
+            self.index.selection_facts, self.settings["taste_half_life_days"]
+        )
+        patterns = load_data("familiar_music", "library").value.get("featured_artist_patterns", [])
+        artists = {t.uri: artist_key(t, patterns) for t in tracks}
+        occasional_tags = {tag_key(g) for g in self.settings["occasional_genres"]}
+        occasional_ids = {t.uri for t in tracks if facts[0][t.uri] & occasional_tags}
+        weights = {
+            t.uri: self._weight(
+                t, facts, terms, years, artist, artists[t.uri], t.uri in occasional_ids
+            )
+            for t in tracks
+        }
+        size = size or self.settings["genre_batch"]
+        pending = list(tracks)
+        batches = []
+        previous = None
+        while (
+            pending
+            and (reserve or not batches)
+            and sum(map(len, batches)) < self.settings["playlist_tracks"]
+        ):
+            batch = self._sample(pending, weights, artists, occasional_ids, size, previous)
+            # A new batch may repeat an artist across its boundary when no alternative remains.
+            batch = batch or self._sample(pending, weights, artists, occasional_ids, size, None)
+            if not batch:
+                break
+            batches.append(batch)
+            used = {t.uri for t in batch}
+            pending = [t for t in pending if t.uri not in used]
+            previous = artists[batch[-1].uri]
+        if not batches:
+            return None
+        return Selection(
+            batches[0], list(chain.from_iterable(batches[1:])), match_count=len(tracks)
+        )
+
+    def _sample(self, pending, weights, artists, occasional_ids, size, previous):
+        result, counts = [], Counter()
+        occasional = False
+        cap = max(1, math.ceil(size * self.settings["artist_batch_share"]))
+        used = set()
+        for _ in range(size):
+            eligible = [
+                t
+                for t in pending
+                if counts[artists[t.uri]] < cap
+                and t.uri not in used
+                and not (occasional and t.uri in occasional_ids)
+            ]
+            spaced = [t for t in eligible if artists[t.uri] != previous]
+            # No adjacent repeats, even for small or explicit single-artist pools.
+            if not spaced:
+                break
+            track = self.rng.choices(spaced, weights=[weights[t.uri] for t in spaced], k=1)[0]
+            result.append(track)
+            used.add(track.uri)
+            previous = artists[track.uri]
+            counts[previous] += 1
+            occasional |= track.uri in occasional_ids
+        return result
 
     async def song(self, text):
-        tracks = self._tracks(self.index.search(text))
+        tracks = self._tracks(await asyncio.to_thread(self.index.search, text))
         if not tracks:
             return None
         return Selection(tracks[:1])
 
     async def artist(self, name):
-        return self._batch(self._tracks(self.index.tracks_by_artist(name)))
+        rows = await asyncio.to_thread(self.index.tracks_by_artist, name)
+        return await self._batch(self._tracks(rows), artist=accent_fold(primary_artist(name)))
+
+    async def library(self):
+        rows = await asyncio.to_thread(self.index.filter)
+        return await self._batch(self._tracks(rows, automatic=True))
 
     async def genre(self, text, genres=None, years=None):
-        vocabulary = {tag_key(row["tag"]) for row in self.index.tag_vocabulary(limit=10000)}
-        expanded, inferred_years = expand(text, vocabulary)
+        vocabulary = {
+            tag_key(row["tag"])
+            for row in await asyncio.to_thread(self.index.tag_vocabulary, limit=10000)
+        }
+        expanded, inferred_years, terms = expand(text, vocabulary)
         merged = list(dict.fromkeys([*expanded, *(genres or [])]))
+        terms = list(dict.fromkeys([*terms, *(frozenset([tag_key(g)]) for g in (genres or []))]))
         bounds = years or inferred_years
-        # Unrecognised text must not accidentally select the entire library.
         if not merged and bounds is None:
             return None
-        tracks = self._tracks(self.index.filter(genres=merged, years=bounds))
-        return self._batch(tracks)
+        rows = await asyncio.to_thread(self.index.filter, genres=merged, years=bounds)
+        return await self._batch(self._tracks(rows, automatic=True), terms=terms, years=bounds)
 
     async def radio(self, seed_track, limit, exclude):
-        rows = self.index.radio_candidates(seed_track, exclude=[*exclude, seed_track])
-        tracks = self._tracks(rows)
-        selection = self._batch(tracks)
+        rows = await asyncio.to_thread(
+            self.index.radio_candidates, seed_track, exclude=[*exclude, seed_track]
+        )
+        resolved = await asyncio.to_thread(self.index.resolve, seed_track)
+        if resolved is None:
+            return None
+        seed = resolved[1]
+        facts = await asyncio.to_thread(
+            self.index.selection_facts, self.settings["taste_half_life_days"]
+        )
+        terms = [frozenset([tag]) for tag in facts[0][seed_track]]
+        years = None
+        if seed.year is not None:
+            years = (seed.year - 5, seed.year + 5)
+        selection = await self._batch(
+            self._tracks(rows, automatic=True),
+            terms=terms,
+            years=years,
+            artist=artist_key(seed),
+            size=limit,
+            reserve=False,
+        )
         if selection is None:
             return None
-        return Selection((selection.tracks + selection.reserve)[:limit])
+        return Selection(selection.tracks)

@@ -358,19 +358,19 @@ def test_enrich_with_mocked_httpx_and_rate_limiting(tmp_path):
 
 
 def test_synonym_expand():
-    tags, years = expand("eighties")
+    tags, years, _ = expand("eighties")
     assert "synthpop" in tags
     assert years == (1980, 1989)
 
-    tags, years = expand("mellow")
+    tags, years, _ = expand("mellow")
     assert "ambient" in tags
     assert years is None
 
-    tags, years = expand("unknown_term")
+    tags, years, _ = expand("unknown_term")
     assert tags == []
     assert years is None
 
-    tags, years = expand("")
+    tags, years, _ = expand("")
     assert tags == []
     assert years is None
 
@@ -515,19 +515,27 @@ def test_enrichment_error_timestamp_column(tmp_path):
     ],
 )
 def test_tokenized_expand(query, years):
-    tags, actual_years = expand(query)
+    tags, actual_years, _ = expand(query)
     assert "disco" in tags
     assert "classics" not in tags
     assert actual_years == years
 
 
 def test_expand_phrases_and_vocabulary():
-    tags, years = expand("rock en español classics cumbia ska")
+    tags, years, _ = expand("rock en español classics cumbia ska")
     assert tags == ["rock en español", "latin rock", "cumbia", "ska"]
     assert years is None
-    assert expand("unknown shoegaze", {"shoegaze"}) == (["shoegaze"], None)
-    assert expand("dream pop classics", {"dreampop"}) == (["dreampop"], None)
-    assert expand("unknown") == ([], None)
+    assert expand("unknown shoegaze", {"shoegaze"}) == (
+        ["shoegaze"],
+        None,
+        [frozenset(["shoegaze"])],
+    )
+    assert expand("dream pop classics", {"dreampop"}) == (
+        ["dreampop"],
+        None,
+        [frozenset(["dreampop"])],
+    )
+    assert expand("unknown") == ([], None, [])
     for term in [
         "rock latino",
         "latin",
@@ -554,3 +562,22 @@ def test_walk_error_does_not_mark_unseen_missing(tmp_path, monkeypatch):
     monkeypatch.setattr("familiar_music.library.scanner.os.walk", broken_walk)
     scanner.scan([root])
     assert len(index.tracks_by_artist("Artist")) == 1
+
+
+@pytest.mark.parametrize("era", ["60s", "seventies", "'80s", "nineties", "2000s", "noughties"])
+def test_era_only_contributes_years_when_genre_present(era):
+    tags, years, terms = expand(f"{era} new wave")
+    assert tags == ["new wave"] and years is not None
+    assert terms == [frozenset(["newwave"])]
+    assert expand(era)[0]  # The era on its own still carries its broad tags.
+
+
+def test_query_relevance_keeps_distinct_requested_terms():
+    tags, years, terms = expand("80s rock en español cumbia ska cumbia")
+    assert years == (1980, 1989)
+    assert "rock" not in tags and "pop" not in tags
+    assert terms == [
+        frozenset(["rockenespanol", "latinrock"]),
+        frozenset(["cumbia"]),
+        frozenset(["ska"]),
+    ]

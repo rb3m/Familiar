@@ -9,7 +9,7 @@ from itertools import chain
 from familiar.interfaces import spoken
 
 from .settings import music_settings
-from .sources import LocalSource, Selection, YouTubeSource
+from .sources import LocalSource, Selection, YouTubeSource, artist_key
 
 # How far back "don't repeat" looks, for songs and for genre playlists.
 RECENT_TRACKS = 60
@@ -37,8 +37,8 @@ class Dislikes:
             return
         self.tracks[track.uri] = artists
 
-    def blocked(self, track):
-        tracks, artists = self.values()
+    def blocked(self, track, *, values=None):
+        tracks, artists = values or self.values()
         return track.uri in tracks or any(a.casefold() in artists for a in track.artists)
 
 
@@ -53,6 +53,7 @@ class DJ:
         clock=time.monotonic,
         rng=None,
         index=None,
+        taste_read=None,
     ):
         self.player = player
         self.rng = rng or random.Random()
@@ -65,13 +66,19 @@ class DJ:
         self.reserve: list = []
         self.recent: deque[str] = deque(maxlen=RECENT_TRACKS)
         self.recent_playlists: deque[str] = deque(maxlen=RECENT_PLAYLISTS)
+        self.recent_artists: deque[str] = deque(maxlen=self.settings["artist_cooldown_songs"])
+        self._heard_uri = None
+        self.taste_read = taste_read or (lambda: [])
+        self._pending_batch = None
         self.sources = {
             "ytm": YouTubeSource(
                 searcher, self.settings, self.rng, self._fresh, self.dislikes, self.recent_playlists
             )
         }
         if index is not None:
-            self.sources["local"] = LocalSource(index, self.settings, self.rng, self._fresh)
+            self.sources["local"] = LocalSource(
+                index, self.settings, self.rng, self._fresh, self.recent_artists
+            )
         self._radio_count = 0
         self._radio_track = None
         self.base_volume: float | None = None
@@ -87,10 +94,9 @@ class DJ:
         return prefix in self.sources and available(prefix)
 
     def draw_lane(self):
-        """D2 can supply persona selection without changing playback or batch ownership."""
+        """Draw once per unrequested batch, independently of explicit requests."""
         weights = self.settings["blend"]
-        lane = self.rng.choices(list(weights), weights=list(weights.values()), k=1)[0]
-        return {"library": "local", "persona": "local", "discovery": "ytm"}[lane]
+        return self.rng.choices(list(weights), weights=list(weights.values()), k=1)[0]
 
     async def seed(
         self, query, mood=None, *, kind="song", calm=False, genres=None, years=None, source=None
@@ -100,8 +106,6 @@ class DJ:
         if source not in {None, "any", "library", "youtube"}:
             return {"error": "Unknown music source"}
         first = forced or "local"
-        if kind == "genre" and forced is None and "local" in self.sources:
-            first = self.draw_lane()
         order = [first]
         if forced is None:
             order.append({"local": "ytm", "ytm": "local"}[first])
@@ -109,7 +113,7 @@ class DJ:
             selection = await self._select(prefix, text, kind, genres, years)
             if selection is None:
                 continue
-            matches = len(selection.tracks) + len(selection.reserve)
+            matches = selection.matches
             if (
                 prefix == "local"
                 and kind == "genre"
@@ -131,7 +135,12 @@ class DJ:
         return await picker(text)
 
     def _fresh(self, tracks):
-        return [t for t in tracks if not self.dislikes.blocked(t) and t.uri not in self.recent]
+        values = self.dislikes.values()
+        return [
+            t
+            for t in tracks
+            if not self.dislikes.blocked(t, values=values) and t.uri not in self.recent
+        ]
 
     async def _start(self, selection: Selection, calm, *, radio=False):
         first, *rest = selection.tracks
@@ -139,6 +148,8 @@ class DJ:
         await self._play_selection(first, rest)
         self.recent.extend(track.uri for track in selection.tracks)
         self.reserve = list(selection.reserve)
+        self._pending_batch = None
+        self._remember_track(first)
         self.announced.add(first.uri)
         self.radio_seed = first.uri
         self._radio_track = first
@@ -214,18 +225,56 @@ class DJ:
         self._radio_count += remaining - left
 
     async def _next_radio_batch(self, prefix, queued):
-        # Wait for the final song, not just the upcoming queue, to finish.
-        if queued or await self.player.now_playing() is not None:
-            return
-        chosen = self.draw_lane()
-        selection = await self._radio_batch(chosen, prefix)
+        selection = self._pending_batch
+        if selection is None:
+            selection = await self._lane_batch(self.draw_lane(), prefix)
         if selection is None:
             selection = await self._radio_batch(prefix, prefix)
         if selection is None:
+            selection = await self._library_batch()
+        if selection is None:
+            selection = await self._radio_batch("ytm", prefix)
+        if selection is None:
             return
-        # An unrequested batch has its own boundary; no playlist reserve crosses it.
+        self._pending_batch = selection
+        chosen = selection.tracks[0].uri.partition(":")[0]
+        current = await self.player.now_playing()
+        if chosen != prefix and (queued or current is not None):
+            return
         selection.reserve = []
+        if current is not None:
+            await self._enqueue_from(selection.tracks, set(queued), len(selection.tracks))
+            self._radio_count = len(selection.tracks)
+            self._pending_batch = None
+            return
         await self._start(selection, False, radio=True)
+
+    async def _lane_batch(self, lane, prefix):
+        if lane == "persona":
+            return await self._persona_lane(prefix)
+        if lane == "library":
+            return await self._library_batch()
+        return await self._radio_batch("ytm", prefix)
+
+    async def _library_batch(self):
+        if not self._available("local"):
+            return None
+        return await self.sources["local"].library()
+
+    async def _persona_lane(self, prefix):
+        tastes = self.taste_read()
+        if not tastes:
+            return await self._lane_batch("library", prefix)
+        return await self._persona_batch(self.rng.choice(tastes))
+
+    async def _persona_batch(self, text):
+        selection = await self._select("local", text, "genre")
+        matches = 0
+        if selection is not None:
+            matches = selection.matches
+        if matches >= self.settings["local_min_matches"]:
+            return selection
+        return await self._select("ytm", text, "genre")
 
     async def _radio_batch(self, chosen, prefix):
         if not self._available(chosen):
@@ -242,7 +291,7 @@ class DJ:
         selection = await self._select(chosen, text, kind)
         if selection is None:
             return None
-        matches = len(selection.tracks) + len(selection.reserve)
+        matches = selection.matches
         if chosen == "local" and kind == "genre" and matches < self.settings["local_min_matches"]:
             return None
         return selection
@@ -345,6 +394,10 @@ class DJ:
     def interrupting(self):
         return self.base_volume is not None or self._pause_requested
 
+    @property
+    def paused_for_speech(self):
+        return self._pause_owner is not None
+
     async def current_track(self):
         """Read and observe atomically with respect to speech pause ownership."""
         async with self._lock:
@@ -422,7 +475,13 @@ class DJ:
         self._pause_owner = None
         self._pause_requested = False
 
+    def _remember_track(self, current):
+        if current is not None and current.uri != self._heard_uri:
+            self._heard_uri = current.uri
+            self.recent_artists.append(artist_key(current))
+
     def observe(self, current):
+        self._remember_track(current)
         if self._pause_owner is None or current is None:
             return
         if current.uri != self._pause_owner or not current.paused:

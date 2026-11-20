@@ -93,12 +93,19 @@ class MusicService:
             clock=clock,
             rng=rng,
             index=index,
+            taste_read=settings.get("taste_read"),
         )
         self.clock, self.sleep = clock, sleeper
         self.poll_interval = pear_settings(settings)["poll_interval_s"]
         self.recovery_interval = pear_settings(settings)["recovery_interval_s"]
         self._current = None
         self._last_uri = None
+        self._observed_track = None
+        self._observed_at = None
+        self._listened_s = 0.0
+        self._play_interrupted = False
+        self._play_cause = None
+        self._play_tasks = set()
         rng = rng or random.Random()
         self.remarks = Cadence(self.settings["remark_every"], rng)
         self.picks = Cadence(self.settings["dj_turn_every"], rng)
@@ -191,13 +198,34 @@ class MusicService:
                     return error
                 if self._overruled(name):
                     return {"error": "The Commander just chose the music; keep it this time"}
+                await self._observe_player()
                 self._note_request(name)
                 result = await self._dispatch(name, arguments)
+                await self._observe_player(name=name, result=result)
                 self._uncounted |= name in SELECTION_TOOLS and "error" not in result
                 return result
             except Exception as exc:
                 _LOG.debug("Music tool failed", exc_info=True)
                 return {"error": f"Music unavailable: {str(exc) or type(exc).__name__}"}
+
+    def _tool_cause(self, name, result, current):
+        if name not in SELECTION_TOOLS or "error" in result:
+            return None
+        explicit = {"skip_track": "skipped", "dislike_track": "disliked"}
+        if name in explicit:
+            return explicit[name]
+        if current != self._observed_track or "playing" in result:
+            return "ignored"
+        return None
+
+    async def _observe_player(self, *, name=None, result=None):
+        """Signal collection must never turn a working control into a failed tool."""
+        try:
+            current = await self.player.now_playing()
+            cause = self._tool_cause(name, result or {}, current)
+            self._observe_play(current, cause=cause)
+        except Exception:
+            _LOG.debug("Music behaviour observation failed", exc_info=True)
 
     def _overruled(self, name):
         """A DJ turn queued before a request or pause must not undo it once it gets to speak."""
@@ -313,9 +341,11 @@ class MusicService:
 
     async def _poll(self):
         self._current = await self.dj.current_track()
+        self._observe_play(self._current)
         if self._current is None:
             await self.dj.top_up()
             self._current = await self.dj.current_track()
+            self._observe_play(self._current)
         self._available = self._current is not None
         if self._current is None:
             return None
@@ -333,6 +363,69 @@ class MusicService:
         self.remarks.tick()
         self.picks.tick()
         return self._dj_turn() or self._remark()
+
+    def _observe_play(self, current, *, cause=None):
+        """Poll time, excluding pauses; changing source never loses the previous identity."""
+        now = self.clock()
+        previous = self._observed_track
+        if previous is not None and not previous.paused:
+            self._listened_s += max(0, now - self._observed_at)
+        changed = previous is not None and (current is None or current.uri != previous.uri)
+        if changed:
+            self._finish_play(previous, cause or self._play_cause, ended=current is None)
+        if previous is None or changed:
+            self._listened_s = 0.0
+            self._play_interrupted = False
+            self._play_cause = None
+        # A player can acknowledge a skip/play command on a later poll.
+        if not changed and cause is not None and previous is not None:
+            self._play_cause = cause
+        self._observed_track, self._observed_at = current, now
+
+    def _finish_play(self, track, cause, *, ended):
+        if cause == "ignored" or self._play_interrupted:
+            return
+        listened = self._listened_s
+        duration = track.duration_s
+        if duration is not None:
+            listened = min(listened, duration)
+        outcome = cause
+        # ADR 0015: only an early skip is negative; a later one is judged like a natural change.
+        if outcome == "skipped" and listened >= self.settings["skip_early_s"]:
+            outcome = None
+        # A dislike is always negative, however long it played; storage knows only skips.
+        outcome = {"disliked": "skipped"}.get(outcome, outcome)
+        if outcome is None:
+            outcome = self._natural_outcome(duration, listened, ended)
+        if outcome is None:
+            return
+        task = asyncio.create_task(self._record_play(track, outcome, listened))
+        self._play_tasks.add(task)
+        task.add_done_callback(self._play_tasks.discard)
+
+    def _natural_outcome(self, duration, listened, ended):
+        if duration and listened >= duration:
+            return "played"
+        if listened < self.settings["skip_early_s"]:
+            return "skipped"
+        if duration and listened >= duration * self.settings["played_fraction"]:
+            return "played"
+        if ended and duration is None:
+            return "played"
+        return None
+
+    async def _record_play(self, track, outcome, listened):
+        at = datetime.now(UTC).isoformat()
+        try:
+            await asyncio.to_thread(self._write_play, track, at, outcome, listened)
+        except Exception:
+            _LOG.debug("Music behaviour write failed", exc_info=True)
+
+    def _write_play(self, track, at, outcome, listened):
+        index = self.index
+        if index is None:
+            index = LibraryIndex(database_path(self.settings))
+        index.record_play(track, at, outcome, listened)
 
     def _may_pick(self):
         return (
@@ -419,13 +512,18 @@ class MusicService:
         if not self._available and not self.dj.interrupting:
             return
         try:
+            self._observe_play(await self.player.now_playing())
             await self.dj.speech_state(state)
+            self._play_interrupted |= self.dj.paused_for_speech
+            self._observe_play(await self.player.now_playing())
         except Exception:
             self._available = False
             raise
 
     async def aclose(self):
         self._library_stop.set()
+        if self._play_tasks:
+            await asyncio.gather(*self._play_tasks)
         if self._library_task is not None:
             self._library_task.cancel()
             with suppress(asyncio.CancelledError):
