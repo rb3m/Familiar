@@ -34,7 +34,7 @@ the core works without any game pack. The commands are in `README.md`.
 | History | `packages/familiar/src/familiar/history.py` | Attributed shared records and a swappable renderer for each speaker. |
 | Conversation | `packages/familiar/src/familiar/conversation.py` | Owns history; streams LLM output, splits sentences, hands them to TTS. |
 | Sentences | `packages/familiar/src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
-| Transcript | `packages/familiar/src/familiar/transcript.py` | Append-only JSONL log, the raw material for future memory. |
+| Transcript | `packages/familiar/src/familiar/transcript.py` | Append-only JSONL log in `data/transcripts/` (lines, tool calls/results, events): the raw material for memory, and the first place to look when debugging a live session. |
 | Director | `packages/familiar/src/familiar/director.py` | Decides when the companion speaks (priorities, TTL, cooldowns, idle chatter). |
 | Memory | `packages/familiar/src/familiar/memory/` | SQLite trip facts, local retrieval, gated recall and shutdown summaries (ADR 0005). |
 | GUI | `packages/familiar/src/familiar/gui/` | Local web launcher: aiohttp server owning one voice subprocess, vanilla frontend in `static/` (ADR 0003, `docs/gui-api.md`). |

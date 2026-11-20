@@ -9,7 +9,7 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Live OK: KSP crew, banter, kRPC; ETS2 **M3** recall, **M6** stereo; Elite gear, scoop, EDSM; DJ phase 1. Awaiting: DJ library blend (ADR 0015), **M5** SCS key presses, callbacks, Elite hand-off (ADR 0013) + ship/system awareness + `system_info`.
+- Live OK: KSP crew, banter, kRPC; ETS2 **M3** recall, **M6** stereo; Elite gear, scoop, EDSM, `system_info`; DJ phase 1 + library blend (ADR 0015). Awaiting: crew handing music requests to the carrier (fixed 2026-11-20), **M5** SCS key presses, callbacks, Elite hand-off (ADR 0013).
 - Next task: live checks above; then tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal sync and KWin focus check; M7 Vic2 save-diff adapter (roadmap).
 - Known: flash-lite free key; 429s park a model 15 min, then `fallback_api_key_env`. ElevenLabs Pro, Gemini TTS fallback. GUI needs evdev push-to-talk. Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
