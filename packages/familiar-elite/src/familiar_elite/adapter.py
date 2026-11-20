@@ -148,7 +148,7 @@ class EliteAdapter:
         if context != self.action_context() or self._action_guard(entry):
             return _result("unknown", "Keys pressed; game context/status changed")
         if self._matches(entry, desired):
-            return _result("done", f"{name} confirmed by the game")
+            return _result("done", f"{name} confirmed by the ship")
         return _result("unknown", f"Keys pressed; {name} not verified; not repeated")
 
     async def _await_docking(self, docking_count, context):
