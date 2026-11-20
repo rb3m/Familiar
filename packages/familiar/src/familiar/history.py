@@ -85,9 +85,10 @@ class DefaultHistoryRenderer:
         )
         if speaker != crew.carrier:
             system += (
-                f"\nOnly {crew.carrier.display_name} carries out mutating game actions. "
-                "If asked to operate the ship or game, call hand_to_carrier when offered, "
-                "with an optional short in-character remark. Do not claim to act yourself."
+                f"\nOnly {crew.carrier.display_name} carries out actions: operating the ship "
+                "or game, and playing or changing music. When the player asks for one, call "
+                "hand_to_carrier when offered, with an optional short in-character remark. "
+                "Do not claim to act yourself. Never say a tool's name aloud."
             )
         # Chronological, every speaker labelled, so replies keep their order relative to the
         # player's turns; the persona's own lines also stay as model turns below.

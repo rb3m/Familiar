@@ -175,6 +175,7 @@ async def test_noncarrier_has_core_queries_and_refuses_mutation_even_if_hallucin
     offered = {spec.name for spec in chat.llm.requests[0][2]}
     assert offered == {"lookup", "act_query", "hand_to_carrier"}
     assert "call hand_to_carrier" in chat.llm.requests[0][1]
+    assert "playing or changing music" in chat.llm.requests[0][1]
     assert actuator.performed == ["query"]
     assert actions.pending is None
     assert_complete(chat.history)
