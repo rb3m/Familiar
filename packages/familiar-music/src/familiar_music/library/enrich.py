@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from familiar.interfaces import load_data
 
-from .index import LibraryIndex, primary_artist, store_artist_tags, tag_key
+from .index import LibraryIndex, accent_fold, primary_artist, store_artist_tags, tag_key
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,9 @@ class Enricher:
         self.collaboration_separators = mb_conf.get("collaboration_separators", [])
         self.tag_stoplist = {tag_key(tag) for tag in mb_conf.get("tag_stoplist", [])}
         self.search_limit = int(mb_conf.get("search_limit", 3))
+
+        overrides = load_data("familiar_music", "artist_overrides").value.get("artists") or {}
+        self.overrides = {_override_key(name): rule for name, rule in overrides.items()}
 
         rate_limit_s = float(mb_conf.get("rate_limit_s", 1.0))
         self.limiter = RateLimiter(rate_limit_s, self.clock, self.sleeper)
@@ -150,30 +153,19 @@ class Enricher:
     def enrich_artist(self, name_norm: str, display: str) -> tuple[bool, str | None]:
         """Perform lookup for a single artist and commit result. Returns (success, error)."""
         now_str = datetime.datetime.now(datetime.UTC).isoformat()
+        rule = self.overrides.get(_override_key(display), {})
         try:
-            best = self._find_artist(display)
-            if best is None:
+            if rule.get("skip"):
+                # A known mismatch: no MusicBrainz data, so only file genres describe them.
+                self._store(name_norm, None, {}, now_str)
+                return True, None
+            mbid = rule.get("mbid") or self._search_mbid(display)
+            if mbid is None:
                 err = "No search candidate above match threshold"
                 self._record_error(name_norm, err, kind="not_found")
                 return False, err
-
-            mbid = best.get("id")
-            if not mbid:
-                raise ValueError("Missing mbid in search result")
-
-            details = self._fetch_artist_details(mbid)
-            tags_map = self._artist_tags(details)
-
-            with self.index._connect() as conn:
-                conn.execute(
-                    """
-                    UPDATE artists
-                    SET mbid = ?, enriched_at = ?, enrich_error = NULL, enrich_error_at = NULL
-                    WHERE name_norm = ?
-                    """,
-                    (mbid, now_str, name_norm),
-                )
-                store_artist_tags(conn, name_norm, tags_map)
+            tags = self._artist_tags(self._fetch_artist_details(mbid))
+            self._store(name_norm, mbid, tags, now_str)
             return True, None
 
         except Exception as exc:
@@ -181,6 +173,27 @@ class Enricher:
             logger.warning("Error enriching artist %s: %s", display, exc)
             self._record_error(name_norm, err, kind="transient")
             return False, err
+
+    def _search_mbid(self, display: str) -> str | None:
+        best = self._find_artist(display)
+        if best is None:
+            return None
+        mbid = best.get("id")
+        if not mbid:
+            raise ValueError("Missing mbid in search result")
+        return mbid
+
+    def _store(self, name_norm: str, mbid: str | None, tags: dict[str, int], now: str) -> None:
+        with self.index._connect() as conn:
+            conn.execute(
+                """
+                UPDATE artists
+                SET mbid = ?, enriched_at = ?, enrich_error = NULL, enrich_error_at = NULL
+                WHERE name_norm = ?
+                """,
+                (mbid, now, name_norm),
+            )
+            store_artist_tags(conn, name_norm, tags)
 
     def _artist_tags(self, details: dict) -> dict[str, int]:
         genres = details.get("genres", [])
@@ -246,3 +259,7 @@ class Enricher:
             "enriched": enriched,
             "failed": failed,
         }
+
+
+def _override_key(name: str) -> str:
+    return accent_fold(primary_artist(name))

@@ -1,0 +1,7 @@
+# Fix MusicBrainz matches by artist name (as tagged in your files; case and accents ignored).
+# Override in ~/.config/familiar/data/familiar_music/artist_overrides.yaml, then run
+# `familiar music enrich --refresh` (or wait for the next refresh) to apply.
+#   skip: true   - never look the artist up; only your file genre tags describe them
+#                  (e.g. a small act MusicBrainz doesn't know, sharing a name with one it does)
+#   mbid: "..."  - use this MusicBrainz artist ID instead of searching by name
+artists: {}

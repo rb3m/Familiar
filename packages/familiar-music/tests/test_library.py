@@ -2,6 +2,7 @@
 
 import argparse
 import datetime
+import json
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -821,3 +822,35 @@ def test_refresh_replaces_old_tags_and_clears_errors(tmp_path):
         assert row["enrich_error_at"] is None
         assert dict(conn.execute("SELECT tag, count FROM artist_tags")) == {"rock": 2}
     assert enricher.enrich_all()["processed"] == 0
+
+
+@pytest.mark.parametrize(
+    "rule,requests,expected_mbid,expected_tags",
+    [
+        ({"skip": True}, [], None, {}),
+        ({"mbid": "pinned"}, ["/ws/2/artist/pinned"], "pinned", {"latinpop": 2}),
+    ],
+)
+def test_enrichment_artist_overrides(tmp_path, rule, requests, expected_mbid, expected_tags):
+    """A name collision is fixed by data: skip the lookup or pin the right MusicBrainz ID."""
+    user_file = tmp_path / "data" / "familiar_music" / "artist_overrides.yaml"
+    user_file.parent.mkdir(parents=True)
+    user_file.write_text(json.dumps({"artists": {"Zú": rule}}))
+    index = LibraryIndex(tmp_path / "lib.sqlite")
+    with index._connect() as conn:
+        conn.execute("INSERT INTO artists (name_norm, display) VALUES ('zu', 'Zu')")
+        store_artist_tags(conn, "zu", {"free jazz": 9})  # the wrong band's tags from a search
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.path)
+        return httpx.Response(200, json={"genres": [{"name": "Latin Pop", "count": 2}]})
+
+    enricher = Enricher(
+        index, client=httpx.Client(transport=httpx.MockTransport(handler)), sleeper=lambda _: None
+    )
+    assert enricher.enrich_artist("zu", "Zu") == (True, None)
+    assert seen == requests  # never a name search for an overridden artist
+    with index._connect() as conn:
+        assert conn.execute("SELECT mbid FROM artists").fetchone()[0] == expected_mbid
+        assert dict(conn.execute("SELECT tag, count FROM artist_tags")) == expected_tags
