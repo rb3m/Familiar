@@ -89,7 +89,8 @@ def test_keys_and_regions_use_overrides():
     ],
 )
 def test_projection_calibration_unchanged(game, x, z, expected):
-    assert PROJECTIONS[game](x, z) == expected
+    # approx: libm results differ in the last bit between Linux and macOS.
+    assert PROJECTIONS[game](x, z) == pytest.approx(expected, rel=1e-12)
 
 
 def test_projection_override():

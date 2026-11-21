@@ -5,6 +5,8 @@ import json
 import os
 import shutil
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -17,7 +19,11 @@ REAL_RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "")
 @pytest.fixture(autouse=True)
 def isolated_data(monkeypatch, tmp_path):
     monkeypatch.setenv("FAMILIAR_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    # macOS caps unix socket paths at 104 bytes and its pytest tmp_path is longer than that.
+    runtime = tempfile.mkdtemp(prefix="fm-", dir="/tmp")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", runtime)
+    yield
+    shutil.rmtree(runtime, ignore_errors=True)
 
 
 TRACKS = {
@@ -212,14 +218,16 @@ async def test_health_states(tmp_path):
     assert health.status == "not running"
     assert health.hint == "Install mpv"
 
-    player = MpvPlayer({"call_timeout_s": 0.05}, resolver=resolver)
+    # Any existing executable passes the install check, so this runs without mpv installed.
+    installed = {"executable": sys.executable}
+    player = MpvPlayer({**installed, "call_timeout_s": 0.05}, resolver=resolver)
     player.socket_path.parent.mkdir(parents=True, exist_ok=True)
     server = await asyncio.start_unix_server(silent, path=player.socket_path)
     assert (await player.health()).status == "unavailable"
     server.close()  # 3.12 wait_closed would wait on the never-answering connection
 
     async with FakeMpv(player.socket_path):
-        healthy = MpvPlayer(resolver=resolver)
+        healthy = MpvPlayer(installed, resolver=resolver)
         assert (await healthy.health()).status == "ok"
         await healthy.aclose()
     await player.aclose()

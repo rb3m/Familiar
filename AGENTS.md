@@ -33,6 +33,7 @@ API tier) is the first backend; others plug in via entry points.
 - `config.example.toml`: every config key with defaults.
 - `packages/familiar/src/familiar/personas/`: packaged built-in persona YAML; user personas live in `~/.config/familiar/personas/` and shadow them.
 - `packaging/linux/`: menu launcher + icon installer (`install.sh`).
+- `packaging/macos/` (mac-local branch only): Terminal launcher + `~/Applications/Familiar.app` installer.
 - `packages/familiar/src/familiar/`: core voice loop, backends, Director and GUI; no imports from game packs.
 - `packages/familiar-scs/src/familiar_scs/`: ATS/ETS2 adapters, commands, data and `knowledge/<game>/` packs.
 - `packages/familiar-ksp/src/familiar_ksp/`: KSP kRPC telemetry, events, quotes and probe/record commands.
