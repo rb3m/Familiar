@@ -16,6 +16,19 @@ get `403`. The frontend reads the token from `location.search` once and keeps it
 Non-2xx responses have JSON `{"error": "human readable message"}`.
 
 ## Endpoints
+- `GET /api/ptt` → `{"backend", "settings", "label", "detectable": bool,
+  "kind": "mouse" | "joystick" | null}`. Labels include `Mouse button 4`,
+  `BTN_TRIGGER on Thrustmaster`, and `Terminal (Enter)`; kind describes platform detection.
+- `POST /api/ptt/detect` body `{"timeout": 30}` (optional, positive seconds, at most 60)
+  → waits for one press and returns the same shape as `GET /api/ptt` with proposed settings,
+  without saving. `409` while a session or detection is running; `408` on timeout.
+  Mouse detection consumes spare buttons to prevent back/forward navigation.
+- `PUT /api/ptt` body `{"backend", "settings"}` → validates and saves to the server's config
+  path, reloads its PTT config, and returns the same shape as GET. Mouse requires an integer
+  `button >= 2` and optional boolean `consume` (default true); evdev requires nonempty
+  `device` and `button` strings; terminal accepts empty settings. `400` on invalid input,
+  `409` while a session or detection runs. Session start is also blocked during detection.
+  All PTT endpoints use the token and origin checks described above.
 - `GET /api/state` → `{"games": [{"id": "ats", "name": "American Truck Simulator", "icon": "🚛"}, ...],
   "personas": [PersonaSummary], "languages": [{"id": "en", "name": "English"}, ...],
   "defaults": {"game": "ats" | null, "persona": "mira", "language": "en"},

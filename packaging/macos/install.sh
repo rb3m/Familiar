@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Install ~/Applications/Familiar.app for the current user (no root needed). Opening it starts a
-# desk voice chat in Terminal; pass other arguments to bake them in, e.g.:
+# Install ~/Applications/Familiar.app for the current user (no root needed). Opening it starts
+# the GUI launcher; pass other arguments to bake them in, e.g.:
 #   install.sh voice --game ats
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 APP="$HOME/Applications/Familiar.app"
-ARGS="${*:-voice}"
+ARGS="${*:-gui}"
 mkdir -p "$HOME/Applications"
 chmod +x "$HERE/familiar-launcher.sh"
 rm -rf "$APP"

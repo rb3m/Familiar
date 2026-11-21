@@ -416,19 +416,22 @@ async def _voices(args: argparse.Namespace) -> None:
 async def _ptt_setup(args: argparse.Namespace) -> None:
     from familiar.config import USER_CONFIG, find_config_path
     from familiar.config_writer import save_ptt
-    from familiar.ptt.setup import detect_button
+    from familiar.ptt.setup import detect
 
-    print("Press the joystick button you want for push-to-talk (30 s)…")
-    print("(Buttons already held down, like a lever resting in a detent, are ignored.)")
-    device, button = await detect_button()
-    print(f"Got {button} on {device}. Press it once more to confirm…")
-    confirmation = await detect_button()
-    if confirmation != (device, button):
-        print(f"That was {confirmation[1]} on {confirmation[0]}; nothing saved. Run it again.")
+    kind = "mouse" if sys.platform == "darwin" else "joystick"
+    print(f"Press the {kind} button you want for push-to-talk (30 s)…")
+    proposal = await detect()
+    label = f"Mouse button {proposal['button']}"
+    if proposal["backend"] == "evdev":
+        label = f"{proposal['button']} on {proposal['device']}"
+    print(f"Got {label}. Press it once more to confirm…")
+    if await detect() != proposal:
+        print("That was a different button; nothing saved. Run it again.")
         raise SystemExit(1)
     path = find_config_path(args.config) or USER_CONFIG.expanduser()
-    save_ptt(path, device, button)
-    print(f"Saved to {path}: push-to-talk = {button} on {device}.")
+    settings = {key: value for key, value in proposal.items() if key != "backend"}
+    save_ptt(path, proposal["backend"], settings)
+    print(f"Saved to {path}: push-to-talk = {label}.")
 
 
 async def _gui(args: argparse.Namespace) -> None:
@@ -474,7 +477,9 @@ def main() -> None:
     gui.add_argument("--no-browser", action="store_true")
     gui.add_argument("--config")
     gui.add_argument("--session", metavar="PATH", help="Session file to edit and launch with")
-    ptt_setup = commands.add_parser("ptt-setup", help="Detect and save a joystick PTT button")
+    ptt_setup = commands.add_parser(
+        "ptt-setup", help="Assign mouse PTT on macOS or joystick PTT on Linux"
+    )
     ptt_setup.add_argument("--config")
     voices = commands.add_parser("voices", help="List ElevenLabs voices and quota")
     voices.add_argument("--config")

@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-_TABLE = re.compile(r"^\s*#?\s*\[([A-Za-z0-9_.\-]+)\]\s*$")
+_TABLE = re.compile(r"^\s*#?\s*\[([A-Za-z0-9_.\-]+)\]\s*(?:#.*)?$")
 
 
 def _table_name(line: str) -> str | None:
@@ -41,19 +41,15 @@ def replace_section(text: str, section: str, block: str) -> str:
     return "\n".join(kept).rstrip() + "\n"
 
 
-def ptt_block(device: str, button: str) -> str:
-    return (
-        "[ptt]\n"
-        'backend = "evdev"          # "terminal" = Enter to start/stop\n'
-        "\n"
-        "[ptt.evdev]                 # written by `familiar ptt-setup`\n"
-        f"device = {json.dumps(device)}\n"
-        f"button = {json.dumps(button)}\n"
-    )
+def ptt_block(backend: str, settings: dict) -> str:
+    lines = ["[ptt]", f"backend = {json.dumps(backend)}", "", f"[ptt.{backend}]"]
+    for key, value in settings.items():
+        lines.append(f"{json.dumps(key)} = {json.dumps(value, ensure_ascii=False)}")
+    return "\n".join(lines) + "\n"
 
 
-def save_ptt(path: Path, device: str, button: str) -> None:
-    """Point the config at an evdev push-to-talk button, creating the file if needed."""
+def save_ptt(path: Path, backend: str, settings: dict) -> None:
+    """Save push-to-talk settings, creating the file if needed."""
     text = path.read_text() if path.is_file() else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(replace_section(text, "ptt", ptt_block(device, button)))
+    path.write_text(replace_section(text, "ptt", ptt_block(backend, settings)))

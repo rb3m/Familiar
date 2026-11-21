@@ -3,19 +3,21 @@
 import asyncio
 import json
 import secrets
+import sys
 import time
 import tomllib
 from contextlib import suppress
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
 
 from familiar.audio.player import Player
-from familiar.config import AppConfig, BackendConfig, find_config_path, load_config
+from familiar.config import USER_CONFIG, AppConfig, BackendConfig, find_config_path, load_config
+from familiar.config_writer import save_ptt
 from familiar.fallback import close_backend
-from familiar.interfaces import ConfigError, Message, read_user_data, save_user_data
+from familiar.interfaces import ConfigError, Message, PluginError, read_user_data, save_user_data
 from familiar.persona import (
     BUILTIN_PERSONAS_DIR,
     TRUTHFULNESS_RULES,
@@ -28,6 +30,7 @@ from familiar.persona import (
     validate_persona,
 )
 from familiar.plugins import available, load, load_class
+from familiar.ptt.setup import detect
 from familiar.session_settings import (
     VERSION as SESSION_VERSION,
 )
@@ -177,6 +180,8 @@ class APIService:
         self._quota_at = float("-inf")
         self._quota_lock = asyncio.Lock()
         self._audio_lock = asyncio.Lock()
+        self._ptt_lock = asyncio.Lock()
+        self.config_path = config_path or find_config_path(None) or USER_CONFIG.expanduser()
 
     def personas(self) -> list[tuple[Any, bool]]:
         return list_personas(
@@ -467,7 +472,93 @@ class APIService:
         save_session(self.session_path, settings)
         return web.json_response(asdict(settings))
 
+    def ptt_info(self, backend: str, settings: dict) -> dict:
+        label = {"terminal": "Terminal (Enter)", "mouse": f"Mouse button {settings.get('button')}"}
+        if backend == "evdev":
+            label[backend] = f"{settings.get('button')} on {settings.get('device')}"
+        kind = {"darwin": "mouse", "linux": "joystick"}.get(sys.platform)
+        return dict(
+            backend=backend,
+            settings=settings,
+            label=label.get(backend, backend),
+            detectable=kind is not None,
+            kind=kind,
+        )
+
+    def check_ptt_idle(self) -> None:
+        if self.sessions.state["running"] or self._ptt_lock.locked():
+            raise SessionConflictError("Stop the session or finish button assignment first")
+
+    async def get_ptt(self, request: web.Request) -> web.Response:
+        spec = self.config.ptt
+        return web.json_response(self.ptt_info(spec.backend, spec.settings))
+
+    async def detect_ptt(self, request: web.Request) -> web.Response:
+        self.check_ptt_idle()
+        data = await optional_body(request)
+        timeout = data.get("timeout", 30)
+        if type(timeout) not in (int, float) or not 0 < timeout <= 60:
+            raise ConfigError("timeout must be a number greater than 0 and at most 60 seconds")
+        self.check_ptt_idle()
+        async with self._ptt_lock:
+            try:
+                async with asyncio.timeout(timeout):
+                    proposal = await detect(timeout)
+            except TimeoutError:
+                raise web.HTTPRequestTimeout(
+                    reason="No push-to-talk button pressed in time"
+                ) from None
+            except PluginError as exc:
+                raise ConfigError(str(exc)) from exc
+        settings = {key: value for key, value in proposal.items() if key != "backend"}
+        return web.json_response(self.ptt_info(proposal["backend"], settings))
+
+    @staticmethod
+    def validate_ptt(backend: str, settings: dict) -> None:
+        if backend == "mouse":
+            button = settings.get("button")
+            if type(button) is not int or button < 2:
+                raise ConfigError("mouse button must be an integer >= 2")
+            if not isinstance(settings.get("consume", True), bool):
+                raise ConfigError("consume must be a boolean")
+            if settings.keys() - {"button", "consume"}:
+                raise ConfigError("Unknown mouse setting")
+            return
+        if backend == "evdev":
+            if any(
+                not isinstance(settings.get(key), str) or not settings[key].strip()
+                for key in ("device", "button")
+            ):
+                raise ConfigError("evdev requires device and button strings")
+            if settings.keys() - {"device", "button"}:
+                raise ConfigError("Unknown evdev setting")
+            return
+        if backend == "terminal":
+            if settings:
+                raise ConfigError("terminal settings must be empty")
+            return
+        raise ConfigError("Unknown push-to-talk backend")
+
+    async def put_ptt(self, request: web.Request) -> web.Response:
+        self.check_ptt_idle()
+        data = await body(request)
+        backend, settings = data.get("backend"), data.get("settings")
+        if not isinstance(settings, dict):
+            raise ConfigError("settings must be an object")
+        self.validate_ptt(backend, settings)
+        self.check_ptt_idle()
+        async with self._ptt_lock:
+            save_ptt(self.config_path, backend, settings)
+            self.config = replace(self.config, ptt=load_config(self.config_path).ptt)
+            self.sessions.config = self.config
+        return await self.get_ptt(request)
+
     async def start(self, request: web.Request) -> web.Response:
+        self.check_ptt_idle()
+        async with self._ptt_lock:
+            return await self._start(request)
+
+    async def _start(self, request: web.Request) -> web.Response:
         if self.sessions.state["running"]:
             raise SessionConflictError("A session is already running")
         data = await optional_body(request)
@@ -582,6 +673,9 @@ def create_app(
     app.add_routes(
         [
             web.get("/api/state", api.state),
+            web.get("/api/ptt", api.get_ptt),
+            web.post("/api/ptt/detect", api.detect_ptt),
+            web.put("/api/ptt", api.put_ptt),
             web.get("/api/languages", api.get_languages),
             web.post("/api/languages", api.add_language),
             web.post("/api/personas/draft", api.draft),

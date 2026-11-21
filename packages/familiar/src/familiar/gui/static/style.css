@@ -1097,3 +1097,6 @@ output {
 [tabindex="-1"]:focus-visible {
   outline: none;
 }
+
+.ptt-panel h2 { margin-bottom:10px; }
+.ptt-panel .help { margin:12px 0 0; }

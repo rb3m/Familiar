@@ -40,6 +40,7 @@ elevenlabs = "familiar.backends.elevenlabs.tts:ElevenLabsTTS"
 [project.entry-points."familiar.ptt"]
 terminal = "familiar.ptt.terminal:TerminalPTT"
 evdev = "familiar.ptt.evdev:EvdevPTT"
+mouse = "familiar.ptt.mouse:MousePTT"
 
 
 [project.entry-points."familiar.keyboard"]

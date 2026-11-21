@@ -336,7 +336,9 @@ async def test_ring_and_exit(monkeypatch):
 @pytest.mark.asyncio
 async def test_terminal_refusal():
     manager = SessionManager(AppConfig())
-    with pytest.raises(ConfigError, match="familiar ptt-setup"):
+    with pytest.raises(
+        ConfigError, match="Assign a push-to-talk button in the Push-to-talk panel first"
+    ):
         await manager.start("mira", "en")
     assert manager.process is None
 

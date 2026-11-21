@@ -1,11 +1,16 @@
-"""Detect a pressed button on readable joystick devices."""
+"""Detect a push-to-talk button on the current platform."""
 
 import asyncio
+import sys
 from typing import Any
 
 from familiar.interfaces import PluginError
 
 from .evdev import evdev_module
+
+
+class DetectionTimeoutError(PluginError, TimeoutError):
+    """No button arrived before the setup deadline."""
 
 
 def _joystick(code: int, codes: Any) -> bool:
@@ -74,7 +79,7 @@ async def _first_success(tasks: list[asyncio.Task], timeout: float) -> tuple[str
             return winners[0].result()
     if not pending:
         raise PluginError("All joysticks disconnected during PTT setup")
-    raise PluginError(f"No joystick button pressed within {timeout:g} seconds")
+    raise DetectionTimeoutError(f"No joystick button pressed within {timeout:g} seconds")
 
 
 async def detect_button(timeout: float = 30) -> tuple[str, str]:
@@ -90,3 +95,41 @@ async def detect_button(timeout: float = 30) -> tuple[str, str]:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         await asyncio.gather(*(asyncio.to_thread(device.close) for device in devices))
+
+
+async def detect_mouse_button(timeout: float = 30) -> int:
+    """Consume spare mouse buttons while waiting for a press."""
+    from .mouse import MousePTT
+
+    class Detector(MousePTT):
+        def _callback(self, proxy: Any, kind: int, event: Any, context: Any) -> Any:
+            q = self._quartz
+            if kind in (q.kCGEventTapDisabledByTimeout, q.kCGEventTapDisabledByUserInput):
+                return super()._callback(proxy, kind, event, context)
+            button = q.CGEventGetIntegerValueField(event, q.kCGMouseEventButtonNumber)
+            if button < 2:
+                return event
+            if kind == q.kCGEventOtherMouseDown:
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, button)
+            return None
+
+    detector = Detector({"button": 2})
+    try:
+        async with asyncio.timeout(timeout):
+            await detector._start()
+            button = await detector._queue.get()
+            if button is None:
+                raise PluginError("Mouse detector stopped before a button was pressed")
+            return button
+    except TimeoutError:
+        raise DetectionTimeoutError(f"No mouse button pressed within {timeout:g} seconds") from None
+    finally:
+        await detector.aclose()
+
+
+async def detect(timeout: float = 30) -> dict:
+    """Detect a platform-appropriate push-to-talk button."""
+    if sys.platform == "darwin":
+        return {"backend": "mouse", "button": await detect_mouse_button(timeout)}
+    device, button = await detect_button(timeout)
+    return {"backend": "evdev", "device": device, "button": button}

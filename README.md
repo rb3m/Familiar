@@ -186,3 +186,15 @@ any game or desk voice mode. The carrier controls playback; everyone can ask wha
 Music ducks during speech, pauses for critical events and rare track remarks, and remembers
 dislikes when memory is enabled. Local picks learn from what you play through or skip early;
 remarks use only facts from your tags. See `config.example.toml` for tuning and data overrides.
+
+### macOS launcher and mouse push-to-talk
+
+Run `uv run familiar gui` (the macOS app installer opens this launcher by default).
+In the launcher's **Push-to-talk** panel, choose **Assign…**, press a spare mouse or
+trackball button, then **Save**. Left and right clicks cannot be assigned. Alternatively,
+run `uv run familiar ptt-setup` and press the same button twice to confirm.
+
+Grant **System Settings > Privacy & Security > Accessibility** to the app running Familiar:
+**Terminal** when launched there, or **Familiar.app** when launched from the installed app.
+Retry assignment after granting permission. The assigned button is consumed while listening,
+so a back/forward button will not also navigate your browser.

@@ -37,10 +37,25 @@ def test_appends_when_missing():
 
 def test_save_ptt_creates_file(tmp_path):
     path = tmp_path / "sub" / "config.toml"
-    save_ptt(path, "Thrustmaster T.Flight Hotas One", "BTN_BASE3")
+    save_ptt(path, "evdev", {"device": "Thrustmaster T.Flight Hotas One", "button": "BTN_BASE3"})
     data = tomllib.loads(path.read_text())
     assert data["ptt"]["backend"] == "evdev"
     assert data["ptt"]["evdev"] == {
         "device": "Thrustmaster T.Flight Hotas One",
         "button": "BTN_BASE3",
     }
+
+
+def test_mouse_round_trip_preserves_other_tables(tmp_path):
+    from familiar.config import load_config
+
+    path = tmp_path / "config.toml"
+    path.write_text('# Keep me\n[llm]\nbackend = "gemini"\n\n[ptt]\nbackend = "terminal"\n')
+    save_ptt(path, "mouse", {"button": 4, "consume": False})
+    assert path.read_text().startswith('# Keep me\n[llm]\nbackend = "gemini"')
+    config = load_config(path)
+    assert config.ptt.backend == "mouse"
+    assert config.ptt.settings == {"button": 4, "consume": False}
+    save_ptt(path, "evdev", {"device": "Stick", "button": "BTN_TRIGGER"})
+    assert "[ptt.mouse]" not in path.read_text()
+    assert load_config(path).ptt.settings == {"device": "Stick", "button": "BTN_TRIGGER"}

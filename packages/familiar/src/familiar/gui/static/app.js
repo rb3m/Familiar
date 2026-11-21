@@ -10,6 +10,9 @@ const samples = {
 };
 const criticalEvents = new Set(['fuel_low', 'air_pressure', 'engine_warning', 'fined', 'job_cancelled']);
 let state;
+let ptt;
+let pttProposal;
+let pttBusy = false;
 let choices = { game: null, crew: [], carrier: '', language: '', banter: 2, stereo: false, seats: {} };
 let saveTimer;
 let saveFailed = false;
@@ -425,7 +428,7 @@ function renderQuota() {
 
 function updateStartAvailability() {
   const toggle = $('#session-toggle');
-  toggle.disabled = sessionBusy || (!state.session.running && (saveFailed || !choices.crew.length || !choices.language));
+  toggle.disabled = sessionBusy || pttBusy || (!state.session.running && (saveFailed || !choices.crew.length || !choices.language));
 }
 
 function lockSetupControls(locked) {
@@ -463,6 +466,7 @@ function renderSession() {
   $('#session-status').textContent = message;
   if (!session.running) $('#listening').hidden = true;
   lockSetupControls(session.running || sessionBusy);
+  renderPTT();
 }
 
 function applySession(session) {
@@ -999,7 +1003,57 @@ function addLanguageControl() {
   $('#language').parentElement.after(details);
 }
 
+function renderPTT() {
+  const locked = Boolean(state?.session.running || sessionBusy || pttBusy);
+  $('#ptt-label').textContent = pttProposal?.label || ptt?.label || 'Unavailable';
+  $('#ptt-assign').disabled = locked || !ptt?.detectable;
+  $('#ptt-save').hidden = $('#ptt-cancel').hidden = !pttProposal;
+  $('#ptt-save').disabled = $('#ptt-cancel').disabled = locked;
+}
+
+async function assignPTT() {
+  pttBusy = true;
+  pttProposal = null;
+  $('#ptt-status').textContent = 'Press the button now…';
+  renderPTT();
+  updateStartAvailability();
+  try {
+    pttProposal = await post('/api/ptt/detect', { timeout: 30 });
+    $('#ptt-status').textContent = 'Save this button for push-to-talk?';
+  } catch (error) {
+    $('#ptt-status').textContent = error.message;
+  } finally {
+    pttBusy = false;
+    renderPTT();
+    updateStartAvailability();
+  }
+}
+
+async function savePTT() {
+  pttBusy = true;
+  renderPTT();
+  updateStartAvailability();
+  try {
+    ptt = await put('/api/ptt', { backend: pttProposal.backend, settings: pttProposal.settings });
+    pttProposal = null;
+    $('#ptt-status').textContent = 'Button saved.';
+  } catch (error) {
+    $('#ptt-status').textContent = error.message;
+  } finally {
+    pttBusy = false;
+    renderPTT();
+    updateStartAvailability();
+  }
+}
+
 function bindControls() {
+  $('#ptt-assign').addEventListener('click', assignPTT);
+  $('#ptt-save').addEventListener('click', savePTT);
+  $('#ptt-cancel').addEventListener('click', () => {
+    pttProposal = null;
+    $('#ptt-status').textContent = '';
+    renderPTT();
+  });
   addLanguageControl();
   for (const tab of $$('[data-view]')) tab.addEventListener('click', () => switchView(tab.dataset.view));
   $('.brand').addEventListener('click', (event) => { event.preventDefault(); switchView('play'); });
@@ -1068,7 +1122,9 @@ async function init() {
     $('#session-status').textContent = 'Waiting for an authenticated launcher URL.';
     return;
   }
-  const results = await Promise.allSettled([api('/api/state'), api('/api/voices'), api('/api/session/settings')]);
+  const results = await Promise.allSettled([api('/api/state'), api('/api/voices'), api('/api/session/settings'), api('/api/ptt')]);
+  if (results[3].status === 'fulfilled') ptt = results[3].value;
+  if (results[3].status === 'rejected') $('#ptt-status').textContent = results[3].reason.message;
   if (results[1].status === 'fulfilled') voices = results[1].value;
   if (results[1].status === 'rejected') voicesError = `Voice catalog unavailable: ${results[1].reason.message}`;
   if (results[0].status === 'rejected') {

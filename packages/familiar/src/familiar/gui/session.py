@@ -129,10 +129,7 @@ class SessionManager:
             if self._state["running"]:
                 raise SessionConflictError("A session is already running")
             if self.config.ptt.backend == "terminal":
-                raise ConfigError(
-                    "Assign a HOTAS button with `familiar ptt-setup` first; "
-                    "the terminal push-to-talk needs a terminal window"
-                )
+                raise ConfigError("Assign a push-to-talk button in the Push-to-talk panel first")
             self.process = await asyncio.create_subprocess_exec(
                 *command,
                 cwd=self.config_path.parent if self.config_path else Path.cwd(),
