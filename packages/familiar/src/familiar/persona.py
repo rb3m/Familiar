@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from familiar.interfaces import ConfigError, load_data
+from familiar.speech import MARKUP_RULE
 
 BUILTIN_PERSONAS_DIR = Path(__file__).parent / "personas"
 
@@ -102,6 +103,7 @@ class Persona:
         parts.append(f"- {TRUTHFULNESS_RULES[self.truthfulness]}")
         parts.append(f"- {PRACTICAL_FACTS_RULE}")
         parts.append(f"- {SPOKEN_RULE}")
+        parts.append(f"- {MARKUP_RULE}")
         if game in self.game_hooks:
             parts.append(self.game_hooks[game])
         parts.append(f"Always reply in {language_names().get(language, language)}.")

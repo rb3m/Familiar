@@ -6,6 +6,8 @@ from collections import deque
 from itertools import permutations
 
 from familiar.crew import Crew, all_aliases, persona_id
+from familiar.speech import SPAN, speakable
+from familiar.speech import TAG as TAG_MARKUP
 
 # Values owned by Familiar. Caps are rounded down after interpolation.
 TUNING = {
@@ -101,7 +103,6 @@ def parse_scene(text: str, crew: Crew, language: str) -> list[tuple[str, str]]:
 
 # A speaker tag: id, display name or alias, then an ASCII or full-width colon.
 TAG = re.compile(r"\s*([^:：]{1,40}?)\s*[:：]\s*(.*)")
-EMPHASIS = re.compile(r"\*{1,2}([^*\n]+?)\*{1,2}")
 
 
 def speaker_names(crew: Crew, language: str) -> dict[str, str]:
@@ -129,8 +130,10 @@ def _parse_line(line: str, crew: Crew, language: str) -> tuple[str, str] | None:
     opened = raw[: len(raw) - len(raw.lstrip("*_"))]  # "**Frieren:** text" closes its marks
     if opened and rest.startswith(opened[::-1]):
         rest = rest[len(opened) :].strip()
-    # Emphasis (*da*, **Bozhe moy**) is how some personas talk; keep the words, drop the marks.
-    text = crew.strip_prefix(EMPHASIS.sub(r"\1", rest).strip(), language)
-    if not text or re.search(r"[\[\]*]|[<>]|\([^)]*\)", text):
+    # Keep *emphasis*, *directions* and [tags] as written: the voice filter cuts what isn't
+    # said (familiar.speech) and transcripts keep it for a tag-capable voice.
+    text = crew.strip_prefix(rest, language)
+    leftover = TAG_MARKUP.sub("", SPAN.sub("", text))
+    if not speakable(text) or re.search(r"[\[\]*]|[<>]|\([^)]*\)", leftover):
         return None
     return speaker, text

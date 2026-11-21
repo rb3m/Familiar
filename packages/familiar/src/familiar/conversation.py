@@ -33,6 +33,7 @@ from familiar.memory import MemoryKeeper
 from familiar.memory.keeper import CREW_REPLY_WINDOW
 from familiar.persona import Persona
 from familiar.pipeline.sentences import SentenceSplitter
+from familiar.speech import MARKUP_RULE
 from familiar.tools import ToolRegistry, validate_arguments
 from familiar.transcript import TranscriptLog
 
@@ -273,7 +274,7 @@ class Conversation:
             "A third crew member may join for at most one line.\n"
             "Output ONLY 2-4 short spoken lines, aiming for 2-3, each as "
             "<persona_id>: <text>, with actual IDs and no angle brackets. "
-            "No stage directions, player lines or claims to take game actions. "
+            "No stage directions, player lines or claims to take game actions. " + MARKUP_RULE + " "
             "Strict members use only supplied facts. Playful members may joke but must "
             "never misreport game state. Practical information must always be exact.\n"
             "Crew roster (third-person roles and relationships):\n"

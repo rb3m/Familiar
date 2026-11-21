@@ -33,7 +33,8 @@ the core works without any game pack. The commands are in `README.md`.
 | Crew | `packages/familiar/src/familiar/crew.py` | Ordered roster, controls (carrier) and DJ roles, hand-off targets, guest rotation, alias/follow-up addressing and event interests. |
 | History | `packages/familiar/src/familiar/history.py` | Attributed shared records and a swappable renderer for each speaker. |
 | Conversation | `packages/familiar/src/familiar/conversation.py` | Owns history; streams LLM output, splits sentences, hands them to TTS. |
-| Sentences | `packages/familiar/src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
+| Sentences | `packages/familiar/src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush; never cuts inside `*…*` or `[…]`. |
+| Speech | `packages/familiar/src/familiar/speech.py` | What the voice says: markup rule for prompts, stage-direction filter (`data/speech.yaml`). |
 | Transcript | `packages/familiar/src/familiar/transcript.py` | Append-only JSONL log in `data/transcripts/` (lines, tool calls/results, events): the raw material for memory, and the first place to look when debugging a live session. |
 | Director | `packages/familiar/src/familiar/director.py` | Decides when the companion speaks (priorities, TTL, cooldowns, idle chatter). |
 | Memory | `packages/familiar/src/familiar/memory/` | SQLite trip facts, local retrieval, gated recall and shutdown summaries (ADR 0005). |
@@ -51,6 +52,9 @@ Outside-owned core defaults live in packaged `data/*.yaml`, loaded through `inte
 - **SpeechToText**: `transcribe(audio: AudioClip, language) -> str`. Push-to-talk clips, not
   continuous streams, until a streaming backend needs it.
 - **TextToSpeech**: `synthesize(text, voice, language) -> AsyncIterator[AudioChunk]` (PCM16 mono).
+  It receives `speech.speakable()` text: stage directions cut, emphasis unwrapped, `[tags]`
+  removed unless its `capabilities` include `"audio_tags"` (ADR 0020). Transcripts keep the
+  raw text.
 - **GameAdapter** (M2): `events() -> AsyncIterator[GameEvent]`, `snapshot() -> dict`, optional
   `tools()`. Each game pack ships its own knowledge data.
 - **Conversation** (later): a higher-level interface so a speech-to-speech backend (Gemini Live) can

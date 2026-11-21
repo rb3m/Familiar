@@ -1,0 +1,41 @@
+# What the voice may perform and what counts as a stage direction (ADR 0020).
+# Override in ~/.config/familiar/data/familiar/speech.yaml.
+
+# Bracketed audio tags a tag-capable voice (ElevenLabs v3) may act out; other [tags] stay in
+# the text but are never sent to any voice.
+vocal_tags:
+  - sighs
+  - sigh
+  - laughs
+  - laughs softly
+  - laughs harder
+  - chuckles
+  - giggles
+  - whispers
+  - exhales
+  - inhales
+  - clears throat
+  - coughs
+  - sniffs
+  - gasps
+  - groans
+  - hums
+  - snorts
+  - crying
+  - sarcastic
+  - excited
+  - curious
+  - mischievously
+
+# An *asterisk span* is a stage direction when its first word (after the lead words below) is
+# one of these verbs in any form: "sigh", "sighs", "sighed", "sighing". Whole words only, so
+# "*nodes*" or "*Siphon*" stay emphasis.
+direction_verbs: [sigh, laugh, chuckle, giggle, whisper, exhale, inhale, lean, smile, grin,
+  smirk, pause, puff, sip, wink, shrug, snort, scoff, cough, nod, gesture, glance, yawn, groan,
+  murmur, purr, sniff, gasp, squint, tilt, adjust, flick]
+# Ambiguous as emphasis in their base form ("*clear*", "*light*"): inflected forms only.
+direction_verbs_inflected: [clear, hum, light, take, drag, turn, roll, raise, lower, blow, wave,
+  spin, tap, stub, stretch]
+
+# Words skipped before the stem check: "*she sighs*", "*slowly exhales*".
+direction_lead_words: [she, he, they, i, slowly, softly, quietly, deeply, dramatically, then, with, a]

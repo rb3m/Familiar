@@ -18,7 +18,9 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
 1. Create `packages/familiar/src/familiar/backends/<vendor>/llm.py` (or your own package).
 2. Implement the class with the attributes and methods in `interfaces/llm.py`:
    `name`, `api_version = PLUGIN_API_VERSION`, `capabilities`, `__init__(self, settings: dict)`,
-   `async stream(...)` and optional `async aclose()`.
+   `async stream(...)` and optional `async aclose()`. A TTS backend that acts out inline audio
+   tags (`[sighs]`, ElevenLabs v3) adds `"audio_tags"` to `capabilities`; others never see
+   tags (ADR 0020).
 3. Read secrets from an env var named in your settings (never from the TOML file itself).
 4. Register it in `pyproject.toml`:
    ```toml

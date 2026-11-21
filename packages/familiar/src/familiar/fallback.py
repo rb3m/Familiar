@@ -13,6 +13,7 @@ from familiar.interfaces import (
     SpeechToText,
     TextToSpeech,
 )
+from familiar.speech import AUDIO_TAGS, performs_tags, speakable
 
 _LOG = logging.getLogger(__name__)
 
@@ -73,11 +74,17 @@ class FallbackTTS(_Fallback):
     ) -> None:
         super().__init__(primary, secondary)
         self.voice_for = voice_for
+        # Let tags through to us if either voice can act them out; each backend gets its own cut.
+        tags = performs_tags(primary) or performs_tags(secondary)
+        self.capabilities = frozenset({"streaming", *([AUDIO_TAGS] if tags else [])})
 
     async def _synthesize(
         self, backend: TextToSpeech, text: str, language: str
     ) -> AsyncIterator[AudioChunk]:
-        async for chunk in backend.synthesize(text, self.voice_for(backend.name), language):
+        spoken = speakable(text, backend)
+        if not spoken:
+            return
+        async for chunk in backend.synthesize(spoken, self.voice_for(backend.name), language):
             yield chunk
 
     async def synthesize(

@@ -142,7 +142,8 @@ def test_cast_rotation_and_relationship_preference(crew):
         "outsider: Hi.\nmira: Hello.",
         "mira: Hi.\nmira: Hello.",
         "mira: Hi.\nbroken interior\nfrieren: Hello.",
-        "mira: [waves] Hi.\nfrieren: Hello.",
+        "mira: [Waves wildly at the crowd] Hi.\nfrieren: Hello.",
+        "mira: [sighs]\nfrieren: Hello.",
         "mira: <waves> Hi.\nfrieren: Hello.",
         "mira: Hi * there.\nfrieren: Hello.",
         "mira: (waves) Hi.\nfrieren: Hello.",
@@ -154,11 +155,16 @@ def test_invalid_scene(text, crew):
     assert parse_scene(text, crew, "en") == []
 
 
-def test_emphasis_is_unwrapped_not_rejected(crew):
-    text = "mira: *Okh,* listen... *da*, **Bozhe moy**!\n**Frieren:** It is *loud*."
+def test_markup_is_kept_for_the_voice_filter(crew):
+    text = (
+        "mira: *Okh,* listen... *da*, **Bozhe moy**!\n"
+        "**Frieren:** [sighs] It is *loud*.\n"
+        "mira: *Sighs, smoke curling past the microphone.* Fine."
+    )
     assert parse_scene(text, crew, "en") == [
-        ("mira", "Okh, listen... da, Bozhe moy!"),
-        ("frieren", "It is loud."),
+        ("mira", "*Okh,* listen... *da*, **Bozhe moy**!"),
+        ("frieren", "[sighs] It is *loud*."),
+        ("mira", "*Sighs, smoke curling past the microphone.* Fine."),
     ]
 
 

@@ -2,6 +2,8 @@
 
 import re
 
+from familiar.speech import open_markup
+
 _ABBREVIATION = re.compile(r"\b(?:mr|mrs|ms|dr|prof|sr|jr|e\.g|i\.e|vs|etc)\.$", re.I)
 _BOUNDARY = re.compile(r"\n|[。！？]+|[.!?…]+(?=\s)")
 
@@ -20,6 +22,8 @@ class SentenceSplitter:
             end = match.end()
             if match.group() == "." and _ABBREVIATION.search(self._buffer[:end]):
                 continue
+            if open_markup(self._buffer[:end]):
+                continue  # don't cut "*She sighs. Leans back.*" in two
             return end
         return None
 

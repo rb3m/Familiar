@@ -27,6 +27,7 @@ from familiar.interfaces import (
     TextToSpeech,
 )
 from familiar.persona import Persona
+from familiar.speech import speakable
 from familiar.transcript import TranscriptLog
 
 # Longest wait for companion services (e.g. music ducking) before audio or recording starts.
@@ -232,10 +233,13 @@ class VoiceSession:
                     if event is not None:
                         label += f" (event: {event.kind})"
                     print(f"{label}: {sentence}", flush=True)
+                    spoken = speakable(sentence, self.tts)
+                    if not spoken:
+                        # Only a stage direction: nothing to say, so nothing was missed.
+                        self.conversation.acknowledge_playback()
+                        continue
                     self._sentence_audio = False
-                    await self.player.play(
-                        self._audio(sentence, released, timings), pan=self._pan()
-                    )
+                    await self.player.play(self._audio(spoken, released, timings), pan=self._pan())
                     # Resuming the sentence generator acknowledges actual playback.
                     await self.player.wait_idle()
                     if self._sentence_audio:
