@@ -152,3 +152,27 @@ def test_slow_service_never_holds_speech(monkeypatch):
         assert time.monotonic() - started < 2
 
     run(scenario())
+
+
+@pytest.mark.parametrize("lines", [[], ["Rain at last."]])
+def test_unprompted_turn_ducks_only_once_it_has_a_line(lines):
+    """A dropped scene or empty remark must not dip the music for nothing."""
+
+    async def sentences():
+        for line in lines:
+            yield line
+
+    async def scenario():
+        from time import monotonic
+
+        service = Service()
+        session = make_session(services=[service])
+        event = GameEvent("banter", "ambient", {"summary": "scene"}, datetime.now(UTC))
+        timings = dict.fromkeys(("stt_ms", "first_sentence_ms", "first_audio_ms"))
+        await session._speak(sentences(), monotonic(), timings, event)
+        await session._flush_speech()
+        assert any(state.speaking for state in service.states) == bool(lines)
+        assert service.states == [] or service.states[-1] == SpeechState()
+        assert "pending" not in session._speech_busy
+
+    run(scenario())

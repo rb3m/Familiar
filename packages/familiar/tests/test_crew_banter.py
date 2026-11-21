@@ -143,7 +143,8 @@ def test_cast_rotation_and_relationship_preference(crew):
         "mira: Hi.\nmira: Hello.",
         "mira: Hi.\nbroken interior\nfrieren: Hello.",
         "mira: [waves] Hi.\nfrieren: Hello.",
-        "mira: *waves* Hi.\nfrieren: Hello.",
+        "mira: <waves> Hi.\nfrieren: Hello.",
+        "mira: Hi * there.\nfrieren: Hello.",
         "mira: (waves) Hi.\nfrieren: Hello.",
         "mira: Mira:\nfrieren: Hi.",
         "mira: Hello.",
@@ -151,6 +152,14 @@ def test_cast_rotation_and_relationship_preference(crew):
 )
 def test_invalid_scene(text, crew):
     assert parse_scene(text, crew, "en") == []
+
+
+def test_emphasis_is_unwrapped_not_rejected(crew):
+    text = "mira: *Okh,* listen... *da*, **Bozhe moy**!\n**Frieren:** It is *loud*."
+    assert parse_scene(text, crew, "en") == [
+        ("mira", "Okh, listen... da, Bozhe moy!"),
+        ("frieren", "It is loud."),
+    ]
 
 
 def test_parser_exterior_junk_prefixes_and_truncation(crew):

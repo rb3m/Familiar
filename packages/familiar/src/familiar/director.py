@@ -127,7 +127,7 @@ class Director:
             self._busy.add(reason)
         if not busy:
             self._busy.discard(reason)
-        if busy or reason in {"user", "speaking", "reply"}:
+        if busy or reason in {"user", "speaking", "reply", "pending"}:
             self._reset_quiet()
         self._changed.set()
 
@@ -155,7 +155,7 @@ class Director:
         if not event.data.get("companion_service") and (not self._connected or self._paused):
             return False
         if preempts(event):
-            return not (self._busy - {"speaking"})
+            return not (self._busy - {"speaking", "pending"})
         if self._busy:
             return False
         if event.data.get("cue"):

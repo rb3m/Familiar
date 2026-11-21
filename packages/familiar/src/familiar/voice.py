@@ -126,6 +126,7 @@ class VoiceSession:
         self._reply_task = None
         self._busy("speaking", False)
         self._busy("critical", False)
+        self._busy("pending", False)
         self._busy("reply", False)
 
     async def _event(self, pressed: bool) -> None:
@@ -212,12 +213,19 @@ class VoiceSession:
         event: GameEvent | None = None,
     ) -> None:
         self._event_kind = event.kind if event is not None else None
-        self._busy("critical", event is not None and event.priority == "critical")
-        self._busy("speaking", True)
+        critical = event is not None and event.priority == "critical"
+        self._busy("pending", True)
+        if event is None:
+            # The player is waiting for an answer: keep music ducked from release onwards.
+            self._start_speech(critical)
         try:
             await self._flush_speech()
             async with aclosing(sentences):
                 async for sentence in sentences:
+                    if "speaking" not in self._speech_busy:
+                        # Unprompted turns duck only once there is a line to say.
+                        self._start_speech(critical)
+                        await self._flush_speech()
                     if timings["first_sentence_ms"] is None:
                         timings["first_sentence_ms"] = (monotonic() - released) * 1000
                     label = self.conversation.speaker.display_name
@@ -238,8 +246,13 @@ class VoiceSession:
                 self.director.notify_spoke()
             self._busy("speaking", False)
             self._busy("critical", False)
+            self._busy("pending", False)
             self._event_kind = None
             await self._flush_speech()
+
+    def _start_speech(self, critical: bool) -> None:
+        self._busy("critical", critical)
+        self._busy("speaking", True)
 
     async def _interject(self, event: GameEvent) -> None:
         timings: dict[str, float | None] = dict.fromkeys(
@@ -270,7 +283,9 @@ class VoiceSession:
                     continue
                 self._interjection = event
                 self._event_kind = event.kind
-                self._busy("speaking", True)
+                # Hold the Director, but don't tell services (music ducking) until a line exists.
+                self._busy("pending", True)
+                # Critical lines are pre-written and always spoken: pause music right away.
                 self._busy("critical", self.director.preempts(event))
                 self._reply_task = asyncio.create_task(self._interject(event))
 

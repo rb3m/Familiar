@@ -101,6 +101,7 @@ def parse_scene(text: str, crew: Crew, language: str) -> list[tuple[str, str]]:
 
 # A speaker tag: id, display name or alias, then an ASCII or full-width colon.
 TAG = re.compile(r"\s*([^:：]{1,40}?)\s*[:：]\s*(.*)")
+EMPHASIS = re.compile(r"\*{1,2}([^*\n]+?)\*{1,2}")
 
 
 def speaker_names(crew: Crew, language: str) -> dict[str, str]:
@@ -124,7 +125,12 @@ def _parse_line(line: str, crew: Crew, language: str) -> tuple[str, str] | None:
     if speaker is None:
         return None
     match = TAG.match(line)
-    text = crew.strip_prefix(match[2].strip().lstrip("*_ "), language)
+    raw, rest = match[1], match[2].strip()
+    opened = raw[: len(raw) - len(raw.lstrip("*_"))]  # "**Frieren:** text" closes its marks
+    if opened and rest.startswith(opened[::-1]):
+        rest = rest[len(opened) :].strip()
+    # Emphasis (*da*, **Bozhe moy**) is how some personas talk; keep the words, drop the marks.
+    text = crew.strip_prefix(EMPHASIS.sub(r"\1", rest).strip(), language)
     if not text or re.search(r"[\[\]*]|[<>]|\([^)]*\)", text):
         return None
     return speaker, text
