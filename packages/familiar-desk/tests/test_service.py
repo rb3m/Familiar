@@ -114,3 +114,12 @@ async def test_context_names_the_location():
     assert service.describe() == (
         "Local time in Corregidora, Querétaro: Friday 2026-11-20 18:42 (dusk)."
     )
+
+
+@pytest.mark.asyncio
+async def test_context_adds_location_notes():
+    await Feed([ClockSource({"timezone": "UTC"})], clock=lambda: NOW).run(
+        asyncio.Event(), once=True
+    )
+    service = DeskService({"location_notes": "The Big Q."}, clock=lambda: NOW)
+    assert service.describe() == "Local time: Friday 2026-11-20 18:42 (dusk).\nThe Big Q."

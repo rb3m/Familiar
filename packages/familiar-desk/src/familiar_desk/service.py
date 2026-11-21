@@ -115,7 +115,9 @@ class DeskService(CompanionService):
                 verb = "was" if local >= sunset else "is at"
                 detail += f"; sunset {verb} {sunset:%H:%M}"
             where = f" in {data['location']}" if data.get("location") else ""
-            return f"Local time{where}: {data['weekday']} {local:%Y-%m-%d %H:%M} ({detail})."
+            line = f"Local time{where}: {data['weekday']} {local:%Y-%m-%d %H:%M} ({detail})."
+            notes = self.settings.get("location_notes")
+            return f"{line}\n{notes}" if notes else line
         except (ValueError, KeyError, TypeError):
             return ""
 

@@ -42,6 +42,7 @@ def test_config_defaults_and_path(tmp_path):
         "[desk]\ntimezone = 12",
         '[desk]\nlocation = " "',
         "[desk]\nlocation = 5",
+        '[desk]\nlocation_notes = ""',
     ],
 )
 def test_invalid_config(tmp_path, section):

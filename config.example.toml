@@ -165,6 +165,7 @@ max_alerts = 8            # integer from 1 to 8
 # longitude = -99.1332
 # timezone = "America/Mexico_City" # defaults to the system local zone
 # location = "Mexico City"  # place name the companion may mention
+# location_notes = "Locals call it CDMX." # free text about the place, added to the prompt
 
 [music]
 enabled = false          # companion DJ, beside any game or in desk voice mode
