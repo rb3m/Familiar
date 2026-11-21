@@ -8,7 +8,12 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
 ARGS="${*:-voice}"
 if [[ "${1:-}" == "gui" ]]; then
-  exec zsh -lic "cd '$REPO' && exec uv run familiar $ARGS"
+  # Detached, so Familiar.app returns at once and every reopen runs this again: `familiar gui`
+  # then finds the running server and only reopens its window.
+  LOG="$HOME/Library/Logs/Familiar/gui.log"
+  mkdir -p "$(dirname "$LOG")"
+  nohup zsh -lic "cd '$REPO' && exec uv run familiar $ARGS" </dev/null >>"$LOG" 2>&1 &
+  exit 0
 fi
 INNER="cd '$REPO' && clear && uv run familiar $ARGS; echo; read -r '?Familiar has stopped. Press Enter to close… '; exit"
 # AppleScript string literal: escape backslashes, then double quotes.
