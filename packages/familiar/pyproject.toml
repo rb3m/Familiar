@@ -10,6 +10,8 @@ dependencies = [
     "google-genai>=3.3.0",
     "httpx>=0.28.1",
     "numpy>=2.5.4",
+    "pyobjc-framework-ApplicationServices>=11.0 ; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=11.0 ; sys_platform == 'darwin'",
     "pyyaml>=6.0.3",
     "sounddevice>=0.5.6",
 ]
