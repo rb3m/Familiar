@@ -1,7 +1,7 @@
 # 0020: Stage directions are kept in text, cut from speech
 
 Date: 2026-11-21
-Status: Accepted
+Status: Accepted; prompt contract and tag grammar amended by 0021
 
 ## Context
 

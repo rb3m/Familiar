@@ -47,6 +47,16 @@ class Voice:
         ("*Siphon* the fuel.", "Siphon the fuel.", None),
         ("**Sighs. Leans back.** Fine.", "Fine.", None),
         ("*nodding slowly* Yes.", "Yes.", None),
+        # Tool calls written as text (live, ADR 0021) and lowercase stage notes.
+        ("[play_music(kind='genre', query='punchy rock')]", "", ""),
+        ("Hold on, *dorogoy*. *[Tool call: play_", "Hold on, dorogoy.", None),
+        ("{play_music: punchy rock} Here.", "Here.", None),
+        ("[playing punchy rock music] Da.", "Da.", None),
+        ("[Intro] starts now.", "[Intro] starts now.", None),
+        # Review regressions (Codex): nesting, text after a call, ordinary words.
+        ("[Tool call: play_music(query='rock')] Enjoy the music.", "Enjoy the music.", None),
+        ("A tool call lets me control the music.", "A tool call lets me control the music.", None),
+        ("[play_music(query='rock', genres=['rock'], kind='genre')] Da.", "Da.", None),
     ],
 )
 def test_speakable(text, plain, v3):
@@ -90,6 +100,11 @@ async def test_fallback_cuts_tags_per_backend(primary_fails):
     assert (plain.texts if primary_fails else v3.texts) == [
         "Okh, fine." if primary_fails else "[sighs] Okh, fine."
     ]
+
+
+def test_markup_rule_asks_for_no_tags_yet():
+    # Asking for [tags] made Gemini skip tool calls (ADR 0021).
+    assert "[" not in MARKUP_RULE and "{" not in MARKUP_RULE
 
 
 def test_markup_rule_reaches_every_persona_prompt():

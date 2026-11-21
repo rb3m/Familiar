@@ -8,8 +8,12 @@ from familiar.interfaces import load_data
 
 AUDIO_TAGS = "audio_tags"  # TTS capability: acts out [sighs]-style tags (ElevenLabs v3)
 
-# A reserved tag: lowercase words, at most three. "[Track 2]" or "[Intro]" is spoken text.
-TAG = re.compile(r"\[([a-z]+(?: [a-z]+){0,2})\]")
+# A stage note or audio tag: lowercase words only. "[Track 2]" or "[Intro]" is spoken text.
+TAG = re.compile(r"\[([a-z]+(?: [a-z]+)*)\]")
+# A tool call written out as text instead of made: "[play_music(query='rock')]",
+# "{play_music: rock}", "[Tool call: play_…". Never spoken (ADR 0021).
+CALL_START = re.compile(r"[\[{]\s*(?:tool[ _-]?call\b|[a-z]+(?:_[a-z]+)+\s*[(:])", re.IGNORECASE)
+CLOSERS = {"[": "]", "{": "}", "(": ")"}
 SPAN = re.compile(r"\*{1,2}([^*]+?)\*{1,2}")
 WORD = re.compile(r"[^\W\d_]+")
 # Left over after a removed direction: "[sighs]. Oh" -> "Oh"; a minus before a digit stays.
@@ -17,11 +21,11 @@ ORPHAN_LEAD = re.compile(r"^(?:[\s.,;:!?…]|[—–-](?!\d))+")
 SPACE_BEFORE_PUNCT = re.compile(r"\s+([,.;:!?…])")
 REPEATED_PUNCT = re.compile(r"([,;:])\s*(?=[,.;:!?…])")
 
+# Tested live (ADR 0021): asking for [audio tags], with or without an example, made Gemini
+# answer in prose instead of calling tools. Ask for tags only once a tag-capable voice exists.
 MARKUP_RULE = (
-    "Formatting for the voice: write a vocal sound only as a short lowercase audio tag in "
-    "square brackets, such as [sighs], [laughs softly] or [whispers]; never narrate actions, "
-    "gestures or scenery. Asterisks are only for spoken emphasis on words you say, such as "
-    "*really*. Example: '[sighs] Oh, *darling*, not again.' Not: '*Sighs, leaning back.* Oh.'"
+    "Write only words you say aloud: no stage directions, actions, gestures, sound effects or "
+    "bracketed notes. Asterisks only mark emphasis on spoken words."
 )
 
 
@@ -72,14 +76,45 @@ def speakable(text: str, backend: Any = None) -> str:
     def tag(match: re.Match) -> str:
         return match[0] if keep_tags and match[1] in vocal else ""
 
-    unwrapped = SPAN.sub(span, text)
-    spoken = TAG.sub(tag, unwrapped)
-    removed = spoken != SPAN.sub(lambda match: match[1], text)
+    without_calls = strip_calls(text)
+    spoken = TAG.sub(tag, SPAN.sub(span, without_calls))
+    removed = without_calls != text or spoken != SPAN.sub(lambda match: match[1], text)
     spoken = re.sub(r"\s{2,}", " ", spoken.replace("\n", " "))
     if removed:
         spoken = REPEATED_PUNCT.sub("", SPACE_BEFORE_PUNCT.sub(r"\1", spoken))
-        spoken = ORPHAN_LEAD.sub("", spoken)
+        spoken = ORPHAN_LEAD.sub("", spoken.replace("*", ""))
     return spoken.strip()
+
+
+def _call_end(text: str, start: int) -> int:
+    """Index after the bracket opened at ``start``, through nesting and quotes; else the end."""
+    expected, quote = [], None
+    for index in range(start, len(text)):
+        char = text[index]
+        if quote is not None:
+            quote = None if char == quote else quote
+            continue
+        if char in "'\"":
+            quote = char
+            continue
+        if char in CLOSERS:
+            expected.append(CLOSERS[char])
+            continue
+        if expected and char == expected[-1]:
+            expected.pop()
+            if not expected:
+                return index + 1
+    return len(text)
+
+
+def strip_calls(text: str) -> str:
+    while (match := CALL_START.search(text)) is not None:
+        text = text[: match.start()] + text[_call_end(text, match.start()) :]
+    return text
+
+
+def looks_like_call(text: str) -> bool:
+    return CALL_START.search(text) is not None
 
 
 def open_markup(text: str) -> bool:

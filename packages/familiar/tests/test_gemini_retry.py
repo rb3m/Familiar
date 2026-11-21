@@ -133,3 +133,24 @@ async def test_quota_exhausted_parks_model_without_retries():
     assert await _collect(llm) == "a"
     assert await _collect(llm) == "b"
     assert calls == ["main", "lite", "lite"]  # no retries, and main stays parked
+
+
+async def test_require_tool_forces_a_call_to_the_given_tools():
+    from familiar.interfaces import ToolSpec
+
+    llm = GeminiLLM({"model": "main", "backoff_seconds": 0})
+    configs = []
+
+    async def fake_once(model, contents, config, fallback=False):
+        configs.append(config)
+        yield LLMChunk(text="ok")
+
+    llm._stream_once = fake_once
+    tools = [ToolSpec("play_music", "Play", {"type": "object", "properties": {}})]
+    [chunk async for chunk in llm.stream([], "sys", tools, require_tool=True)]
+    [chunk async for chunk in llm.stream([], "sys", tools)]
+    forced, free = configs
+    assert forced.tool_config.function_calling_config.mode == "ANY"
+    assert forced.tool_config.function_calling_config.allowed_function_names == ["play_music"]
+    assert free.tool_config is None
+    assert "require_tool" in llm.capabilities

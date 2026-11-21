@@ -5,6 +5,10 @@ from typing import Protocol, runtime_checkable
 
 from .types import LLMChunk, Message, ToolSpec
 
+# Optional capability (API 2.4): stream() accepts require_tool=True, meaning the reply must be a
+# call to one of the given tools. Core passes it only to backends that declare this.
+REQUIRE_TOOL = "require_tool"
+
 
 @runtime_checkable
 class LLMProvider(Protocol):
@@ -18,6 +22,8 @@ class LLMProvider(Protocol):
 
     def stream(
         self, messages: list[Message], system: str, tools: list[ToolSpec]
-    ) -> AsyncIterator[LLMChunk]: ...
+    ) -> AsyncIterator[LLMChunk]:
+        """With the REQUIRE_TOOL capability, also accept ``require_tool: bool = False``."""
+        ...
 
     async def aclose(self) -> None: ...

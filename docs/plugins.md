@@ -20,7 +20,9 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
    `name`, `api_version = PLUGIN_API_VERSION`, `capabilities`, `__init__(self, settings: dict)`,
    `async stream(...)` and optional `async aclose()`. A TTS backend that acts out inline audio
    tags (`[sighs]`, ElevenLabs v3) adds `"audio_tags"` to `capabilities`; others never see
-   tags (ADR 0020).
+   tags (ADR 0020). An LLM backend that can force a tool call adds `"require_tool"` and
+   accepts `stream(..., require_tool=True)`: the reply must call one of the given tools (plugin
+   API 2.4, ADR 0021). Core passes it only to backends that declare it.
 3. Read secrets from an env var named in your settings (never from the TOML file itself).
 4. Register it in `pyproject.toml`:
    ```toml

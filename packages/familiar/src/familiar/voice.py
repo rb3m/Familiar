@@ -27,7 +27,7 @@ from familiar.interfaces import (
     TextToSpeech,
 )
 from familiar.persona import Persona
-from familiar.speech import speakable
+from familiar.speech import looks_like_call, speakable
 from familiar.transcript import TranscriptLog
 
 # Longest wait for companion services (e.g. music ducking) before audio or recording starts.
@@ -233,6 +233,10 @@ class VoiceSession:
                     if event is not None:
                         label += f" (event: {event.kind})"
                     print(f"{label}: {sentence}", flush=True)
+                    if looks_like_call(sentence):
+                        logging.getLogger(__name__).warning(
+                            "%s wrote a tool call as text (not spoken): %s", label, sentence
+                        )
                     spoken = speakable(sentence, self.tts)
                     if not spoken:
                         # Only a stage direction: nothing to say, so nothing was missed.

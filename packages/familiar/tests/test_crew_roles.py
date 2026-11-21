@@ -320,3 +320,63 @@ async def test_pending_confirmation_is_asked_before_handing_off(tmp_path, crew):
     results = [message.text for message in chat.history if message.role == "tool"]
     assert "Not handed off: ask the player to confirm" in results[0]
     assert "needs_confirmation" in results[1]
+
+
+class RequiringLLM:
+    """A backend that can be told a reply must be a tool call (REQUIRE_TOOL)."""
+
+    capabilities = frozenset({"tools", "require_tool"})
+
+    def __init__(self, rounds):
+        self.rounds = iter(rounds)
+        self.required = []
+
+    async def stream(self, messages, system, tools, require_tool=False):
+        self.required.append((self_names(tools), require_tool))
+        for chunk in next(self.rounds):
+            yield chunk
+
+
+def self_names(tools):
+    return sorted(spec.name for spec in tools)
+
+
+async def test_handoff_target_must_act_on_her_first_round(tmp_path, crew):
+    """Live: Ruslana described "punchy rock" instead of playing it (ADR 0021)."""
+    played = []
+    chat = conversation(tmp_path, split(crew), [], tools=music_tools(played))
+    chat.llm = RequiringLLM(
+        [
+            [LLMChunk(tool_call=ToolCall("h", "hand_off", {}))],
+            [LLMChunk(tool_call=ToolCall("p", "play_music", {}))],
+            [LLMChunk(text="Spinning now.")],
+        ]
+    )
+    assert await consume(chat.ask("Play some punchy rock")) == ["Spinning now."]
+    assert played == ["play"]
+    assert [required for _, required in chat.llm.required] == [False, True, False]
+    assert chat.llm.required[1][0] == ["now_playing", "play_music"]
+
+
+async def test_chained_target_may_pass_the_job_on_in_her_required_round(tmp_path, crew):
+    played = []
+    tools = music_tools(played)
+    actuator = Actuator()
+    ActionKeeper(actuator, {}, "en").register(tools)
+    chat = conversation(tmp_path, split(crew), [], tools=tools)
+    chat.speaker = chat.crew.members[2]  # Megumin holds neither job
+    chat.llm = RequiringLLM(
+        [
+            [LLMChunk(tool_call=ToolCall("a", "hand_off", {"to": "mira"}))],
+            [
+                LLMChunk(tool_call=ToolCall("m", "act_move", {})),
+                LLMChunk(tool_call=ToolCall("b", "hand_off", {})),
+            ],
+            [LLMChunk(tool_call=ToolCall("p", "play_music", {}))],
+            [LLMChunk(text="Here we go.")],
+        ]
+    )
+    await consume(chat.ask("Megumin, move and play"))
+    assert actuator.performed == ["move"] and played == ["play"]
+    assert [required for _, required in chat.llm.required] == [False, True, True, False]
+    assert "hand_off" in chat.llm.required[1][0]

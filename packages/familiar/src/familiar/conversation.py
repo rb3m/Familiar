@@ -22,6 +22,7 @@ from familiar.history import (
     strip_history_labels,
 )
 from familiar.interfaces import (
+    REQUIRE_TOOL,
     GameEvent,
     LLMProvider,
     Message,
@@ -452,7 +453,12 @@ class Conversation:
             system += ALERT_RULE
         if any(spec.name.startswith("act_") for spec in specs):
             system += ACTION_RULE
-        reply = self._reply_round(system, specs, request=text, visited=visited)
+        # A hand-off target was given this because it is her job: she acts, then speaks
+        # (ADR 0021). Without this, chatty personas describe the action instead of calling it.
+        required = bool(visited) and player_turn and any(spec.name != HANDOFF for spec in specs)
+        reply = self._reply_round(
+            system, specs, request=text, visited=visited, require_tool=required
+        )
         async with aclosing(reply) as sentences:
             async for sentence in sentences:
                 yield sentence
@@ -464,12 +470,15 @@ class Conversation:
         round_index: int = 0,
         request: str = "",
         visited: tuple[Persona, ...] = (),
+        require_tool: bool = False,
     ) -> AsyncIterator[str]:
         calls: list[ToolCall] = []
         offered = []
         if round_index < 3:
             offered = specs
-        async with aclosing(self._stream_round(system, offered, calls)) as sentences:
+        # Passing the job on (hand_off) counts as acting, so chains still work.
+        required = require_tool and round_index == 0
+        async with aclosing(self._stream_round(system, offered, calls, required)) as sentences:
             async for sentence in sentences:
                 yield sentence
         if not calls:
@@ -613,7 +622,14 @@ class Conversation:
             sentence = self.crew.strip_prefix(sentence, self.language)
         return strip_history_labels(sentence)
 
-    async def _stream_sentences(self, system, tools, calls, fragments) -> AsyncIterator[str]:
+    def _stream(self, messages, system: str, tools: list, require_tool: bool):
+        if require_tool and tools and REQUIRE_TOOL in getattr(self.llm, "capabilities", ()):
+            return self.llm.stream(messages, system, tools, require_tool=True)
+        return self.llm.stream(messages, system, tools)
+
+    async def _stream_sentences(
+        self, system, tools, calls, fragments, require_tool: bool = False
+    ) -> AsyncIterator[str]:
         prompt, messages = self.renderer.render(
             self.records, self.speaker, self.crew, self.language, self.game
         )
@@ -621,7 +637,8 @@ class Conversation:
         splitter = SentenceSplitter()
         reading = True
         first = True
-        async with aclosing(self.llm.stream(messages, prompt + system, tools)) as chunks:
+        source = self._stream(messages, prompt + system, tools, require_tool)
+        async with aclosing(source) as chunks:
             # Drain complete sentences before requesting another backend chunk.
             while reading or pending:
                 if not pending:
@@ -634,12 +651,14 @@ class Conversation:
                     continue
                 yield sentence
 
-    async def _stream_round(self, system: str, tools: list, calls: list) -> AsyncIterator[str]:
+    async def _stream_round(
+        self, system: str, tools: list, calls: list, require_tool: bool = False
+    ) -> AsyncIterator[str]:
         fragments: list[str] = []
         completed = False
         heard = True
         try:
-            source = self._stream_sentences(system, tools, calls, fragments)
+            source = self._stream_sentences(system, tools, calls, fragments, require_tool)
             async with aclosing(source) as sentences:
                 async for sentence in sentences:
                     before = self._playback_acks

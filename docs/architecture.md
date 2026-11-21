@@ -53,7 +53,8 @@ Outside-owned core defaults live in packaged `data/*.yaml`, loaded through `inte
   continuous streams, until a streaming backend needs it.
 - **TextToSpeech**: `synthesize(text, voice, language) -> AsyncIterator[AudioChunk]` (PCM16 mono).
   It receives `speech.speakable()` text: stage directions cut, emphasis unwrapped, `[tags]`
-  removed unless its `capabilities` include `"audio_tags"` (ADR 0020). Transcripts keep the
+  removed unless its `capabilities` include `"audio_tags"`, and tool calls written as text are
+  never spoken (ADRs 0020, 0021). Transcripts keep the
   raw text.
 - **GameAdapter** (M2): `events() -> AsyncIterator[GameEvent]`, `snapshot() -> dict`, optional
   `tools()`. Each game pack ships its own knowledge data.
@@ -102,6 +103,8 @@ core tools, `now_playing` and `read_only` actions are available to everyone. A s
 role in use gets `hand_off(to, line?)`: her own tool calls in that round run, an optional remark
 uses her voice, then the target handles the same request in the same reply (ADR 0013). A hand-off
 never returns to anyone who already spoke in that reply, so chains end within the crew size.
+The target's first round must be a tool call (or a further hand-off) when the LLM backend
+supports `require_tool`, so she acts instead of describing the job (ADR 0021).
 For crews of two or three, session banter levels 1-10 replace idle remarks with one tool-free
 call for a validated 2-4-line scene. `banter.py` owns the gap/cap anchors (1: 1200 s, 2/h;
 5: 420 s, 5/h; 10: 120 s, 10/h), linear interpolation with caps rounded down, and a rolling

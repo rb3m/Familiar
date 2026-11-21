@@ -17,6 +17,7 @@ from familiar.backends.models import model_defaults
 from familiar.banter import TUNING
 from familiar.interfaces import (
     PLUGIN_API_VERSION,
+    REQUIRE_TOOL,
     BackendError,
     LLMChunk,
     Message,
@@ -119,7 +120,7 @@ def _part_chunks(part: types.Part) -> list[LLMChunk]:
 class GeminiLLM:
     name = "gemini"
     api_version = PLUGIN_API_VERSION
-    capabilities = frozenset({"streaming", "tools"})
+    capabilities = frozenset({"streaming", "tools", REQUIRE_TOOL})
 
     def __init__(self, settings: dict) -> None:
         self.settings = {"api_key_env": "GEMINI_API_KEY", **settings}
@@ -187,14 +188,29 @@ class GeminiLLM:
         return [(self.model, 0.0, False), *retries, *fallbacks]
 
     async def stream(
-        self, messages: list[Message], system: str, tools: list[ToolSpec]
+        self,
+        messages: list[Message],
+        system: str,
+        tools: list[ToolSpec],
+        require_tool: bool = False,
     ) -> AsyncIterator[LLMChunk]:
-        """Stream response deltas, retrying busy/rate-limit errors before the first chunk."""
+        """Stream response deltas, retrying busy/rate-limit errors before the first chunk.
+
+        ``require_tool`` makes the reply a call to one of ``tools`` (function calling mode ANY).
+        """
+        forced = None
+        if require_tool and tools:
+            forced = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode="ANY", allowed_function_names=[tool.name for tool in tools]
+                )
+            )
         config = types.GenerateContentConfig(
             system_instruction=system,
             tools=[types.Tool(function_declarations=[tool_to_declaration(tool) for tool in tools])]
             if tools
             else None,
+            tool_config=forced,
             temperature=self.temperature,
         )
         contents = messages_to_contents(messages)
