@@ -36,6 +36,14 @@ ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.0, "max_alerts": 8}
 
 MUSIC_DEFAULTS = {"enabled": False, "service": "pear"}
 
+DESK_DEFAULTS = {
+    "enabled": False,
+    "interval_s": 60,
+    "latitude": None,
+    "longitude": None,
+    "timezone": None,
+}
+
 
 HANDS_DEFAULTS = {
     "enabled": True,
@@ -73,6 +81,8 @@ class AppConfig:
     alerts: dict = field(default_factory=lambda: ALERT_DEFAULTS.copy())
     hands: dict = field(default_factory=lambda: HANDS_DEFAULTS.copy())
     music: dict = field(default_factory=lambda: MUSIC_DEFAULTS.copy())
+    desk: dict = field(default_factory=lambda: DESK_DEFAULTS.copy())
+    config_path: Path | None = None
 
 
 def session_settings(
@@ -208,6 +218,38 @@ def _music(data: dict) -> dict:
     return settings
 
 
+def _desk(data: dict) -> dict:
+    section = data.get("desk", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[desk] must be a table")
+    settings = {**DESK_DEFAULTS, **section}
+    if type(settings["enabled"]) is not bool:
+        raise ConfigError("desk.enabled must be a boolean")
+    for key in ("interval_s", "poll_s"):
+        value = settings.get(key, 5)
+        if type(value) not in {int, float} or not math.isfinite(value) or value <= 0:
+            raise ConfigError(f"desk.{key} must be a finite positive number")
+    for key, limit in (("latitude", 90), ("longitude", 180)):
+        value = settings[key]
+        if value is None:
+            continue
+        if type(value) not in {int, float} or not math.isfinite(value) or abs(value) > limit:
+            raise ConfigError(f"desk.{key} must be between {-limit} and {limit}")
+    if (settings["latitude"] is None) != (settings["longitude"] is None):
+        raise ConfigError("desk.latitude and desk.longitude must be set together")
+    zone = settings["timezone"]
+    if zone is not None:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        if not isinstance(zone, str) or not zone:
+            raise ConfigError("desk.timezone must be an IANA timezone")
+        try:
+            ZoneInfo(zone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ConfigError("desk.timezone must be an IANA timezone") from exc
+    return settings
+
+
 def _hands(data: dict) -> dict:
     section = data.get("hands", {})
     if not isinstance(section, dict):
@@ -281,6 +323,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         alerts=_alerts(data),
         hands=_hands(data),
         music=_music(data),
+        desk=_desk(data),
+        config_path=source.resolve() if source is not None else None,
         language=language,
         persona=persona,
         personas_dir=_path(data["personas_dir"], base) if "personas_dir" in data else None,

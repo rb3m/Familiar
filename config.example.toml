@@ -158,6 +158,13 @@ max_alerts = 8            # integer from 1 to 8
 # [hands.negatives]
 # en = ["hold on"]
 
+# [desk]
+# enabled = false        # local time context beside games and at the desk
+# interval_s = 60        # feed sampling interval in seconds
+# latitude = 19.4326     # set both coordinates for offline solar context
+# longitude = -99.1332
+# timezone = "America/Mexico_City" # defaults to the system local zone
+
 [music]
 enabled = false          # companion DJ, beside any game or in desk voice mode
 service = "blend"        # familiar.services entry point; "pear" keeps YouTube-only playback

@@ -142,6 +142,9 @@ class _Runtime:
             )
             self.stack.push_async_callback(conversation.aclose)
         self._music(conversation)
+        if self.config.desk.get("enabled", False):
+            settings = {**self.config.desk, "config_path": self.config.config_path}
+            self._service(conversation, "desk", settings)
         contexts.extend(self.services)
         if self.services:
             conversation.context = lambda: self._describe(contexts)
@@ -211,8 +214,11 @@ class _Runtime:
                 dislike_read=conversation.memory.store.music_dislikes,
                 dislike_write=conversation.memory.store.dislike_music,
             )
+        self._service(conversation, self.config.music["service"], settings)
+
+    def _service(self, conversation: Conversation, name: str, settings: dict) -> None:
         try:
-            service = load("services", self.config.music["service"], settings)
+            service = load("services", name, settings)
             self.stack.push_async_callback(close_backend, service)
             for tool in service.service_tools():
                 conversation.tools.register(
@@ -223,7 +229,7 @@ class _Runtime:
                 )
             self.services.append(service)
         except Exception:
-            logging.getLogger(__name__).exception("Music service unavailable")
+            logging.getLogger(__name__).exception("Companion service %s unavailable", name)
 
     def speech(self, kind: str) -> Any:
         spec = getattr(self.config, kind)
