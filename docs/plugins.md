@@ -263,7 +263,8 @@ remain unbound; only sessions without a controls file use packaged default keys.
 Implement `familiar.interfaces.CompanionService` and register a `familiar.services` entry point.
 `events()` yields ordinary `GameEvent` values without a game snapshot; core marks their origin
 so game connection/pause gates do not suppress them. `service_tools()` returns `ServiceTool`
-values with JSON-schema parameters, async dictionary-returning handlers and `carrier_only`.
+values with JSON-schema parameters, async dictionary-returning handlers and an owning crew
+`role` (`"controls"`, `"dj"` or `None` for everyone; `carrier_only=True` means `"controls"`).
 `describe()` must return cached prompt context quickly, or an empty string. `speech_state()`
 receives complete immutable listening/speaking/critical state and the spoken event kind;
 make repeated states idempotent and restore resources in `aclose()`. Core isolates failures.
@@ -272,7 +273,10 @@ API 2.2 (additive, ADR 0014): a service event may set `data["cue"]` (tied to a m
 Director's quiet gaps, still wait for silence), `data["speaker"] = "carrier"` (route to the
 carrier), `data["tools"]` (tool names offered on that unprompted turn; only tools registered with
 `ServiceTool(autonomous=True)` are honoured, carrier-only rules still apply) and `data["taste"]`
-(a persona `tastes` topic added as hints). `speech_state()` seeing `speaking` with your event kind
+(a persona `tastes` topic added as hints).
+API 2.3 (additive, ADR 0018): `ServiceTool.role`; `data["speaker"]` names a role (`"dj"`,
+`"controls"`, or `"carrier"` as an alias for controls) or `"guest"`: the next crew member other
+than the DJ, in rotation, who may use that event's offered autonomous tools for the one turn. `speech_state()` seeing `speaking` with your event kind
 means the Director admitted that event; use it to restart schedules instead of counting emissions. `[music]` selects the first
 service; settings other than `enabled` and `service` pass through to its constructor. Core
 injects `dislike_read()` and `dislike_write(video_id, artists)` callbacks when memory is enabled;

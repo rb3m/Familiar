@@ -50,7 +50,7 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
     takes precedence); `overrides_builtin` = a user copy shadowing a shipped persona (DELETE
     restores the original, so the UI labels it "Reset to built-in").
   - `Session` = `{"running": bool, "game": str | null, "persona": str | null, "language": str | null,
-    "crew": [str, ...] | null, "carrier": str | null, "banter": int | null,
+    "crew": [str, ...] | null, "carrier": str | null, "dj": str | null, "banter": int | null,
     "started_at": ISO-8601 | null, "exit_code": int | null}`. `persona` mirrors `carrier` for
     older clients; a legacy start reports a crew of one with `banter` null.
   - Game names: ats "American Truck Simulator", ets2 "Euro Truck Simulator 2"; unknown ids
@@ -84,14 +84,15 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   "language": "en", "text": "optional sample"}` → speaks the sample on this machine;
   `200 {"ok": true}`.
 - `GET /api/session/settings` → the launcher's saved selections. With no session file: derived
-  defaults (`200 {"version": 2, "game", "crew": [config persona], "language", "carrier",
-  "banter": 2, "stereo": false, "seats": {"<carrier>": 0.0}, "problems": []}`). With a valid
+  defaults (`200 {"version": 3, "game", "crew": [config persona], "language", "carrier",
+  "dj": [config persona], "banter": 2, "stereo": false, "seats": {"<carrier>": 0.0}, "problems": []}`). With a valid
   file: its values plus `"problems": []` (version 1 files load with `"stereo": false` and
-  default seats). With an
+  default seats; files without `dj` report the carrier). With an
   invalid file: `200` with the raw values that parsed plus `"problems": [...]` (schema and
   persona problems, reported together) so the UI can show and repair them. Never writes.
-- `PUT /api/session/settings` body `{"version": 2, "game": "ats" | null, "crew": ["mira", ...1-3
-  unique persona ids], "language": "en", "carrier": "<a crew member>", "banter": 0-10,
+- `PUT /api/session/settings` body `{"version": 3, "game": "ats" | null, "crew": ["mira", ...1-3
+  unique persona ids], "language": "en", "carrier": "<a crew member>", "dj": "<a crew member>"
+  (optional, defaults to the carrier), "banter": 0-10,
   "stereo": bool, "seats": {"<crew id>": pan}}` — `stereo` (optional, default `false`) turns on
   spatial placement; `seats` (optional) maps crew ids to a pan from -1.0 (left) to 1.0 (right),
   with missing members defaulted (carrier 0.0, others alternating +0.7, -0.7 in roster order) and

@@ -11,9 +11,12 @@ from .types import GameEvent, ToolSpec
 class ServiceTool:
     spec: ToolSpec
     handler: Callable[..., Awaitable[dict]]
+    # Legacy spelling of role="controls".
     carrier_only: bool = False
     # May be offered on an unprompted turn when an event names it in data["tools"].
     autonomous: bool = False
+    # Crew role that owns the tool: "controls" (game actions) or "dj" (music); None is everyone.
+    role: str | None = None
 
 
 @dataclass(frozen=True)

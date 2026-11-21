@@ -50,6 +50,7 @@ class SessionManager:
             language=None,
             crew=None,
             carrier=None,
+            dj=None,
             banter=None,
             started_at=None,
             exit_code=None,
@@ -109,6 +110,7 @@ class SessionManager:
             language=language,
             crew=[persona],
             carrier=persona,
+            dj=persona,
             banter=None,
         )
         return await self._spawn(self.command(persona, language, game), fields)
@@ -120,6 +122,7 @@ class SessionManager:
             language=settings.language,
             crew=list(settings.crew),
             carrier=settings.carrier,
+            dj=settings.dj,
             banter=settings.banter,
         )
         return await self._spawn(self.session_command(), fields)

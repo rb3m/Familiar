@@ -84,8 +84,9 @@ Nice to have: **the companion as DJ** (in every game; design agreed with the Com
 via `ytmusicapi`, seed + radio, duck/pause, voice commands, dislikes in memory. Phase 2 (built
 2026-11-19, ADR 0015, awaiting live test): local library via mpv, SQLite index, MusicBrainz
 genres, 70/20/10 blend, taste weighting from plays. Later: ListenBrainz similar artists,
-regional flavour, YouTube Music history import and tag fingerprinting. The action-carrier is the DJ: picks music for the moment and comments
-on it; the rest of the crew react through banter. Play, skip and queue are carrier-only actions.
+regional flavour, YouTube Music history import and tag fingerprinting. The crew's DJ (the carrier unless the session names another member, ADR 0018)
+picks music for the moment and comments on it; the rest of the crew react through banter. Play,
+skip and queue are DJ-only actions.
 - **Sources:** a local library on this PC (~12,000 tracks: MP3, FLAC, Apple-bought AAC; some
   old CD rips lack tags) through a local player such as MPD; YouTube Music for discovery, in the
   browser if MPRIS plus opening a track link covers playing a chosen song, else a desktop

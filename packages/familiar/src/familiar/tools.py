@@ -2,8 +2,9 @@
 
 import json
 import math
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 
+from familiar.crew import CONTROLS, ROLES
 from familiar.interfaces import ToolCall, ToolSpec
 
 ToolHandler = Callable[..., Awaitable[dict]]
@@ -38,6 +39,11 @@ def _validate(value: object, schema: dict, path: str = "arguments") -> None:
             _validate(item, properties[key], f"{path}.{key}")
 
 
+def validate_arguments(arguments: object, schema: dict) -> None:
+    """Raise ValueError when tool arguments do not match a JSON-schema subset."""
+    _validate(arguments, schema)
+
+
 def _validate_bounds(value: object, schema: dict, path: str) -> None:
     if type(value) not in {int, float}:
         return
@@ -47,10 +53,21 @@ def _validate_bounds(value: object, schema: dict, path: str) -> None:
         raise ValueError(f"{path} exceeds maximum")
 
 
+def _role(name: str, carrier_only: bool, role: str | None) -> str | None:
+    """carrier_only predates roles and means the controls role (ADR 0018)."""
+    if role is not None and role not in ROLES:
+        raise ValueError(f"Tool {name}: unknown role {role!r}")
+    if carrier_only and role not in (None, CONTROLS):
+        raise ValueError(f"Tool {name}: carrier_only conflicts with role {role!r}")
+    if carrier_only:
+        return CONTROLS
+    return role
+
+
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, tuple[ToolSpec, ToolHandler]] = {}
-        self._carrier_only: set[str] = set()
+        self._roles: dict[str, str] = {}
         self._autonomous: set[str] = set()
 
     def register(
@@ -59,30 +76,34 @@ class ToolRegistry:
         handler: ToolHandler,
         *,
         carrier_only: bool = False,
+        role: str | None = None,
         autonomous: bool = False,
     ) -> None:
         if spec.name in self._tools:
             raise ValueError(f"Duplicate tool: {spec.name}")
+        role = _role(spec.name, carrier_only, role)
         self._tools[spec.name] = spec, handler
-        if carrier_only:
-            self._carrier_only.add(spec.name)
+        if role is not None:
+            self._roles[spec.name] = role
         if autonomous:
             self._autonomous.add(spec.name)
 
     @property
-    def has_carrier_tools(self) -> bool:
-        return bool(self._carrier_only)
+    def roles_in_use(self) -> frozenset[str]:
+        """Roles that own at least one registered tool."""
+        return frozenset(self._roles.values())
 
-    def offered(self, names, *, carrier: bool) -> list[ToolSpec]:
+    def offered(self, names, roles: Collection[str] | None = None) -> list[ToolSpec]:
         """Tools an event may offer an unprompted turn: named, registered as autonomous."""
         allowed = set(names) & self._autonomous
-        return [spec for spec in self.specs(carrier=carrier) if spec.name in allowed]
+        return [spec for spec in self.specs(roles) if spec.name in allowed]
 
-    def specs(self, *, carrier: bool = True) -> list[ToolSpec]:
+    def specs(self, roles: Collection[str] | None = None) -> list[ToolSpec]:
+        """Tools open to everyone plus those of the given roles; None means every tool."""
         return [
             spec
             for spec, _ in self._tools.values()
-            if carrier or spec.name not in self._carrier_only
+            if roles is None or self._roles.get(spec.name, None) in {None, *roles}
         ]
 
     async def execute(self, call: ToolCall) -> dict:

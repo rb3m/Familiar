@@ -10,7 +10,8 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   original persona, **Mira**, a small lantern-spirit familiar.
 - **Voice crews** of one to three personas share a conversation and memory. Address a member
   by name or a configured alias; follow-ups stay with the last speaker for 30 seconds.
-  One selected carrier handles game actions; everyone can use read-only queries.
+  One member takes the game controls and one runs the music (the same one, if you like);
+  everyone can use read-only queries.
 - **Plugins for everything**: LLM, speech-to-text, text-to-speech, push-to-talk devices, game
   adapters and CLI commands are discovered through Python entry points. Gemini and ElevenLabs
   are built in; adding another provider is a small class (see `docs/plugins.md`).
@@ -102,10 +103,14 @@ For example, after creating a user persona named `copilot` with voices for Engli
 version = 1
 crew = ["mira", "copilot"]
 language = "en"
-carrier = "mira"
+carrier = "mira"     # takes the game controls
+dj = "copilot"       # runs the music (optional; defaults to the carrier)
 banter = 0
 game = "elite"  # omit for desk use
 ```
+
+Asked for something outside their job, a crew member hands it to whoever holds it, in the same
+reply: "gear down and play something" gets the gear from the carrier and the music from the DJ.
 
 CLI flags override the saved selection; `--persona` selects a crew of one. Without a session
 file, the existing config defaults apply. With two or more members, `banter = 1` through `10`
@@ -120,7 +125,7 @@ occasionally call back to older moments. These stay labelled as things the crew 
 as game facts. Persona YAML
 supports language-specific `aliases`, event-kind/prefix `interests`, optional one-line
 `relationships`, and `tastes` (e.g. `music: ["70s city pop", "quiet folk"]`, hints for the
-carrier's own music picks) in your own persona files; see Mira's YAML for examples.
+DJ's own music picks) in your own persona files; see Mira's YAML for examples.
 
 ATS/ETS2 telemetry comes from a local TruckSim GPS telemetry server (default
 `http://localhost:31377`); see `[games.ats]` in `config.example.toml`.
@@ -170,7 +175,7 @@ MIT, see `LICENSE`.
 ### Companion DJ (optional)
 
 The DJ blends your **local music library** (played by **mpv**) with **YouTube Music** (played by
-Pear Desktop), roughly 70% library, 20% the carrier persona's own taste, 10% discovery
+Pear Desktop), roughly 70% library, 20% the DJ persona's own taste, 10% discovery
 (`blend` in `familiar_music/music.yaml`). Ask for a source by voice ("from my library",
 "something new on YouTube").
 
@@ -186,7 +191,8 @@ Pear Desktop), roughly 70% library, 20% the carrier persona's own taste, 10% dis
 
 Enable `[music]` with `enabled = true` and `service = "blend"` (or `"pear"` for YouTube Music
 only). Ask for music, a skip, calmer music, more like this, likes/dislikes or volume changes in
-any game or desk voice mode. The carrier controls playback; everyone can ask what's playing.
+any game or desk voice mode. The crew's DJ controls playback; everyone can ask what's playing, and every
+third time the DJ would pick a song, another crew member gets the pick instead, in turn.
 Music ducks during speech, pauses for critical events and rare track remarks, and remembers
 dislikes when memory is enabled. Local picks learn from what you play through or skip early;
 remarks use only facts from your tags. See `config.example.toml` for tuning and data overrides.

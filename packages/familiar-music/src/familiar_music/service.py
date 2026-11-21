@@ -38,6 +38,12 @@ DJ_TURN = (
     "playlist search, or an artist) and say one short line about your pick. Otherwise keep it "
     "and make at most a brief remark about the song."
 )
+GUEST_TURN = (
+    "Music check: now playing {track}. The crew's DJ lets you choose this time, so you may call "
+    "play_music yourself. If something from your own taste or for this moment would suit "
+    "better, call play_music (kind genre with a descriptive playlist search, or an artist) and "
+    "say one short line about your pick. Otherwise keep it and make at most a brief remark."
+)
 
 
 class Cadence:
@@ -112,6 +118,8 @@ class MusicService:
         self._hold_until = float("-inf")
         self._picks_paused = False
         self._turn_valid = False  # the last DJ turn emitted is still the Commander's wish
+        self._guest_turn = False  # the last DJ turn emitted was lent to another crew member
+        self._dj_turns = 0  # DJ turns heard since the last guest pick
         self._speaking_kind = None  # our event kind being spoken right now, if any
         self._uncounted = False  # the next song change came from a request
         self._hint_logged = False
@@ -328,8 +336,8 @@ class MusicService:
                     },
                 ),
                 partial(self._execute, name),
-                name != "now_playing",
-                name in AUTONOMOUS_TOOLS,
+                autonomous=name in AUTONOMOUS_TOOLS,
+                role=None if name == "now_playing" else "dj",
             )
             for name, (description, properties, required) in definitions.items()
         ]
@@ -440,11 +448,14 @@ class MusicService:
         if not self._may_pick():
             return None
         self._turn_valid = True
+        every = self.settings["guest_pick_every"]
+        self._guest_turn = every > 0 and self._dj_turns >= every - 1
+        template = {True: GUEST_TURN, False: DJ_TURN}[self._guest_turn]
         return self._cue(
             "music_dj_turn",
-            DJ_TURN.format(track=self._current.summary()),
+            template.format(track=self._current.summary()),
             ttl_s=20,
-            speaker="carrier",
+            speaker={True: "guest", False: "dj"}[self._guest_turn],
             tools=sorted(AUTONOMOUS_TOOLS),
             taste="music",
         )
@@ -506,6 +517,8 @@ class MusicService:
         # Voice repeats states within one turn (e.g. push-to-talk); count each turn once.
         for cadence in heard[kind] if started else ():
             cadence.reset()
+        if started and kind == "music_dj_turn":
+            self._dj_turns = 0 if self._guest_turn else self._dj_turns + 1
 
     async def speech_state(self, state):
         self._acknowledge(state)

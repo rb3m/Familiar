@@ -1,8 +1,9 @@
 """Versioned launcher selections; no backend, secret or device settings.
 
 Schema 2 adds optional stereo voice placement: ``stereo`` (off by default) and ``seats``
-mapping persona ids to a pan from -1.0 (left) to 1.0 (right). Version 1 files still load
-with stereo off and default seats; saves always write version 2.
+mapping persona ids to a pan from -1.0 (left) to 1.0 (right). Schema 3 adds an optional
+``dj`` (the crew member running the music, ADR 0018), defaulting to the carrier. Older files
+still load; saves always write version 3.
 """
 
 import json
@@ -15,8 +16,9 @@ from pathlib import Path
 from familiar.interfaces import ConfigError
 from familiar.persona import load_persona, validate_id
 
-VERSION = 2
-_KEYS = {"version", "game", "crew", "language", "carrier", "banter", "stereo", "seats"}
+VERSION = 3
+VERSIONS = (1, 2, 3)
+_KEYS = {"version", "game", "crew", "language", "carrier", "dj", "banter", "stereo", "seats"}
 _REQUIRED = {"version", "crew", "language", "carrier", "banter"}
 SIDE_PAN = 0.7  # default seat for non-carrier members, alternating right then left
 
@@ -48,8 +50,11 @@ class SessionSettings:
     stereo: bool = False
     seats: dict[str, float] | None = None
     version: int = VERSION
+    dj: str | None = None
 
     def __post_init__(self) -> None:
+        if self.dj is None:
+            object.__setattr__(self, "dj", self.carrier)
         if self.stereo is None:
             object.__setattr__(self, "stereo", False)
         seats = default_seats(self.crew, self.carrier)
@@ -66,8 +71,8 @@ def default_path() -> Path:
 def _problems(data: dict) -> list[str]:
     problems = [f"Unknown session key: {key}" for key in sorted(data.keys() - _KEYS)]
     problems += [f"Missing session key: {key}" for key in sorted(_REQUIRED - data.keys())]
-    if type(data.get("version")) is not int or data["version"] not in (1, VERSION):
-        problems.append("Session version must be 1 or 2")
+    if type(data.get("version")) is not int or data["version"] not in VERSIONS:
+        problems.append("Session version must be 1, 2 or 3")
     game = data.get("game")
     if game is not None and (not isinstance(game, str) or not game.strip()):
         problems.append("game must be a non-empty string or absent (desk mode)")
@@ -78,6 +83,9 @@ def _problems(data: dict) -> list[str]:
     problems.extend(_stereo_problems(data))
     crew = data.get("crew")
     problems.extend(_crew_problems(crew, data.get("carrier")))
+    dj = data.get("dj")
+    if dj is not None and (not isinstance(dj, str) or dj not in _safe_crew(crew)):
+        problems.append("dj must be a member of crew")
     return problems
 
 
@@ -177,6 +185,7 @@ def load(
         crew=_safe_crew(crew),
         language=effective.get("language", ""),
         carrier=effective.get("carrier", ""),
+        dj=effective.get("dj"),
         game=effective.get("game"),
         banter=effective.get("banter", 0),
         stereo=effective.get("stereo", False),

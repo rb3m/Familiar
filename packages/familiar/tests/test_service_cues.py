@@ -63,9 +63,9 @@ def registry():
 def test_events_offer_only_named_autonomous_tools():
     tools = registry()
     names = ["play_music", "skip_track", "missing"]
-    assert [spec.name for spec in tools.offered(names, carrier=True)] == ["play_music"]
-    assert tools.offered(names, carrier=False) == []  # carrier-only stays carrier-only
-    assert tools.offered([], carrier=True) == []
+    assert [spec.name for spec in tools.offered(names, {"controls"})] == ["play_music"]
+    assert tools.offered(names, ()) == []  # role tools stay with their role
+    assert tools.offered([], {"controls"}) == []
 
 
 async def test_dj_turn_offers_play_music_to_the_carrier_with_taste(tmp_path, crew):

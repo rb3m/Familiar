@@ -5,8 +5,10 @@ volume_tolerance: 5
 queue_top_up: 5
 # A remark on the new song every [low, high] song changes (picked songs don't count).
 remark_every: [3, 4]
-# The carrier may choose new music every [low, high] song changes...
+# The DJ may choose new music every [low, high] song changes...
 dj_turn_every: [8, 12]
+# Every Nth DJ turn goes to another crew member in rotation, with her own taste (0: off).
+guest_pick_every: 3
 # ...but not within this long of a music request, and never while music is paused.
 autonomy_hold_s: 900
 autonomous_picks: true
@@ -21,7 +23,7 @@ playlist_tracks: 100
 play_volume: 70
 calm_volume: 40
 
-# Unrequested batches draw library, carrier taste, or YouTube discovery.
+# Unrequested batches draw library, DJ taste, or YouTube discovery.
 blend: {library: 70, persona: 20, discovery: 10}
 local_min_matches: 8
 # Automatic genre choices also need this many distinct primary artists.

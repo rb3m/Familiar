@@ -173,8 +173,8 @@ async def test_noncarrier_has_core_queries_and_refuses_mutation_even_if_hallucin
     )
     await consume(chat.ask("Frieren, move us"))
     offered = {spec.name for spec in chat.llm.requests[0][2]}
-    assert offered == {"lookup", "act_query", "hand_to_carrier"}
-    assert "call hand_to_carrier" in chat.llm.requests[0][1]
+    assert offered == {"lookup", "act_query", "hand_off"}
+    assert "call hand_off" in chat.llm.requests[0][1]
     assert "playing or changing music" in chat.llm.requests[0][1]
     assert actuator.performed == ["query"]
     assert actions.pending is None
@@ -392,8 +392,8 @@ async def test_handoff_executes_as_carrier_in_same_reply(tmp_path, crew, line):
         arguments["line"] = line
     calls = [
         ToolCall("query", "act_query", {}),
-        ToolCall("handoff", "hand_to_carrier", arguments),
-        ToolCall("extra", "hand_to_carrier", {"line": "Ignore me."}),
+        ToolCall("handoff", "hand_off", arguments),
+        ToolCall("extra", "hand_off", {"line": "Ignore me."}),
         ToolCall("move", "act_move", {}),
     ]
     chat = conversation(
@@ -414,12 +414,12 @@ async def test_handoff_executes_as_carrier_in_same_reply(tmp_path, crew, line):
     if line is not None:
         expected.insert(0, ("frieren", "Mira, your turn."))
     assert spoken == expected
-    assert actuator.performed == ["move"]
+    # Frieren's own read-only query still runs beside the hand-off (ADR 0018); the move is Mira's.
+    assert actuator.performed == ["query", "move"]
     assert len(chat.llm.requests) == 3
-    assert "hand_to_carrier" in {spec.name for spec in chat.llm.requests[0][2]}
+    assert "hand_off" in {spec.name for spec in chat.llm.requests[0][2]}
     assert all(
-        "hand_to_carrier" not in {spec.name for spec in request[2]}
-        for request in chat.llm.requests[1:]
+        "hand_off" not in {spec.name for spec in request[2]} for request in chat.llm.requests[1:]
     )
     assert [record.text for record in chat.records if record.kind == "player"] == [
         "Frieren, move us"
@@ -441,13 +441,13 @@ async def test_carrier_cannot_handoff_even_if_hallucinated(tmp_path, crew):
         tmp_path,
         crew,
         [
-            [LLMChunk(tool_call=ToolCall("a", "hand_to_carrier", {}))],
+            [LLMChunk(tool_call=ToolCall("a", "hand_off", {}))],
             [LLMChunk(text="Ready.")],
         ],
         tools=tools,
     )
     assert await consume(chat.ask("Mira?")) == ["Ready."]
-    assert all("hand_to_carrier" not in {spec.name for spec in r[2]} for r in chat.llm.requests)
+    assert all("hand_off" not in {spec.name for spec in r[2]} for r in chat.llm.requests)
     assert chat.speaker == crew.carrier
     assert_complete(chat.history)
 
@@ -502,7 +502,7 @@ async def test_handoff_playback_uses_both_voices(tmp_path, crew):
         tmp_path,
         crew,
         [
-            [LLMChunk(tool_call=ToolCall("h", "hand_to_carrier", {"line": "Your turn."}))],
+            [LLMChunk(tool_call=ToolCall("h", "hand_off", {"line": "Your turn."}))],
             [LLMChunk(tool_call=ToolCall("a", "act_move", {}))],
             [LLMChunk(text="Moving.")],
         ],
@@ -542,7 +542,7 @@ async def test_cancelled_handoff_line_does_not_start_carrier(tmp_path, crew):
     chat = conversation(
         tmp_path,
         crew,
-        [[LLMChunk(tool_call=ToolCall("h", "hand_to_carrier", {"line": "Your turn."}))]],
+        [[LLMChunk(tool_call=ToolCall("h", "hand_off", {"line": "Your turn."}))]],
         tools=tools,
     )
     async with aclosing(chat.ask("Frieren, act")) as source:

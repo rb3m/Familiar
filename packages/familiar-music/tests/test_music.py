@@ -319,7 +319,45 @@ async def test_remark_every_few_songs_and_only_once_heard():
     assert player.closed
 
 
-async def test_dj_turn_goes_to_the_carrier_with_play_music_only():
+async def test_every_nth_heard_dj_turn_is_a_guest_pick():
+    player = FakePlayer()
+    service = PearMusicService(
+        {"remark_every": [9, 9], "dj_turn_every": [1, 1], "guest_pick_every": 3},
+        player=player,
+        searcher=FakeSearch(),
+        rng=FixedRng(),
+    )
+    await service.poll()
+    speakers = []
+    for index in range(7):
+        event = await change(service, player, f"ytm:song{index}")
+        speakers.append(event.data["speaker"])
+        if index == 1:
+            continue  # dropped by the Director: not heard, so it does not count
+        await service.speech_state(SpeechState(speaking=True, event_kind="music_dj_turn"))
+        await service.speech_state(SpeechState())
+    assert speakers == ["dj", "dj", "dj", "guest", "dj", "dj", "guest"]
+    await service.aclose()
+
+
+async def test_guest_picks_can_be_turned_off():
+    player = FakePlayer()
+    service = PearMusicService(
+        {"remark_every": [9, 9], "dj_turn_every": [1, 1], "guest_pick_every": 0},
+        player=player,
+        searcher=FakeSearch(),
+        rng=FixedRng(),
+    )
+    await service.poll()
+    for index in range(4):
+        event = await change(service, player, f"ytm:song{index}")
+        assert event.data["speaker"] == "dj"
+        await service.speech_state(SpeechState(speaking=True, event_kind="music_dj_turn"))
+        await service.speech_state(SpeechState())
+    await service.aclose()
+
+
+async def test_dj_turn_goes_to_the_dj_with_play_music_only():
     player = FakePlayer()
     now = [0]
     service = PearMusicService(
@@ -332,7 +370,7 @@ async def test_dj_turn_goes_to_the_carrier_with_play_music_only():
     await service.poll()
     event = await change(service, player, "ytm:two")
     assert event.kind == "music_dj_turn"
-    assert event.data["speaker"] == "carrier" and event.data["tools"] == ["play_music"]
+    assert event.data["speaker"] == "dj" and event.data["tools"] == ["play_music"]
     assert event.data["taste"] == "music" and event.data["cue"] and "Two" in event.data["summary"]
     await service.speech_state(SpeechState(speaking=True, event_kind="music_dj_turn"))
     assert service.picks.count == 0 and service.remarks.count == 0
@@ -380,13 +418,13 @@ def test_invalid_cadence_settings(settings):
         PearMusicService(settings, player=FakePlayer(), searcher=FakeSearch())
 
 
-async def test_tool_schema_carrier_and_health_hint_once(caplog):
+async def test_tool_schema_dj_role_and_health_hint_once(caplog):
     player = FakePlayer()
     service = PearMusicService({}, player=player, searcher=FakeSearch())
     registry = ToolRegistry()
     for tool in service.service_tools():
-        registry.register(tool.spec, tool.handler, carrier_only=tool.carrier_only)
-    assert [spec.name for spec in registry.specs(carrier=False)] == ["now_playing"]
+        registry.register(tool.spec, tool.handler, role=tool.role)
+    assert [spec.name for spec in registry.specs(())] == ["now_playing"]
     assert "error" in await registry.execute(ToolCall("1", "set_music_volume", {"level": 101}))
     assert "error" in await registry.execute(ToolCall("2", "play_music", {}))
     assert "error" in await registry.execute(ToolCall("3", "set_music_volume", {}))

@@ -62,6 +62,7 @@ def music_settings(overrides):
     number(settings, "autonomy_hold_s")
     for key in ("remark_every", "dj_turn_every"):
         settings[key] = song_range(settings, key)
+    number(settings, "guest_pick_every", integer=True)
     if not isinstance(settings["autonomous_picks"], bool):
         raise ConfigError("Music autonomous_picks must be true or false")
     number(settings, "reseed_cooldown_s")

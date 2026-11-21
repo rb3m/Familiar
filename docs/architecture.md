@@ -67,8 +67,10 @@ Backend plugin classes expose `name`, `api_version` and `capabilities` (a set of
 - Per-persona `chattiness` scales cooldowns for `ambient` and `notable`.
 - A `cue` event (e.g. a song change) skips those cooldowns and the per-kind gap but still waits
   until nobody is speaking or holding push-to-talk; its short TTL drops it if the moment passes.
-- `speaker: carrier` routes an event to the carrier; `tools` offers named autonomous tools on
-  that one unprompted turn (other interjections stay tool-free). See ADR 0014.
+- `speaker` names a crew role (`dj`, `controls`, legacy `carrier`) whose holder takes the event,
+  or `guest` (the rest of the crew in rotation, granted the event's offered tools);
+  `tools` offers named autonomous tools on that one unprompted turn (other interjections stay
+  tool-free). See ADR 0014, 0018.
 
 Game packs may attach `event.data["flavor"]`, a list of real quote candidates with `id`, `text`,
 `speaker`, `context` and `attribution` (`verified` or `attributed`). Packs supply candidates;
@@ -90,10 +92,12 @@ Each turn has one speaker and uses that persona's voices, including speech fallb
 shared history stores speaker IDs and whether text was heard; voice acknowledges a sentence
 after audio drains. Each speaker sees her own model/tool turns and other members in a labelled
 transcript preface with compact tool outcomes. Single-persona prompts retain their existing
-form. Mutating action tools, including confirmation, are offered and dispatched only on the
-carrier's turns; core tools and `read_only` actions are available to everyone. Non-carriers get
-`hand_to_carrier` when carrier-only tools exist: an optional remark uses their voice, then the
-carrier handles the same request in the same reply (ADR 0013), at most once per player turn.
+form. Tools belong to a crew role (ADR 0018): `controls` (mutating actions and confirmation,
+the carrier) or `dj` (music); each is offered and dispatched only on its holder's turns, while
+core tools, `now_playing` and `read_only` actions are available to everyone. A speaker lacking a
+role in use gets `hand_off(to, line?)`: her own tool calls in that round run, an optional remark
+uses her voice, then the target handles the same request in the same reply (ADR 0013). A hand-off
+never returns to anyone who already spoke in that reply, so chains end within the crew size.
 For crews of two or three, session banter levels 1-10 replace idle remarks with one tool-free
 call for a validated 2-4-line scene. `banter.py` owns the gap/cap anchors (1: 1200 s, 2/h;
 5: 420 s, 5/h; 10: 120 s, 10/h), linear interpolation with caps rounded down, and a rolling
@@ -195,7 +199,8 @@ and pause gates. A service also creates a desk Director when there is no game or
 The optional `[music]` service is disabled by default. `familiar-music` owns Pear playback,
 threaded YouTube Music discovery, radio selection and a single duck/pause coordinator.
 Track remarks pause music; ordinary speech ducks against a separately remembered base volume.
-Remarks come every 3-4 natural song changes and the carrier gets a DJ turn (may call
+Remarks come every 3-4 natural song changes and the DJ gets a DJ turn (every third heard one
+is lent to another crew member in rotation as a guest pick) (may call
 `play_music`) every 8-12, held back for 15 minutes after any music request and while paused.
 Critical pauses resume only while ownership survives explicit user controls and observed track
 or playback changes. An external pause command issued while playback is already paused cannot

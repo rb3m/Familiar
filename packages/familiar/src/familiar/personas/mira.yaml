@@ -11,7 +11,7 @@ aliases:
 # Event kind or prefix -> nonnegative weight (exact wins, then longest prefix).
 # Effective event preference is weight * chattiness; omitted matches default to 1.
 interests: {}
-# Likes per topic, used as hints (e.g. the carrier's own music picks, ADR 0014).
+# Likes per topic, used as hints (e.g. the DJ's own music picks, ADR 0014, 0018).
 tastes:
   music:
   - synthwave and retro electronic

@@ -49,7 +49,7 @@ class Service:
 
 
 @pytest.mark.parametrize("with_game", [False, True])
-async def test_runtime_loads_service_and_registers_carrier_tools(monkeypatch, tmp_path, with_game):
+async def test_runtime_loads_service_and_registers_dj_tools(monkeypatch, tmp_path, with_game):
     from test_m2_voice import FakeGameAdapter
 
     service = Service()
@@ -72,14 +72,14 @@ async def test_runtime_loads_service_and_registers_carrier_tools(monkeypatch, tm
             argparse.Namespace(game="ats" if with_game else None)
         )
         assert isinstance(director, Director)
-        assert [s.name for s in conversation.tools.specs(carrier=False)] == ["now_playing"]
+        assert [s.name for s in conversation.tools.specs(())] == ["now_playing"]
         assert {s.name for s in conversation.tools.specs()} == {"play_music", "now_playing"}
         assert "Now playing: Music" in conversation.context()
         settings = next(settings for kind, settings in loaded if kind == "services")
-        assert settings["taste_read"]() == conversation.crew.carrier.tastes.get("music", [])
-        conversation.crew.carrier = replace(conversation.crew.carrier, tastes={"music": ["jazz"]})
+        assert settings["taste_read"]() == conversation.crew.dj.tastes.get("music", [])
+        conversation.crew.dj = replace(conversation.crew.dj, tastes={"music": ["jazz"]})
         assert settings["taste_read"]() == ["jazz"]
-        conversation.crew.carrier = replace(conversation.crew.carrier, tastes={})
+        conversation.crew.dj = replace(conversation.crew.dj, tastes={})
         assert settings["taste_read"]() == []
         settings["dislike_write"]("track", ("Artist",))
         assert settings["dislike_read"]()[0] == {"track"}

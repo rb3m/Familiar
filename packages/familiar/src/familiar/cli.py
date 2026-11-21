@@ -208,7 +208,7 @@ class _Runtime:
             for key, value in self.config.music.items()
             if key not in {"enabled", "service"}
         }
-        settings["taste_read"] = lambda: list(conversation.crew.carrier.tastes.get("music", []))
+        settings["taste_read"] = lambda: list(conversation.crew.dj.tastes.get("music", []))
         if conversation.memory is not None:
             settings.update(
                 dislike_read=conversation.memory.store.music_dislikes,
@@ -225,6 +225,7 @@ class _Runtime:
                     tool.spec,
                     tool.handler,
                     carrier_only=tool.carrier_only,
+                    role=tool.role,
                     autonomous=tool.autonomous,
                 )
             self.services.append(service)
@@ -257,7 +258,7 @@ async def _runtime(args: argparse.Namespace) -> AsyncIterator[_Runtime]:
         load_persona(config.personas_dir, identifier, config.user_personas_dir)
         for identifier in selection.crew
     ]
-    crew = Crew(members, selection.carrier)
+    crew = Crew(members, selection.carrier, selection.dj)
     language = selection.language
     for member in members:
         member.system_prompt(language)

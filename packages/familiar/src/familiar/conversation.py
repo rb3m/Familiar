@@ -7,10 +7,11 @@ from collections import deque
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import asdict
+from functools import partial
 
 from familiar.alerts import AlertKeeper
 from familiar.banter import Casting, parse_scene
-from familiar.crew import Crew, persona_id
+from familiar.crew import GUEST, ROLE_DUTIES, ROLES, Crew, persona_id
 from familiar.fallback import llm_budget_blocked
 from familiar.flavor import FlavorKeeper, flavor_hint
 from familiar.hands import ActionKeeper
@@ -32,7 +33,7 @@ from familiar.memory import MemoryKeeper
 from familiar.memory.keeper import CREW_REPLY_WINDOW
 from familiar.persona import Persona
 from familiar.pipeline.sentences import SentenceSplitter
-from familiar.tools import ToolRegistry
+from familiar.tools import ToolRegistry, validate_arguments
 from familiar.transcript import TranscriptLog
 
 ALERT_RULE = (
@@ -53,21 +54,34 @@ ACTION_RULE = (
 )
 
 
-HANDOFF_SPEC = ToolSpec(
-    "hand_to_carrier",
-    "Hand the player's request to the carrier to operate the ship or game in this reply.",
-    {
-        "type": "object",
-        "properties": {
-            "line": {
-                "type": "string",
-                "description": "Optional in-character spoken remark (at most 200 characters).",
-                "maxLength": 200,
-            }
+HANDOFF = "hand_off"
+
+
+def handoff_spec(targets: dict[str, Persona], crew: Crew) -> ToolSpec:
+    """Hand the request to a crew member holding a role the speaker lacks (ADR 0013, 0018)."""
+    duties = "; ".join(
+        f"{identifier} = {member.display_name}, "
+        + " and ".join(ROLE_DUTIES[role] for role in ROLES if role in crew.roles_of(member))
+        for identifier, member in targets.items()
+    )
+    required = ["to"] if len(targets) > 1 else []
+    return ToolSpec(
+        HANDOFF,
+        f"Hand the player's request to the crew member who does it, in this reply ({duties}).",
+        {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "enum": list(targets), "description": "Crew member id."},
+                "line": {
+                    "type": "string",
+                    "description": "Optional in-character spoken remark (at most 200 characters).",
+                    "maxLength": 200,
+                },
+            },
+            "required": required,
+            "additionalProperties": False,
         },
-        "additionalProperties": False,
-    },
-)
+    )
 
 
 class Conversation:
@@ -228,7 +242,9 @@ class Conversation:
             text += flavor_hint(candidate)
         recorded = False
         offered = tuple(event.data.get("tools", ()))
-        async with aclosing(self._turn(text, offered=offered)) as sentences:
+        granted = event.data.get("speaker") == GUEST
+        turn = self._turn(text, offered=offered, granted=granted)
+        async with aclosing(turn) as sentences:
             async for sentence in sentences:
                 yield sentence
                 if recorded or (spoken is not None and not spoken()):
@@ -384,19 +400,37 @@ class Conversation:
             await self.memory.finish(self.llm, self.transcript)
 
     async def _turn(
-        self, text: str, player_turn: bool = False, offered: tuple[str, ...] = ()
+        self,
+        text: str,
+        player_turn: bool = False,
+        offered: tuple[str, ...] = (),
+        granted: bool = False,
     ) -> AsyncIterator[str]:
         kinds = {True: "player", False: "game_event"}
         self._record_message(Message("user", text), kind=kinds[player_turn])
         self._remember_many([])
-        async with aclosing(self._respond(text, player_turn, offered)) as sentences:
+        reply = self._respond(text, player_turn, offered, granted=granted)
+        async with aclosing(reply) as sentences:
             async for sentence in sentences:
                 yield sentence
 
+    def _handoff_targets(self, visited: tuple[Persona, ...]) -> dict[str, Persona]:
+        return self.crew.handoff_targets(self.speaker, self.tools.roles_in_use, visited)
+
     async def _respond(
-        self, text: str, player_turn: bool, offered: tuple[str, ...] = ()
+        self,
+        text: str,
+        player_turn: bool,
+        offered: tuple[str, ...] = (),
+        visited: tuple[Persona, ...] = (),
+        granted: bool = False,
     ) -> AsyncIterator[str]:
-        """Respond to the current request without recording another player turn."""
+        """Respond to the current request without recording another player turn.
+
+        ``visited`` lists crew who already spoke in this reply; hand-offs never go back to them.
+        ``granted`` opens the event's offered autonomous tools whatever role owns them (a guest
+        turn, ADR 0018).
+        """
         system = ""
         context = self.context() if self.context is not None else ""
         if context:
@@ -406,23 +440,29 @@ class Conversation:
             memories = self.memory.context(text)
         if memories:
             system += "\n\n" + memories
-        carrier = self.speaker == self.crew.carrier
-        specs = self.tools.offered(offered, carrier=carrier)
+        roles = self.crew.roles_of(self.speaker)
+        specs = self.tools.offered(offered, None if granted else roles)
         if player_turn:
-            specs = self.tools.specs(carrier=carrier)
-        handoff = player_turn and self.speaker != self.crew.carrier and self.tools.has_carrier_tools
-        if handoff:
-            specs.append(HANDOFF_SPEC)
+            specs = self.tools.specs(roles)
+        targets = self._handoff_targets(visited)
+        if player_turn and targets:
+            specs.append(handoff_spec(targets, self.crew))
         if any(spec.name == "set_alert" for spec in specs):
             system += ALERT_RULE
         if any(spec.name.startswith("act_") for spec in specs):
             system += ACTION_RULE
-        async with aclosing(self._reply_round(system, specs, request=text)) as sentences:
+        reply = self._reply_round(system, specs, request=text, visited=visited)
+        async with aclosing(reply) as sentences:
             async for sentence in sentences:
                 yield sentence
 
     async def _reply_round(
-        self, system: str, specs: list[ToolSpec], round_index: int = 0, request: str = ""
+        self,
+        system: str,
+        specs: list[ToolSpec],
+        round_index: int = 0,
+        request: str = "",
+        visited: tuple[Persona, ...] = (),
     ) -> AsyncIterator[str]:
         calls: list[ToolCall] = []
         offered = []
@@ -433,35 +473,65 @@ class Conversation:
                 yield sentence
         if not calls:
             return
-        handoff = next((call for call in calls if call.name == HANDOFF_SPEC.name), None)
-        if handoff is not None and HANDOFF_SPEC in offered:
-            async with aclosing(self._hand_off(handoff, calls, request)) as sentences:
+        handoff = next((call for call in calls if call.name == HANDOFF), None)
+        if not any(spec.name == HANDOFF for spec in offered):
+            handoff = None  # a hallucinated hand-off is dispatched, and refused, like any tool
+        target = self._handoff_target(handoff, offered, visited)
+        decide = partial(self._handoff_result, target)
+        outcome = await self._execute_calls(calls, offered, handoff, decide)
+        if target is not None and outcome.get("status") == "handed_off":
+            async with aclosing(self._hand_off(handoff, target, request, visited)) as sentences:
                 async for sentence in sentences:
                     yield sentence
             return
-        await self._execute_calls(calls, offered)
         if not offered:
             return
         async with aclosing(
-            self._reply_round(system, specs, round_index + 1, request)
+            self._reply_round(system, specs, round_index + 1, request, visited)
         ) as sentences:
             async for sentence in sentences:
                 yield sentence
 
+    def _handoff_target(
+        self, handoff: ToolCall | None, offered: list[ToolSpec], visited: tuple[Persona, ...]
+    ) -> Persona | None:
+        """The validated target, or None: a bad call becomes an error, never a guess."""
+        if handoff is None:
+            return None
+        spec = next(spec for spec in offered if spec.name == HANDOFF)
+        try:
+            validate_arguments(handoff.arguments, spec.parameters)
+        except ValueError:
+            return None
+        targets = self._handoff_targets(visited)
+        if "to" not in handoff.arguments and len(targets) == 1:
+            return next(iter(targets.values()))
+        return targets.get(handoff.arguments.get("to"))
+
+    def _handoff_result(self, target: Persona | None, own: list[dict]) -> dict:
+        """Hand off only once the speaker's own part needs nothing more from the player."""
+        if target is None:
+            targets = ", ".join(self._handoff_targets(()))
+            return {"error": f"Not handed off: set 'to' to one of: {targets}"}
+        if any(result.get("status") == "needs_confirmation" for result in own):
+            return {
+                "error": "Not handed off: ask the player to confirm the pending action first; "
+                "hand off after they answer."
+            }
+        return {"status": "handed_off", "detail": target.display_name}
+
     async def _hand_off(
-        self, handoff: ToolCall, calls: list[ToolCall], request: str
+        self, handoff: ToolCall, target: Persona, request: str, visited: tuple[Persona, ...]
     ) -> AsyncIterator[str]:
-        # Complete every protocol call, but execute none of this round's other tools.
-        results = {
-            True: {"status": "handed_off", "detail": self.crew.carrier.display_name},
-            False: {"error": "Skipped because this round handed the request to the carrier"},
-        }
-        self._remember_many([self._tool_result(call, results[call is handoff]) for call in calls])
+        # The speaker's own tools in this round already ran ("gear down and play something": the
+        # controls holder lowers the gear, then the DJ picks the music). The target sees the
+        # outcomes, and can hand on only to crew who have not spoken in this reply.
         async with aclosing(self._handoff_line(handoff.arguments.get("line", ""))) as sentences:
             async for sentence in sentences:
                 yield sentence
-        self.speaker = self.crew.carrier
-        async with aclosing(self._respond(request, player_turn=True)) as sentences:
+        visited = (*visited, self.speaker)
+        self.speaker = target
+        async with aclosing(self._respond(request, True, visited=visited)) as sentences:
             async for sentence in sentences:
                 yield sentence
 
@@ -481,20 +551,37 @@ class Conversation:
             self._record_message(Message("assistant", line), heard=heard)
             self._log_line(line, heard)
 
-    async def _execute_calls(self, calls: list[ToolCall], offered: list[ToolSpec]) -> None:
-        results = []
-        allowed = {spec.name for spec in offered}
+    async def _execute_calls(
+        self,
+        calls: list[ToolCall],
+        offered: list[ToolSpec],
+        held: ToolCall | None = None,
+        decide: Callable[[list[dict]], dict] | None = None,
+    ) -> dict:
+        """Run calls in order; ``held`` is answered last by ``decide`` from the others' results.
+
+        Returns the held call's result (empty without one).
+        """
+        outcomes: dict[int, dict] = {}
+        allowed = {spec.name for spec in offered} - {HANDOFF}
         try:
-            for call in calls:
-                result = await self._dispatch(call, allowed)
-                results.append(self._tool_result(call, result))
+            for index, call in enumerate(calls):
+                if call is held:
+                    continue
+                outcomes[index] = await self._dispatch(call, allowed)
+            held_index = next((i for i, call in enumerate(calls) if call is held), None)
+            if held_index is not None and decide is not None:
+                outcomes[held_index] = decide(list(outcomes.values()))
         finally:
             # Cancellation still leaves a complete protocol group for the next turn.
-            results.extend(
-                self._tool_result(call, {"error": "Tool execution interrupted"})
-                for call in calls[len(results) :]
+            interrupted = {"error": "Tool execution interrupted"}
+            self._remember_many(
+                [
+                    self._tool_result(call, outcomes.get(index, interrupted))
+                    for index, call in enumerate(calls)
+                ]
             )
-            self._remember_many(results)
+        return next((outcomes[i] for i, call in enumerate(calls) if call is held), {})
 
     async def _dispatch(self, call: ToolCall, allowed: set[str]) -> dict:
         if call.name not in allowed:

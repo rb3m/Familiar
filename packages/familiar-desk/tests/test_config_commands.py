@@ -54,7 +54,7 @@ def test_invalid_config(tmp_path, section):
 
 @pytest.mark.asyncio
 async def test_shared_service_registration(monkeypatch):
-    tool = Mock(carrier_only=True, autonomous=True)
+    tool = Mock(carrier_only=True, autonomous=True, role=None)
     service = Mock(service_tools=Mock(return_value=[tool]), aclose=AsyncMock())
     load = Mock(return_value=service)
     monkeypatch.setattr("familiar.cli.load", load)
@@ -64,7 +64,7 @@ async def test_shared_service_registration(monkeypatch):
         runtime._service(conversation, "desk", {"interval_s": 60})
         load.assert_called_once_with("services", "desk", {"interval_s": 60})
         conversation.tools.register.assert_called_once_with(
-            tool.spec, tool.handler, carrier_only=True, autonomous=True
+            tool.spec, tool.handler, carrier_only=True, role=None, autonomous=True
         )
         assert runtime.services == [service]
     service.aclose.assert_awaited_once()

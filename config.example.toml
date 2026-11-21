@@ -5,10 +5,11 @@ language = "en"            # catalog code; add languages in the GUI or data over
 # Voice reads ~/.config/familiar/session.toml when present (XDG_CONFIG_HOME respected).
 # --session PATH selects another file; CLI flags / FAMILIAR_PERSONA, FAMILIAR_GAME,
 # FAMILIAR_LANGUAGE override its choices. FAMILIAR_SESSION selects a session path.
-# Session schema: version = 1, crew = ["mira"], language = "en", carrier = "mira",
-# banter = 0 (0-10; stored for phase 2). Optional game = "ats"; omit for desk mode.
-# No session file: persona below is a crew of one, its own carrier, with banter off.
-# --persona selects a crew of one, also overriding the session's carrier.
+# Session schema: version = 3, crew = ["mira"], language = "en", carrier = "mira",
+# banter = 0 (0-10). Optional game = "ats" (omit for desk mode) and dj = "mira" (who runs
+# the music; defaults to the carrier, who takes the game controls).
+# No session file: persona below is a crew of one, its own carrier and DJ, with banter off.
+# --persona selects a crew of one, also overriding the session's carrier and DJ.
 # Persona YAML may include aliases: {es: [Mira]}, interests: {landmark_: 2.0}.
 # display_name is always an alias; interest uses exact then longest prefix, scaled by
 # chattiness. User personas may add relationships: {persona_id: "One line"}.
@@ -172,7 +173,7 @@ enabled = false          # companion DJ, beside any game or in desk voice mode
 service = "blend"        # familiar.services entry point; "pear" keeps YouTube-only playback
 # library_paths = []      # default: XDG Music dir
 # library_db = "~/.local/state/familiar/music/library.sqlite" # default follows XDG_STATE_HOME
-# blend = { library = 70, persona = 20, discovery = 10 } # persona follows the current carrier taste
+# blend = { library = 70, persona = 20, discovery = 10 } # persona follows the DJ's taste
 # local_min_matches = 8   # fewer local genre matches fall through to YouTube Music
 # local_min_artists = 4   # minimum distinct primary artists for automatic local genres
 # artist_tag_min_share = 0.25 # fraction of highest artist-tag count; file genres always match
@@ -206,9 +207,10 @@ service = "blend"        # familiar.services entry point; "pear" keeps YouTube-o
 # calm_volume = 40        # level for calmer music, always applied
 # queue_top_up = 5        # short radio batch; excludes queued IDs and dislikes
 # remark_every = [3, 4]   # remark on the new song every 3-4 song changes (picked songs don't count)
-# dj_turn_every = [8, 12] # the carrier may choose new music every 8-12 song changes
+# dj_turn_every = [8, 12] # the DJ may choose new music every 8-12 song changes
+# guest_pick_every = 3   # every 3rd DJ turn goes to another crew member in turn (0: off)
 # autonomy_hold_s = 900   # no autonomous pick within this long of a music request
-# autonomous_picks = true # false: the carrier only picks music when asked
+# autonomous_picks = true # false: the DJ only picks music when asked
 # reseed_cooldown_s = 15  # minimum gap for calmer / more-like-this requests
 # search_timeout_s = 10  # deadline for blocking discovery calls (run in a worker thread)
 # search_limit = 8        # candidate songs per search

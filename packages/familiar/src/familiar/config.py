@@ -99,7 +99,7 @@ def session_settings(
     """CLI/env selections override a saved session, then ordinary config defaults."""
     overrides = {}
     if persona:
-        overrides.update(crew=(persona,), carrier=persona)
+        overrides.update(crew=(persona,), carrier=persona, dj=persona)
     if game:
         overrides["game"] = game
     if language:

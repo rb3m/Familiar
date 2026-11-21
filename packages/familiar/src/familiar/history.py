@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-from familiar.crew import Crew, persona_id
+from familiar.crew import ROLE_DUTIES, ROLES, Crew, persona_id
 from familiar.interfaces import Message, ToolCall
 from familiar.persona import Persona
 
@@ -83,13 +83,7 @@ class DefaultHistoryRenderer:
             f"\nYou are {speaker.display_name}; speak only as {speaker.display_name}; "
             "never write other crew members' lines; no name prefix."
         )
-        if speaker != crew.carrier:
-            system += (
-                f"\nOnly {crew.carrier.display_name} carries out actions: operating the ship "
-                "or game, and playing or changing music. When the player asks for one, call "
-                "hand_to_carrier when offered, with an optional short in-character remark. "
-                "Do not claim to act yourself. Never say a tool's name aloud."
-            )
+        system += self._duties(speaker, crew)
         # Chronological, every speaker labelled, so replies keep their order relative to the
         # player's turns; the persona's own lines also stay as model turns below.
         has_others = any(
@@ -103,6 +97,22 @@ class DefaultHistoryRenderer:
             )
         own = [record for record in records if record.speaker_id in {"player", persona_id(speaker)}]
         return self._own_history(system, own)
+
+    @staticmethod
+    def _duties(speaker: Persona, crew: Crew) -> str:
+        """Who does which job, for a speaker lacking a role (ADR 0018)."""
+        others = [role for role in ROLES if crew.holders[role] != speaker]
+        if not others:
+            return ""
+        jobs = " ".join(
+            f"Only {crew.holders[role].display_name} handles {ROLE_DUTIES[role]}."
+            for role in others
+        )
+        return (
+            f"\n{jobs} When the player asks for one of those, call hand_off when offered, "
+            "with an optional short in-character remark, after doing your own part. "
+            "Do not claim to do it yourself. Never say a tool's name aloud."
+        )
 
     def _own_history(self, system: str, records: list[HistoryRecord]) -> tuple[str, list[Message]]:
         cut_off = [

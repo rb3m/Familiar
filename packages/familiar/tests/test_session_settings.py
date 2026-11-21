@@ -60,7 +60,7 @@ def test_atomic_failure_keeps_original_and_removes_temp(roster, monkeypatch):
 def test_every_error_reported_together(roster):
     path = roster / "session.toml"
     path.write_text(
-        'version = 3\ncrew = ["test", "missing", "third"]\n'
+        'version = 4\ncrew = ["test", "missing", "third"]\n'
         'carrier = "outsider"\nlanguage = "ja"\nbanter = 11\napi_key = "bad"\n'
     )
     with pytest.raises(session.SessionError) as raised:
@@ -189,7 +189,8 @@ def test_version_one_file_loads_with_stereo_defaults(roster):
     )
     loaded = read(path, roster)
     assert loaded == settings()
-    assert loaded.version == 2
+    assert loaded.version == 3
+    assert loaded.dj == "other"  # no dj key: the carrier runs the music
     assert loaded.stereo is False
     assert loaded.seats == {"test": 0.7, "other": 0.0}
 
@@ -204,11 +205,12 @@ def test_default_seats_alternate_around_the_carrier(roster):
     assert session.default_seats("not-a-list", None) == {}
 
 
-def test_save_always_writes_version_two_with_seats(roster):
+def test_save_always_writes_version_three_with_seats(roster):
     path = roster / "session.toml"
     session.save(path, replace(settings(stereo=True), version=1))
     text = path.read_text()
-    assert "version = 2" in text
+    assert "version = 3" in text
+    assert 'dj = "other"' in text
     assert "stereo = true" in text
     loaded = read(path, roster)
     assert loaded.stereo is True

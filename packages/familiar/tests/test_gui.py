@@ -134,6 +134,7 @@ async def test_auth_and_state(client):
         "language",
         "crew",
         "carrier",
+        "dj",
         "banter",
         "started_at",
         "exit_code",
@@ -500,11 +501,12 @@ async def test_session_settings_defaults_without_file(client, tmp_path):
     response = await client.get("/api/session/settings")
     assert response.status == 200
     assert await response.json() == {
-        "version": 2,
+        "version": 3,
         "game": None,
         "crew": ["mira"],
         "language": "en",
         "carrier": "mira",
+        "dj": "mira",
         "banter": 2,
         "stereo": False,
         "seats": {"mira": 0.0},
@@ -612,7 +614,7 @@ async def test_put_session_settings_stereo_seats_round_trip(client, tmp_path):
     response = await client.get("/api/session/settings")
     assert response.status == 200
     echoed = await response.json()
-    assert echoed["version"] == 2
+    assert echoed["version"] == 3
     assert echoed["stereo"] is True
     assert echoed["seats"] == {"mira": 0.0, "frieren": -0.7}
     assert echoed["problems"] == []

@@ -13,7 +13,7 @@ let state;
 let ptt;
 let pttProposal;
 let pttBusy = false;
-let choices = { game: null, crew: [], carrier: '', language: '', banter: 2, stereo: false, seats: {} };
+let choices = { game: null, crew: [], carrier: '', dj: '', language: '', banter: 2, stereo: false, seats: {} };
 let saveTimer;
 let saveFailed = false;
 let voices = null;
@@ -164,6 +164,7 @@ function normalizeChoices(preferred = choices) {
     crew.push(validPersona(defaults.persona) ? defaults.persona : state.personas[0].id);
   }
   const carrier = crew.includes(preferred.carrier) ? preferred.carrier : (crew[0] || '');
+  const dj = crew.includes(preferred.dj) ? preferred.dj : carrier;
   const language = validLanguage(preferred.language) ? preferred.language
     : (validLanguage(defaults.language) ? defaults.language : state.languages[0]?.id || '');
   const banter = Number.isInteger(preferred.banter) && preferred.banter >= 0 && preferred.banter <= 10 ? preferred.banter : 2;
@@ -174,7 +175,7 @@ function normalizeChoices(preferred = choices) {
     const pan = Number(source[id]);
     if (Number.isFinite(pan) && pan >= -1 && pan <= 1) seats[id] = pan;
   }
-  choices = { game, crew, carrier, language, banter, stereo, seats };
+  choices = { game, crew, carrier, dj, language, banter, stereo, seats };
 }
 
 function settingsToChoices(settings) {
@@ -182,6 +183,7 @@ function settingsToChoices(settings) {
     game: settings.game ?? null,
     crew: Array.isArray(settings.crew) ? [...settings.crew] : [],
     carrier: typeof settings.carrier === 'string' ? settings.carrier : '',
+    dj: typeof settings.dj === 'string' ? settings.dj : '',
     language: typeof settings.language === 'string' ? settings.language : '',
     banter: settings.banter,
     stereo: settings.stereo === true,
@@ -210,7 +212,7 @@ function showSaveStatus(message) {
 
 async function saveSettings() {
   const seats = Object.fromEntries(choices.crew.map((id) => [id, seatOf(id)]));
-  const payload = { version: 2, ...choices, seats };
+  const payload = { version: 3, ...choices, seats };
   try {
     await put('/api/session/settings', payload);
     saveFailed = false;
@@ -326,7 +328,6 @@ function moveCrew(index, delta) {
 
 function removeCrew(index) {
   choices.crew.splice(index, 1);
-  if (!choices.crew.includes(choices.carrier)) choices.carrier = choices.crew[0] || '';
   renderCrew();
   scheduleSave();
 }
@@ -340,12 +341,26 @@ function addCrewMember() {
   $$('#crew-slots .crew-slot').at(-1)?.querySelector('select')?.focus();
 }
 
-function renderCarrier() {
-  const select = $('#carrier');
+// Roles stay on crew members: controls fall back to the first member, music to the controls.
+function keepRoles() {
+  if (!choices.crew.includes(choices.carrier)) choices.carrier = choices.crew[0] || '';
+  if (!choices.crew.includes(choices.dj)) choices.dj = choices.carrier;
+}
+
+function renderRoleSelect(selector, value) {
+  const select = $(selector);
   select.replaceChildren();
   for (const id of choices.crew) select.add(new Option(personaName(id), id));
-  select.value = choices.carrier;
+  select.value = value;
   select.disabled = state.session.running || sessionBusy || !choices.crew.length;
+}
+
+function renderRoles() {
+  keepRoles();
+  renderRoleSelect('#carrier', choices.carrier);
+  renderRoleSelect('#dj', choices.dj);
+  // A crew of one does both jobs; the music picker only matters with company aboard.
+  $('#dj-field').hidden = choices.crew.length < 2;
 }
 
 function renderBanter() {
@@ -368,7 +383,7 @@ function renderCrew() {
   choices.crew.forEach((id, index) => root.append(crewSlot(id, index)));
   $('#crew-add').disabled = state.session.running || sessionBusy
     || choices.crew.length >= 3 || choices.crew.length >= state.personas.length;
-  renderCarrier();
+  renderRoles();
   renderBanter();
   renderStereo();
 }
@@ -441,6 +456,7 @@ function lockSetupControls(locked) {
   for (const control of $$('#games button, #crew-slots button, #crew-slots select')) control.disabled = true;
   $('#crew-add').disabled = true;
   $('#carrier').disabled = true;
+  $('#dj').disabled = true;
   $('#banter').disabled = true;
   $('#stereo').disabled = true;
   $('#language').disabled = true;
@@ -457,10 +473,11 @@ function renderSession() {
     const crew = (Array.isArray(session.crew) && session.crew.length ? session.crew : [session.persona]).filter(Boolean);
     const names = crew.map((id) => personaName(id)).join(', ');
     const carrier = session.carrier ? `${personaName(session.carrier)} takes the controls · ` : '';
+    const dj = session.dj && session.dj !== session.carrier ? `${personaName(session.dj)} on the music · ` : '';
     const date = session.started_at ? new Date(session.started_at) : null;
     const since = date && !Number.isNaN(date.getTime()) ? ` · running since ${date.toLocaleString()}` : ' · running';
     const game = state.games.find((item) => item.id === session.game)?.name || session.game || 'desk chat';
-    message = `${names || 'Companion'} · ${carrier}${game} · ${session.language || ''}${since}`;
+    message = `${names || 'Companion'} · ${carrier}${dj}${game} · ${session.language || ''}${since}`;
   }
   if (!session.running && session.exit_code !== null) message = `Session stopped · exit code ${session.exit_code}`;
   $('#session-status').textContent = message;
@@ -477,6 +494,7 @@ function applySession(session) {
       game: session.game,
       crew: session.crew,
       carrier: session.carrier,
+      dj: session.dj,
       language: session.language,
       banter: session.banter,
     });
@@ -1077,6 +1095,10 @@ function bindControls() {
   $('#crew-add').addEventListener('click', addCrewMember);
   $('#carrier').addEventListener('change', (event) => {
     choices.carrier = event.target.value;
+    scheduleSave();
+  });
+  $('#dj').addEventListener('change', (event) => {
+    choices.dj = event.target.value;
     scheduleSave();
   });
   $('#banter').addEventListener('input', (event) => {

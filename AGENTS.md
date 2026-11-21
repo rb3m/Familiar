@@ -9,7 +9,7 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Live OK: KSP crew, banter, kRPC; ETS2 **M3** recall, **M6** stereo; Elite gear, scoop, EDSM, `system_info`; DJ + library blend; Mac desk assistant (GUI, Ctrl+F12 key PTT, desk feed, Pear music). Awaiting live: crew→carrier music hand-off, **M5** SCS keys, callbacks, Elite hand-off; desk-feed remarks (period/sunset).
+- Live OK: KSP crew, banter, kRPC; ETS2 **M3** recall, **M6** stereo; Elite gear, scoop, EDSM, `system_info`; DJ + library blend; Mac desk assistant (GUI, Ctrl+F12 key PTT, desk feed, Pear music). Awaiting live: controls/DJ split (ADR 0018, Elite on Linux), **M5** SCS keys, callbacks, Elite hand-off; desk-feed remarks (period/sunset).
 - Next task: live checks above; next desk feed sources (roadmap); tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal, KWin focus; M7 Vic2 adapter.
 - Known: flash-lite free key; 429s park a model 15 min, then `fallback_api_key_env`. ElevenLabs Pro, Gemini TTS fallback. GUI needs a non-terminal PTT (evdev on Linux, mouse or F-key/keypad on macOS). Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
@@ -28,7 +28,7 @@ API tier) is the first backend; others plug in via entry points.
 - `docs/architecture.md`: modules, interfaces, Director rules, platforms. Read before changing interfaces or adding a module.
 - `docs/plugins.md`: how to add a backend, command, or game pack. Read before writing a plugin.
 - `docs/roadmap.md`: milestones and done-criteria. Read when picking the next task.
-- `docs/decisions/`: ADRs. 0001 structure, 0002 location/landmarks, 0003 GUI, 0004 package boundaries, 0005 trip memory, 0006 KSP/quotes, 0007 tools/alerts, 0008 API vs CLI, 0009 hands gate, 0010 Elite, 0011 crew, 0012 DJ/music, 0013 hand-off, 0014 service cues/DJ turns, 0015 local library/blend, 0016 desk feed, 0017 macOS mouse PTT.
+- `docs/decisions/`: ADRs. 0001 structure, 0002 location/landmarks, 0003 GUI, 0004 package boundaries, 0005 trip memory, 0006 KSP/quotes, 0007 tools/alerts, 0008 API vs CLI, 0009 hands gate, 0010 Elite, 0011 crew, 0012 DJ/music, 0013 hand-off, 0014 service cues/DJ turns, 0015 local library/blend, 0016 desk feed, 0017 macOS mouse PTT, 0018 controls/DJ roles.
 - `docs/gui-api.md`: GUI server/frontend contract (endpoints, auth, SSE). Read before changing `packages/familiar/src/familiar/gui/`.
 - `config.example.toml`: every config key with defaults.
 - `packages/familiar/src/familiar/personas/`: built-in persona YAML; user copies in `~/.config/familiar/personas/` shadow them.
