@@ -9,8 +9,8 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Live OK: KSP crew, banter, kRPC; ETS2 **M3** recall, **M6** stereo; Elite gear, scoop, EDSM, `system_info`; DJ + library blend. Awaiting live: crew→carrier music hand-off, **M5** SCS keys, callbacks, Elite hand-off; Mac desk assistant (GUI + mouse/key PTT, desk feed, Pear-only music).
-- Next task: Mac live check (keys, Pear, Accessibility, `[desk]` lat/lon); other live checks; tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal, KWin focus; M7 Vic2 adapter.
+- Live OK: KSP crew, banter, kRPC; ETS2 **M3** recall, **M6** stereo; Elite gear, scoop, EDSM, `system_info`; DJ + library blend; Mac desk assistant (GUI, Ctrl+F12 key PTT, desk feed, Pear music). Awaiting live: crew→carrier music hand-off, **M5** SCS keys, callbacks, Elite hand-off; desk-feed remarks (period/sunset).
+- Next task: live checks above; next desk feed sources (roadmap); tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal, KWin focus; M7 Vic2 adapter.
 - Known: flash-lite free key; 429s park a model 15 min, then `fallback_api_key_env`. ElevenLabs Pro, Gemini TTS fallback. GUI needs a non-terminal PTT (evdev on Linux, mouse or F-key/keypad on macOS). Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
 ## Rules
