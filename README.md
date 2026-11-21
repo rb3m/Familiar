@@ -19,8 +19,8 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   Euro Truck Simulator 2: live telemetry, a hand-checked landmark pack and town lookup.
   `familiar-ksp` adds Kerbal Space Program flight telemetry, mission events and resource warnings
   through the kRPC mod (enable auto-start servers and auto-accept clients).
-- **Launcher GUI** (`familiar gui`): pick the game and persona, assign push-to-talk, watch the
-  conversation, and create or edit personas, with optional AI drafting and voice previews.
+- **Launcher GUI** (`familiar gui`): pick the game and crew, who takes the controls and who
+  plays the music, assign push-to-talk, watch the conversation, and create or edit personas, with optional AI drafting and voice previews.
 - **Desk companion** (`familiar-desk`): a local feed of your surroundings, time of day and
   sunrise/sunset first, so the companion has something to remark on at the desk or beside a
   game without telemetry.
@@ -100,7 +100,7 @@ Voice loads `~/.config/familiar/session.toml` when present (`XDG_CONFIG_HOME` is
 For example, after creating a user persona named `copilot` with voices for English:
 
 ```toml
-version = 1
+version = 3
 crew = ["mira", "copilot"]
 language = "en"
 carrier = "mira"     # takes the game controls
@@ -191,8 +191,10 @@ Pear Desktop), roughly 70% library, 20% the DJ persona's own taste, 10% discover
 
 Enable `[music]` with `enabled = true` and `service = "blend"` (or `"pear"` for YouTube Music
 only). Ask for music, a skip, calmer music, more like this, likes/dislikes or volume changes in
-any game or desk voice mode. The crew's DJ controls playback; everyone can ask what's playing, and every
-third time the DJ would pick a song, another crew member gets the pick instead, in turn.
+any game or desk voice mode. The crew's DJ controls playback; everyone can ask what's playing.
+Every 8-12 songs the DJ may pick something unprompted; every third of those picks goes to
+another crew member instead, in turn, guided by that member's `tastes.music`
+(`guest_pick_every`, 0: off).
 Music ducks during speech, pauses for critical events and rare track remarks, and remembers
 dislikes when memory is enabled. Local picks learn from what you play through or skip early;
 remarks use only facts from your tags. See `config.example.toml` for tuning and data overrides.

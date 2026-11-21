@@ -272,7 +272,7 @@ API 2.1 is additive and remains compatible with API major 2 plugins.
 API 2.2 (additive, ADR 0014): a service event may set `data["cue"]` (tied to a moment: skip the
 Director's quiet gaps, still wait for silence), `data["speaker"] = "carrier"` (route to the
 carrier), `data["tools"]` (tool names offered on that unprompted turn; only tools registered with
-`ServiceTool(autonomous=True)` are honoured, carrier-only rules still apply) and `data["taste"]`
+`ServiceTool(autonomous=True)` are honoured, role rules still apply) and `data["taste"]`
 (a persona `tastes` topic added as hints).
 API 2.3 (additive, ADR 0018): `ServiceTool.role`; `data["speaker"]` names a role (`"dj"`,
 `"controls"`, or `"carrier"` as an alias for controls) or `"guest"`: the next crew member other

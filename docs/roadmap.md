@@ -8,7 +8,7 @@
 | **M3 Memory** (in progress; recall live in ETS2 2026-11-17) | Local per-game trip memory: places, jobs and notable moments, session summaries; recall when asked ("have we been here before?") and, rarely, unprompted | "Remember last trip to Reno?" works; spontaneous recall is occasional, never every visit |
 | **M4 More games** (ETS2 live 2026-11-16: countries, towns, landmarks; KSP live 2026-11-17, ADR 0006: flight events, navball/target speed, quotes; voice-set alerts ADR 0007; Elite built 2026-11-17, ADR 0010: journal events, written binds, hands; EDSM nearby-system and exploration hints built 2026-11-17; live flight 2026-11-18 OK (gear, cargo scoop, nearby systems); ship/system awareness and `system_info` added 2026-11-18, live check pending) | ETS2 (shares ATS adapter), KSP (kRPC; flight events + rare paraphrased astronaut quotes), then MSFS, Elite (journal + EDSM), Minecraft (see below) | Each has an adapter + knowledge pack |
 | **M5 Hands** (built 2026-11-17, ADR 0009; KSP kRPC actions live 2026-11-17, SCS key presses pending) | uinput actions as LLM tools, kRPC actions for KSP, Touch Portal sync (both ways, see below) | Voice command toggles something in-game |
-| **M6 Crew** (phases 1-3 built 2026-11-17, ADR 0011; crew turns and banter live in KSP 2026-11-17; stereo positioning live in ETS2 2026-11-17; Touch Portal part of phase 3 deferred) | Up to three personas at once: launcher picks game, crew, language, action-carrier and banter level into `session.toml`; one speaker at a time; banter scenes; shared memory with speaker attribution. Phases: 1 session + speaker selection, 2 banter, 3 stereo/callbacks/Touch Portal | Ask Frieren a question by name and she answers in her voice; Megumin teases her on a long quiet stretch; Mira handles the gear |
+| **M6 Crew** (phases 1-3 built 2026-11-17, ADR 0011; crew turns and banter live in KSP 2026-11-17; stereo positioning live in ETS2 2026-11-17; Touch Portal part of phase 3 deferred) | Up to three personas at once: launcher picks game, crew, language, action-carrier, DJ (ADR 0018, 2026-11-20) and banter level into `session.toml`; one speaker at a time; banter scenes; shared memory with speaker attribution. Phases: 1 session + speaker selection, 2 banter, 3 stereo/callbacks/Touch Portal | Ask Frieren a question by name and she answers in her voice; Megumin teases her on a long quiet stretch; Mira handles the gear |
 
 | **M7 Beyond sims** (planned 2026-11-18, see below) | Two new companion roles: advisor (strategy games, from save snapshots) and commentator (RPGs, from coarse context or screen vision) | Mira briefs a real Vic3/CK3 session from autosave diffs, and riffs on an RPG scene without talking over dialogue or spoiling the plot |
 
@@ -85,8 +85,9 @@ via `ytmusicapi`, seed + radio, duck/pause, voice commands, dislikes in memory. 
 2026-11-19, ADR 0015, awaiting live test): local library via mpv, SQLite index, MusicBrainz
 genres, 70/20/10 blend, taste weighting from plays. Later: ListenBrainz similar artists,
 regional flavour, YouTube Music history import and tag fingerprinting. The crew's DJ (the carrier unless the session names another member, ADR 0018)
-picks music for the moment and comments on it; the rest of the crew react through banter. Play,
-skip and queue are DJ-only actions.
+picks music for the moment and comments on it; every third DJ pick is a guest pick by another
+crew member in rotation (built 2026-11-20, awaiting live test); the rest of the crew react through
+banter. Play, skip and queue are DJ-only actions.
 - **Sources:** a local library on this PC (~12,000 tracks: MP3, FLAC, Apple-bought AAC; some
   old CD rips lack tags) through a local player such as MPD; YouTube Music for discovery, in the
   browser if MPRIS plus opening a track link covers playing a chosen song, else a desktop

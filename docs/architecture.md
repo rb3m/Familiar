@@ -30,7 +30,7 @@ the core works without any game pack. The commands are in `README.md`.
 | Config | `packages/familiar/src/familiar/config.py` | Loads `config.toml` (see `config.example.toml`). Secrets come from env vars. |
 | Persona | `packages/familiar/src/familiar/persona.py` | Loads user, configured and packaged persona YAML; builds the system prompt for the active language. |
 | Session settings | `packages/familiar/src/familiar/session_settings.py` | Validates and atomically saves versioned launcher selections; CLI/env choices override them. |
-| Crew | `packages/familiar/src/familiar/crew.py` | Ordered roster, carrier, alias/follow-up addressing and event interests. |
+| Crew | `packages/familiar/src/familiar/crew.py` | Ordered roster, controls (carrier) and DJ roles, hand-off targets, guest rotation, alias/follow-up addressing and event interests. |
 | History | `packages/familiar/src/familiar/history.py` | Attributed shared records and a swappable renderer for each speaker. |
 | Conversation | `packages/familiar/src/familiar/conversation.py` | Owns history; streams LLM output, splits sentences, hands them to TTS. |
 | Sentences | `packages/familiar/src/familiar/pipeline/sentences.py` | Incremental sentence splitter with a max-length flush. |
@@ -199,9 +199,9 @@ and pause gates. A service also creates a desk Director when there is no game or
 The optional `[music]` service is disabled by default. `familiar-music` owns Pear playback,
 threaded YouTube Music discovery, radio selection and a single duck/pause coordinator.
 Track remarks pause music; ordinary speech ducks against a separately remembered base volume.
-Remarks come every 3-4 natural song changes and the DJ gets a DJ turn (every third heard one
-is lent to another crew member in rotation as a guest pick) (may call
-`play_music`) every 8-12, held back for 15 minutes after any music request and while paused.
+Remarks come every 3-4 natural song changes and the DJ gets a DJ turn (may call `play_music`)
+every 8-12; every third heard DJ turn is lent to another crew member in rotation as a guest pick
+(`guest_pick_every`). DJ turns are held back for 15 minutes after any music request and while paused.
 Critical pauses resume only while ownership survives explicit user controls and observed track
 or playback changes. An external pause command issued while playback is already paused cannot
 be distinguished through Pear's state-only API. Dislikes use injected MemoryStore callbacks,
