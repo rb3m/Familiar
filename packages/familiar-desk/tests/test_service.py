@@ -104,3 +104,13 @@ async def test_no_tools_or_speech_work():
     assert service.service_tools() == []
     assert service.describe() == ""
     await service.speech_state(Mock())
+
+
+@pytest.mark.asyncio
+async def test_context_names_the_location():
+    source = ClockSource({"timezone": "UTC", "location": "Corregidora, Querétaro"})
+    await Feed([source], clock=lambda: NOW).run(asyncio.Event(), once=True)
+    service = DeskService({}, clock=lambda: NOW)
+    assert service.describe() == (
+        "Local time in Corregidora, Querétaro: Friday 2026-11-20 18:42 (dusk)."
+    )

@@ -45,3 +45,12 @@ async def test_dst_and_weekend():
     assert after["local_time"].endswith("-04:00")
     assert after["weekday"] == "Sunday" and after["weekend"]
     assert after["timezone"] == "America/New_York"
+
+
+@pytest.mark.asyncio
+async def test_location_named_in_data_and_events():
+    source = ClockSource({"timezone": "UTC", "location": "Corregidora, Querétaro"})
+    data, _ = await source.sample(datetime(2026, 11, 20, 10, tzinfo=UTC))
+    assert data["location"] == "Corregidora, Querétaro"
+    _, events = await source.sample(datetime(2026, 11, 20, 12, tzinfo=UTC))
+    assert events[0]["summary"] == "It is now midday in Corregidora, Querétaro."

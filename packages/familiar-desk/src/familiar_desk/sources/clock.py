@@ -14,6 +14,8 @@ class ClockSource:
         self.zone = ZoneInfo(settings["timezone"]) if settings.get("timezone") else None
         self.latitude = settings.get("latitude")
         self.longitude = settings.get("longitude")
+        self.location = settings.get("location")
+        self._where = f" in {self.location}" if self.location else ""
         self._period = None
         self._sunset_date = None
 
@@ -40,6 +42,7 @@ class ClockSource:
             "weekday": local.strftime("%A"),
             "weekend": local.weekday() >= 5,
             "timezone": getattr(local.tzinfo, "key", None) or local.strftime("%z"),
+            "location": self.location,
         }
         events = []
         if self.latitude is not None and self.longitude is not None:
@@ -70,7 +73,10 @@ class ClockSource:
                 if 0 < remaining <= 1800 and self._sunset_date != data["date"]:
                     events.append(
                         self._event(
-                            local, "sunset_soon", "Sunset is about half an hour away.", 1800
+                            local,
+                            "sunset_soon",
+                            f"Sunset{self._where} is about half an hour away.",
+                            1800,
                         )
                     )
                     self._sunset_date = data["date"]
@@ -78,7 +84,10 @@ class ClockSource:
         if self._period is not None and self._period != period:
             events.append(
                 self._event(
-                    local, f"period:{period}", f"It is now {period.replace('_', ' ')}.", 600
+                    local,
+                    f"period:{period}",
+                    f"It is now {period.replace('_', ' ')}{self._where}.",
+                    600,
                 )
             )
         self._period = period

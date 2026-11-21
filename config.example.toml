@@ -164,6 +164,7 @@ max_alerts = 8            # integer from 1 to 8
 # latitude = 19.4326     # set both coordinates for offline solar context
 # longitude = -99.1332
 # timezone = "America/Mexico_City" # defaults to the system local zone
+# location = "Mexico City"  # place name the companion may mention
 
 [music]
 enabled = false          # companion DJ, beside any game or in desk voice mode

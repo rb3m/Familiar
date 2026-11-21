@@ -114,7 +114,8 @@ class DeskService(CompanionService):
                 sunset = datetime.fromisoformat(data["sunset"])
                 verb = "was" if local >= sunset else "is at"
                 detail += f"; sunset {verb} {sunset:%H:%M}"
-            return f"Local time: {data['weekday']} {local:%Y-%m-%d %H:%M} ({detail})."
+            where = f" in {data['location']}" if data.get("location") else ""
+            return f"Local time{where}: {data['weekday']} {local:%Y-%m-%d %H:%M} ({detail})."
         except (ValueError, KeyError, TypeError):
             return ""
 

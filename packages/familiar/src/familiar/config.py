@@ -42,6 +42,7 @@ DESK_DEFAULTS = {
     "latitude": None,
     "longitude": None,
     "timezone": None,
+    "location": None,
 }
 
 
@@ -237,6 +238,9 @@ def _desk(data: dict) -> dict:
             raise ConfigError(f"desk.{key} must be between {-limit} and {limit}")
     if (settings["latitude"] is None) != (settings["longitude"] is None):
         raise ConfigError("desk.latitude and desk.longitude must be set together")
+    location = settings["location"]
+    if location is not None and (not isinstance(location, str) or not location.strip()):
+        raise ConfigError("desk.location must be a non-empty place name")
     zone = settings["timezone"]
     if zone is not None:
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
