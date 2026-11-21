@@ -41,10 +41,20 @@ def replace_section(text: str, section: str, block: str) -> str:
     return "\n".join(kept).rstrip() + "\n"
 
 
+_BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _key(key: str) -> str:
+    return key if _BARE_KEY.match(key) else json.dumps(key)
+
+
 def ptt_block(backend: str, settings: dict) -> str:
-    lines = ["[ptt]", f"backend = {json.dumps(backend)}", "", f"[ptt.{backend}]"]
+    lines = ["[ptt]"]
+    lines.append(f"backend = {json.dumps(backend)}")
+    if settings:
+        lines.extend(["", f"[ptt.{backend}]"])
     for key, value in settings.items():
-        lines.append(f"{json.dumps(key)} = {json.dumps(value, ensure_ascii=False)}")
+        lines.append(f"{_key(key)} = {json.dumps(value, ensure_ascii=False)}")
     return "\n".join(lines) + "\n"
 
 

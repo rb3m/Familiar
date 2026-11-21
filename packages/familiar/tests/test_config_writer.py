@@ -59,3 +59,14 @@ def test_mouse_round_trip_preserves_other_tables(tmp_path):
     save_ptt(path, "evdev", {"device": "Stick", "button": "BTN_TRIGGER"})
     assert "[ptt.mouse]" not in path.read_text()
     assert load_config(path).ptt.settings == {"device": "Stick", "button": "BTN_TRIGGER"}
+
+
+def test_save_ptt_twice_replaces_section_with_bare_keys(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('language = "en"\n\n[ptt]\nbackend = "terminal"\n\n[music]\nenabled = true\n')
+    save_ptt(path, "mouse", {"button": 4})
+    save_ptt(path, "mouse", {"button": 3})
+    text = path.read_text()
+    assert text.count("[ptt]") == 1
+    assert "button = 3" in text
+    assert tomllib.loads(text)["music"] == {"enabled": True}
