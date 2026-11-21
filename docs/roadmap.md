@@ -174,14 +174,13 @@ each backend (Gemini, ElevenLabs STT/TTS) accepts a newly added code.
 Planned: **Mac desk companion with alerts.** Familiar on the Mac as a desk assistant that
 speaks up about notifications and events, not games. Core already runs without a game pack;
 which alerts matter most is still undecided, so pick sources before building. Steps:
-1. macOS push-to-talk on a **mouse button**: the user's Elecom HUGE trackball has spare buttons.
-   A `PushToTalk` backend that listens for "other" mouse buttons (pynput/CGEventTap; needs
-   Accessibility or Input Monitoring) with the button picked in config or by a "press it now"
-   setup, like the joystick. It should consume the press so the button doesn't also act as
-   browser back/forward. Check which buttons reach macOS without Elecom's driver; the Fn buttons
-   may need mapping there first. A keyboard hotkey is the fallback.
-2. A `familiar-desk` pack: a `GameAdapter` registered under `familiar.games` that emits events
-   with priorities, so the Director's cooldowns and stale-dropping apply unchanged. Sources:
+1. Built 2026-11-20, **live check pending**: macOS push-to-talk on a **mouse button** (`mouse`
+   backend, ADR 0017), assigned in the GUI panel or `ptt-setup`. Check which Elecom HUGE
+   buttons reach macOS without Elecom's driver (the Fn buttons may need mapping there first)
+   and that the Accessibility grant to Familiar.app survives. A keyboard hotkey is the fallback.
+2. Built 2026-11-20, **live check pending**: the `familiar-desk` pack, a `CompanionService`
+   (not a `GameAdapter`, ADR 0016) fed by the `familiar desk-feed` helper. The clock source
+   (time of day, sunrise/sunset) is done. Further sources, each a feed source:
    - Local webhook (`POST` to localhost) as the core: scripts, cron, Home Assistant, Claude
      Code / agy / codex hooks ("build finished") and CI can all hand Mira something to say.
      No permissions needed.

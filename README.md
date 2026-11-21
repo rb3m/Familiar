@@ -18,8 +18,11 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   Euro Truck Simulator 2: live telemetry, a hand-checked landmark pack and town lookup.
   `familiar-ksp` adds Kerbal Space Program flight telemetry, mission events and resource warnings
   through the kRPC mod (enable auto-start servers and auto-accept clients).
-- **Launcher GUI** (`familiar gui`): pick the game and persona, watch the conversation, and
-  create or edit personas, with optional AI drafting and voice previews.
+- **Launcher GUI** (`familiar gui`): pick the game and persona, assign push-to-talk, watch the
+  conversation, and create or edit personas, with optional AI drafting and voice previews.
+- **Desk companion** (`familiar-desk`): a local feed of your surroundings, time of day and
+  sunrise/sunset first, so the companion has something to remark on at the desk or beside a
+  game without telemetry.
 - **Voice-set telemetry alerts** in KSP, ATS and ETS2: ask “tell me at 4,000 metres”,
   “warn me when we're 50 km out” or “tell me when fuel drops under 25%”. Alerts fire once,
   last for the session and can be listed or cancelled by voice. Configure `[alerts]` in TOML.
@@ -40,7 +43,7 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   stations and services to local scans. Nearby searches can filter by market or rescue services.
 
 Status: early and personal, but working. Linux (KDE Wayland) is the daily driver; macOS on Apple
-Silicon is the next target. See `docs/roadmap.md`.
+Silicon runs the GUI with mouse-button push-to-talk, the desk feed and YouTube Music. See `docs/roadmap.md`.
 
 ## Install
 
@@ -85,11 +88,12 @@ uv run familiar gui                                # launcher window
 uv run familiar chat                               # text chat in the terminal
 uv run familiar voice --game ats --persona mira    # voice, with ATS telemetry
 uv run familiar voice --session path/to/session.toml  # saved crew selection
-uv run familiar ptt-setup                          # bind a joystick/HOTAS button to push-to-talk
+uv run familiar ptt-setup                          # push-to-talk: joystick (Linux), mouse (macOS)
 uv run familiar plugins                            # list installed backends and game packs
 ```
 
-On Linux, `packaging/linux/install.sh` adds Familiar to the applications menu.
+On Linux, `packaging/linux/install.sh` adds Familiar to the applications menu. On macOS,
+`packaging/macos/install.sh` builds `~/Applications/Familiar.app`, which opens the launcher.
 
 Voice loads `~/.config/familiar/session.toml` when present (`XDG_CONFIG_HOME` is respected).
 For example, after creating a user persona named `copilot` with voices for English:
@@ -198,3 +202,12 @@ Grant **System Settings > Privacy & Security > Accessibility** to the app runnin
 **Terminal** when launched there, or **Familiar.app** when launched from the installed app.
 Retry assignment after granting permission. The assigned button is consumed while listening,
 so a back/forward button will not also navigate your browser.
+
+### Desk feed (optional)
+
+Enable `[desk]` with `enabled = true`; add `latitude` and `longitude` for sunrise, sunset and
+dusk (computed offline), otherwise day periods follow the clock. Voice sessions start the
+`familiar desk-feed` helper, which writes `desk-feed.json` to a private runtime folder
+(`$XDG_RUNTIME_DIR/familiar/`, or the per-user temp folder on macOS) and stops with the session.
+The companion knows the local time and may remark when the evening starts or sunset is near.
+Run `familiar desk-feed --once` to write a single snapshot by hand.

@@ -38,6 +38,7 @@ the core works without any game pack. The commands are in `README.md`.
 | Director | `packages/familiar/src/familiar/director.py` | Decides when the companion speaks (priorities, TTL, cooldowns, idle chatter). |
 | Memory | `packages/familiar/src/familiar/memory/` | SQLite trip facts, local retrieval, gated recall and shutdown summaries (ADR 0005). |
 | GUI | `packages/familiar/src/familiar/gui/` | Local web launcher: aiohttp server owning one voice subprocess, vanilla frontend in `static/` (ADR 0003, `docs/gui-api.md`). |
+| Desk | `packages/familiar-desk/src/familiar_desk/` | `desk-feed` helper (pluggable sources, atomic JSON feed) and the `desk` companion service (ADR 0016). |
 | SCS games | `packages/familiar-scs/src/familiar_scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
 | Backends | `packages/familiar/src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |
 
@@ -161,7 +162,9 @@ mode, practical information the player acts on (fuel, damage, distances, deadlin
     joystick + terminal only): the xdg-desktop-portal **GlobalShortcuts** portal (KDE supports it; it signals
     press *and* release). This avoids the `input` group, which would let any process keylog.
     Fallback: a udev rule granting `uaccess` to one dedicated device (e.g. a gaming keypad).
-  - macOS: a CGEventTap/pynput hotkey (Accessibility permission).
+  - macOS: `mouse` backend, an active Quartz session tap that consumes one spare mouse button
+    (Accessibility permission, attributed to Terminal or Familiar.app; ADR 0017). Assigned with
+    `ptt-setup` or the GUI panel through one shared detector. A keyboard hotkey is not built yet.
   - Terminal key (hold Space) as a no-permission fallback for development.
 - The user is on open speakers about half the time, so the mic only records while PTT is held, and
   pressing PTT stops playback (barge-in). Without that, the companion would hear itself.
@@ -198,3 +201,10 @@ Critical pauses resume only while ownership survives explicit user controls and 
 or playback changes. An external pause command issued while playback is already paused cannot
 be distinguished through Pear's state-only API. Dislikes use injected MemoryStore callbacks,
 independent of games/personas; disabled memory uses process-local taste instead.
+
+The optional `[desk]` service (`familiar-desk`, ADR 0016) starts the `familiar desk-feed` helper
+unless another writer holds its lock, and stops it on close. The helper samples each source on
+its own interval into a versioned envelope (`sources` plus a bounded `events` list with stable
+ids) written atomically to `<runtime>/familiar/desk-feed.json`. The service turns unseen events
+into ambient remarks and adds the local time to the prompt. The first source is the clock;
+RSS, email and the other sources from the roadmap plug in as further sources.
