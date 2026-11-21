@@ -125,9 +125,9 @@ async def detect_mouse_button(timeout: float = 30) -> int:
         await detector.aclose()
 
 
-async def detect_key(timeout: float = 30) -> int:
-    """Consume allowed keys while waiting for a fresh press."""
-    from .key import ALLOWED_KEYS, KeyPTT
+async def detect_key(timeout: float = 30) -> dict:
+    """Consume allowed keys while waiting for a fresh press; returns key and held modifiers."""
+    from .key import ALLOWED_KEYS, KeyPTT, held_modifiers
 
     class Detector(KeyPTT):
         def classify(self, kind: int, event: Any) -> tuple[bool | None, bool]:
@@ -138,17 +138,21 @@ async def detect_key(timeout: float = 30) -> int:
             if kind == q.kCGEventKeyDown and not q.CGEventGetIntegerValueField(
                 event, q.kCGKeyboardEventAutorepeat
             ):
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, key)
+                pressed = {"key": key}
+                modifiers = held_modifiers(q, event)
+                if modifiers:
+                    pressed["modifiers"] = modifiers
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, pressed)
             return None, True
 
     detector = Detector({"key": 105})
     try:
         async with asyncio.timeout(timeout):
             await detector._start()
-            key = await detector._queue.get()
-            if key is None:
+            pressed = await detector._queue.get()
+            if pressed is None:
                 raise PluginError("Key detector stopped before a key was pressed")
-            return key
+            return pressed
     except TimeoutError:
         raise DetectionTimeoutError(f"No key pressed within {timeout:g} seconds") from None
     finally:
@@ -173,6 +177,6 @@ async def detect(kind: str | None = None, timeout: float = 30) -> dict:
     if kind == "mouse":
         return {"backend": "mouse", "button": await detect_mouse_button(timeout)}
     if kind == "key":
-        return {"backend": "key", "key": await detect_key(timeout)}
+        return {"backend": "key", **await detect_key(timeout)}
     device, button = await detect_button(timeout)
     return {"backend": "evdev", "device": device, "button": button}

@@ -422,7 +422,7 @@ async def _voices(args: argparse.Namespace) -> None:
 async def _ptt_setup(args: argparse.Namespace) -> None:
     from familiar.config import USER_CONFIG, find_config_path
     from familiar.config_writer import save_ptt
-    from familiar.ptt.key import ALLOWED_KEYS
+    from familiar.ptt.key import key_label
     from familiar.ptt.setup import detect, detectable_kinds
 
     kinds = detectable_kinds()
@@ -434,7 +434,7 @@ async def _ptt_setup(args: argparse.Namespace) -> None:
     proposal = await detect(kind=kind)
     label = f"Mouse button {proposal.get('button')}"
     if proposal["backend"] == "key":
-        label = f"Key {ALLOWED_KEYS[proposal['key']]}"
+        label = f"Key {key_label(proposal)}"
     if proposal["backend"] == "evdev":
         label = f"{proposal['button']} on {proposal['device']}"
     print(f"Got {label}. Press it once more to confirm…")

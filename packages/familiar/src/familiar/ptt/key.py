@@ -51,18 +51,49 @@ KEY_ERROR = (
     "Only function keys F1-F20 and keypad keys can be push-to-talk; "
     "remap a spare key, e.g. a keyboard knob, to F13"
 )
+# Modifier name -> (Quartz flag mask attribute, label), in label order. Fn, Caps Lock and the
+# keypad flag are ignored: Mac function keys always carry the Fn flag.
+MODIFIERS = {
+    "control": ("kCGEventFlagMaskControl", "Ctrl"),
+    "option": ("kCGEventFlagMaskAlternate", "Option"),
+    "shift": ("kCGEventFlagMaskShift", "Shift"),
+    "command": ("kCGEventFlagMaskCommand", "Cmd"),
+}
+
+
+def validate_key_settings(settings: dict) -> None:
+    """Raise PluginError unless settings describe an allowed key and modifier combination."""
+    key = settings.get("key")
+    if type(key) is not int or key not in ALLOWED_KEYS:
+        raise PluginError(KEY_ERROR)
+    modifiers = settings.get("modifiers", [])
+    if not isinstance(modifiers, list) or not set(modifiers) <= MODIFIERS.keys():
+        raise PluginError(f"key PTT modifiers must be a list of: {', '.join(MODIFIERS)}")
+    if not isinstance(settings.get("consume", True), bool):
+        raise PluginError("key PTT consume must be a boolean")
+    if settings.keys() - {"key", "modifiers", "consume"}:
+        raise PluginError("Unknown key PTT setting")
+
+
+def key_label(settings: dict) -> str:
+    held = set(settings.get("modifiers", []))
+    names = [label for name, (_, label) in MODIFIERS.items() if name in held]
+    return "+".join([*names, ALLOWED_KEYS.get(settings.get("key"), "Unknown")])
+
+
+def held_modifiers(quartz: Any, event: Any) -> list[str]:
+    flags = quartz.CGEventGetFlags(event)
+    return [name for name, (mask, _) in MODIFIERS.items() if flags & getattr(quartz, mask)]
 
 
 class KeyPTT(EventTapPTT):
     name = "key"
 
     def __init__(self, settings: dict) -> None:
-        self.key = settings.get("key")
-        if type(self.key) is not int or self.key not in ALLOWED_KEYS:
-            raise PluginError(KEY_ERROR)
+        validate_key_settings(settings)
+        self.key = settings["key"]
+        self.modifiers = set(settings.get("modifiers", []))
         self.consume = settings.get("consume", True)
-        if not isinstance(self.consume, bool):
-            raise PluginError("key PTT consume must be a boolean")
         super().__init__(settings)
 
     def event_types(self) -> tuple[int, ...]:
@@ -73,8 +104,11 @@ class KeyPTT(EventTapPTT):
         q = self._quartz
         if q.CGEventGetIntegerValueField(event, q.kCGKeyboardEventKeycode) != self.key:
             return None, False
+        # Release on key-up even if a modifier was let go first; only our own presses are eaten.
         if kind == q.kCGEventKeyUp:
-            return False, self.consume
+            return (False, self.consume) if self._held else (None, False)
         if self._held or q.CGEventGetIntegerValueField(event, q.kCGKeyboardEventAutorepeat):
             return None, self.consume
+        if set(held_modifiers(q, event)) != self.modifiers:
+            return None, False
         return True, self.consume

@@ -28,6 +28,11 @@ def native(monkeypatch):
         kCGSessionEventTap=1,
         kCGHeadInsertEventTap=0,
         kCGEventTapOptionDefault=0,
+        kCGEventFlagMaskShift=0x20000,
+        kCGEventFlagMaskControl=0x40000,
+        kCGEventFlagMaskAlternate=0x80000,
+        kCGEventFlagMaskCommand=0x100000,
+        CGEventGetFlags=lambda event: event.get("flags", 0) if isinstance(event, dict) else 0,
         kCFRunLoopCommonModes="common",
         CGEventGetIntegerValueField=lambda event, field: (
             event.get(field, 0) if isinstance(event, dict) else event
@@ -285,7 +290,7 @@ async def test_key_detector(native):
         await asyncio.sleep(0)
         assert not task.done()
         assert callback(None, 10, {9: 87}, None) is None
-        assert await task == 87
+        assert await task == {"key": 87}
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
@@ -302,7 +307,7 @@ async def test_key_detector_timeout(native):
 @pytest.mark.asyncio
 async def test_key_dispatcher(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
-    detector = AsyncMock(return_value=105)
+    detector = AsyncMock(return_value={"key": 105})
     monkeypatch.setattr(setup, "detect_key", detector)
     assert setup.detectable_kinds() == ("mouse", "key")
     assert await setup.detect("key", 12) == {"backend": "key", "key": 105}
@@ -336,3 +341,62 @@ async def test_cli_key_confirmation(monkeypatch, tmp_path, capsys):
     assert detector.await_count == 2
     detector.assert_awaited_with(kind="key")
     assert "Press the key" in capsys.readouterr().out
+
+
+CTRL = 0x40000
+SHIFT = 0x20000
+FN = 0x800000  # Mac function keys always carry the Fn flag; it must not matter.
+
+
+@pytest.mark.asyncio
+async def test_key_modifiers_match_exactly(native):
+    q, _ = native
+    ptt = key.KeyPTT({"key": 111, "modifiers": ["control"]})
+    await ptt._start()
+    try:
+        callback = q.CGEventTapCreate.call_args.args[4]
+        for flags in (FN, FN | CTRL | SHIFT):
+            event = {9: 111, "flags": flags}
+            assert callback(None, 10, event, None) is event  # plain/extra-modifier F12 passes
+            assert callback(None, 11, event, None) is event  # and so does its key-up
+        assert callback(None, 10, {9: 111, "flags": FN | CTRL}, None) is None
+        assert callback(None, 11, {9: 111, "flags": FN}, None) is None  # Ctrl let go first
+        await asyncio.sleep(0)
+        assert ptt._queue.get_nowait() is True
+        assert ptt._queue.get_nowait() is False
+        assert ptt._queue.empty()
+    finally:
+        await ptt.aclose()
+
+
+@pytest.mark.asyncio
+async def test_key_detector_records_modifiers(native):
+    q, _ = native
+    task = asyncio.create_task(setup.detect_key())
+    try:
+        while not q.CGEventTapCreate.called:
+            await asyncio.sleep(0)
+        callback = q.CGEventTapCreate.call_args.args[4]
+        assert callback(None, 10, {9: 111, "flags": FN | CTRL}, None) is None
+        assert await task == {"key": 111, "modifiers": ["control"]}
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"key": 111, "modifiers": "control"},
+        {"key": 111, "modifiers": ["hyper"]},
+        {"key": 111, "extra": 1},
+    ],
+)
+def test_invalid_key_settings(settings):
+    with pytest.raises(PluginError, match="key PTT"):
+        key.KeyPTT(settings)
+
+
+def test_key_label_orders_modifiers():
+    assert key.key_label({"key": 111, "modifiers": ["shift", "control"]}) == "Ctrl+Shift+F12"
+    assert key.key_label({"key": 105}) == "F13"

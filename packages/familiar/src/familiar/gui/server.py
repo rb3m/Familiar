@@ -29,7 +29,7 @@ from familiar.persona import (
     validate_persona,
 )
 from familiar.plugins import available, load, load_class
-from familiar.ptt.key import ALLOWED_KEYS, KEY_ERROR
+from familiar.ptt.key import key_label, validate_key_settings
 from familiar.ptt.setup import detect, detectable_kinds
 from familiar.session_settings import (
     VERSION as SESSION_VERSION,
@@ -477,7 +477,7 @@ class APIService:
         if backend == "evdev":
             label[backend] = f"{settings.get('button')} on {settings.get('device')}"
         if backend == "key":
-            label[backend] = f"Key {ALLOWED_KEYS.get(settings.get('key'), 'Unknown')}"
+            label[backend] = f"Key {key_label(settings)}"
         kinds = detectable_kinds()
         kind = kinds[0] if kinds else None
         return dict(
@@ -523,13 +523,10 @@ class APIService:
     @staticmethod
     def validate_ptt(backend: str, settings: dict) -> None:
         if backend == "key":
-            key = settings.get("key")
-            if type(key) is not int or key not in ALLOWED_KEYS:
-                raise ConfigError(KEY_ERROR)
-            if not isinstance(settings.get("consume", True), bool):
-                raise ConfigError("consume must be a boolean")
-            if settings.keys() - {"key", "consume"}:
-                raise ConfigError("Unknown key setting")
+            try:
+                validate_key_settings(settings)
+            except PluginError as exc:
+                raise ConfigError(str(exc)) from exc
             return
         if backend == "mouse":
             button = settings.get("button")

@@ -195,7 +195,8 @@ remarks use only facts from your tags. See `config.example.toml` for tuning and 
 
 Run `uv run familiar gui` (the macOS app installer opens this launcher by default).
 In the launcher's **Push-to-talk** panel, choose **Assign mouse button…** or **Assign key…**,
-press a spare mouse/trackball button or an F1-F20/keypad key, then **Save**. Left and right clicks cannot be assigned. Alternatively,
+press a spare mouse/trackball button or an F1-F20/keypad key (modifiers count: Ctrl+F12
+leaves plain F12 to Chrome's DevTools), then **Save**. Left and right clicks cannot be assigned. Alternatively,
 run `uv run familiar ptt-setup --kind mouse` or `--kind key` and press the same control
 twice to confirm.
 
