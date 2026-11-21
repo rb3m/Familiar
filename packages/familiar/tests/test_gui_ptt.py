@@ -1,6 +1,7 @@
 """PTT API proposals, persistence, and session exclusion without sockets."""
 
 import asyncio
+import sys
 from unittest.mock import AsyncMock
 
 import pytest
@@ -42,7 +43,7 @@ async def test_detect_proposal_not_saved(ptt_client, monkeypatch):
     response = await client.post("/api/ptt/detect", json={"timeout": 12})
     assert response.status == 200
     assert (await response.json())["settings"] == {"button": 4}
-    detector.assert_awaited_once_with(12)
+    detector.assert_awaited_once_with(kind=None, timeout=12)
     assert not path.exists()
 
 
@@ -86,7 +87,7 @@ async def test_detection_excludes_detection_save_and_start(ptt_client, monkeypat
     client, _, _ = ptt_client
     entered, finish = asyncio.Event(), asyncio.Event()
 
-    async def detect(timeout):
+    async def detect(kind=None, timeout=30):
         entered.set()
         await finish.wait()
         return {"backend": "mouse", "button": 4}
@@ -152,3 +153,64 @@ async def test_evdev_save(ptt_client):
     assert response.status == 200
     assert (await response.json())["label"] == "BTN_TRIGGER on Thrustmaster"
     assert load_config(path).ptt.backend == "evdev"
+
+
+@pytest.mark.parametrize(
+    "platform,kinds", [("darwin", ["mouse", "key"]), ("linux", ["joystick"]), ("win32", [])]
+)
+async def test_kinds(ptt_client, monkeypatch, platform, kinds):
+    monkeypatch.setattr(sys, "platform", platform)
+    client, _, _ = ptt_client
+    data = await (await client.get("/api/ptt")).json()
+    assert data["kinds"] == kinds
+    assert data["kind"] == next(iter(kinds), None)
+    assert data["detectable"] == bool(kinds)
+
+
+async def test_detect_key_kind(ptt_client, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    client, _, path = ptt_client
+    detector = AsyncMock(return_value={"backend": "key", "key": 105})
+    monkeypatch.setattr(server, "detect", detector)
+    response = await client.post("/api/ptt/detect", json={"kind": "key"})
+    assert response.status == 200
+    assert (await response.json())["label"] == "Key F13"
+    detector.assert_awaited_once_with(kind="key", timeout=30)
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("kind", ["joystick", "bogus", 1, None, [], {}])
+async def test_invalid_detect_kind(ptt_client, monkeypatch, kind):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    client, _, _ = ptt_client
+    assert (await client.post("/api/ptt/detect", json={"kind": kind})).status == 400
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"key": 0},
+        {"key": True},
+        {"key": "105"},
+        {},
+        {"key": 105, "consume": 1},
+        {"key": 105, "other": 1},
+    ],
+)
+async def test_invalid_key_settings(ptt_client, settings):
+    client, _, path = ptt_client
+    response = await client.put("/api/ptt", json={"backend": "key", "settings": settings})
+    assert response.status == 400
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("consume", [True, False])
+async def test_key_config_round_trip(ptt_client, consume):
+    client, service, path = ptt_client
+    settings = {"key": 105, "consume": consume}
+    response = await client.put("/api/ptt", json={"backend": "key", "settings": settings})
+    assert response.status == 200
+    assert (await response.json())["label"] == "Key F13"
+    assert load_config(path).ptt.settings == settings
+    assert load_config(path).ptt.backend == "key"
+    assert service.sessions.config.ptt == service.config.ptt

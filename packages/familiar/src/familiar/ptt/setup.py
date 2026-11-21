@@ -102,16 +102,14 @@ async def detect_mouse_button(timeout: float = 30) -> int:
     from .mouse import MousePTT
 
     class Detector(MousePTT):
-        def _callback(self, proxy: Any, kind: int, event: Any, context: Any) -> Any:
+        def classify(self, kind: int, event: Any) -> tuple[bool | None, bool]:
             q = self._quartz
-            if kind in (q.kCGEventTapDisabledByTimeout, q.kCGEventTapDisabledByUserInput):
-                return super()._callback(proxy, kind, event, context)
             button = q.CGEventGetIntegerValueField(event, q.kCGMouseEventButtonNumber)
             if button < 2:
-                return event
+                return None, False
             if kind == q.kCGEventOtherMouseDown:
                 self._loop.call_soon_threadsafe(self._queue.put_nowait, button)
-            return None
+            return None, True
 
     detector = Detector({"button": 2})
     try:
@@ -127,9 +125,54 @@ async def detect_mouse_button(timeout: float = 30) -> int:
         await detector.aclose()
 
 
-async def detect(timeout: float = 30) -> dict:
-    """Detect a platform-appropriate push-to-talk button."""
-    if sys.platform == "darwin":
+async def detect_key(timeout: float = 30) -> int:
+    """Consume allowed keys while waiting for a fresh press."""
+    from .key import ALLOWED_KEYS, KeyPTT
+
+    class Detector(KeyPTT):
+        def classify(self, kind: int, event: Any) -> tuple[bool | None, bool]:
+            q = self._quartz
+            key = q.CGEventGetIntegerValueField(event, q.kCGKeyboardEventKeycode)
+            if key not in ALLOWED_KEYS:
+                return None, False
+            if kind == q.kCGEventKeyDown and not q.CGEventGetIntegerValueField(
+                event, q.kCGKeyboardEventAutorepeat
+            ):
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, key)
+            return None, True
+
+    detector = Detector({"key": 105})
+    try:
+        async with asyncio.timeout(timeout):
+            await detector._start()
+            key = await detector._queue.get()
+            if key is None:
+                raise PluginError("Key detector stopped before a key was pressed")
+            return key
+    except TimeoutError:
+        raise DetectionTimeoutError(f"No key pressed within {timeout:g} seconds") from None
+    finally:
+        await detector.aclose()
+
+
+DETECTABLE_KINDS = {"darwin": ("mouse", "key"), "linux": ("joystick",)}
+
+
+def detectable_kinds() -> tuple[str, ...]:
+    """Return detection kinds supported on this platform."""
+    return DETECTABLE_KINDS.get(sys.platform, ())
+
+
+async def detect(kind: str | None = None, timeout: float = 30) -> dict:
+    """Detect a platform-appropriate push-to-talk control."""
+    kinds = detectable_kinds()
+    if kind is None and kinds:
+        kind = kinds[0]
+    if kind not in kinds:
+        raise PluginError(f"Unsupported PTT detection kind: {kind}")
+    if kind == "mouse":
         return {"backend": "mouse", "button": await detect_mouse_button(timeout)}
+    if kind == "key":
+        return {"backend": "key", "key": await detect_key(timeout)}
     device, button = await detect_button(timeout)
     return {"backend": "evdev", "device": device, "button": button}

@@ -3,7 +3,6 @@
 import asyncio
 import json
 import secrets
-import sys
 import time
 import tomllib
 from contextlib import suppress
@@ -30,7 +29,8 @@ from familiar.persona import (
     validate_persona,
 )
 from familiar.plugins import available, load, load_class
-from familiar.ptt.setup import detect
+from familiar.ptt.key import ALLOWED_KEYS, KEY_ERROR
+from familiar.ptt.setup import detect, detectable_kinds
 from familiar.session_settings import (
     VERSION as SESSION_VERSION,
 )
@@ -476,13 +476,17 @@ class APIService:
         label = {"terminal": "Terminal (Enter)", "mouse": f"Mouse button {settings.get('button')}"}
         if backend == "evdev":
             label[backend] = f"{settings.get('button')} on {settings.get('device')}"
-        kind = {"darwin": "mouse", "linux": "joystick"}.get(sys.platform)
+        if backend == "key":
+            label[backend] = f"Key {ALLOWED_KEYS.get(settings.get('key'), 'Unknown')}"
+        kinds = detectable_kinds()
+        kind = kinds[0] if kinds else None
         return dict(
             backend=backend,
             settings=settings,
             label=label.get(backend, backend),
             detectable=kind is not None,
             kind=kind,
+            kinds=list(kinds),
         )
 
     def check_ptt_idle(self) -> None:
@@ -496,6 +500,9 @@ class APIService:
     async def detect_ptt(self, request: web.Request) -> web.Response:
         self.check_ptt_idle()
         data = await optional_body(request)
+        kind = data.get("kind")
+        if "kind" in data and kind not in detectable_kinds():
+            raise ConfigError("Unsupported PTT detection kind")
         timeout = data.get("timeout", 30)
         if type(timeout) not in (int, float) or not 0 < timeout <= 60:
             raise ConfigError("timeout must be a number greater than 0 and at most 60 seconds")
@@ -503,7 +510,7 @@ class APIService:
         async with self._ptt_lock:
             try:
                 async with asyncio.timeout(timeout):
-                    proposal = await detect(timeout)
+                    proposal = await detect(kind=kind, timeout=timeout)
             except TimeoutError:
                 raise web.HTTPRequestTimeout(
                     reason="No push-to-talk button pressed in time"
@@ -515,6 +522,15 @@ class APIService:
 
     @staticmethod
     def validate_ptt(backend: str, settings: dict) -> None:
+        if backend == "key":
+            key = settings.get("key")
+            if type(key) is not int or key not in ALLOWED_KEYS:
+                raise ConfigError(KEY_ERROR)
+            if not isinstance(settings.get("consume", True), bool):
+                raise ConfigError("consume must be a boolean")
+            if settings.keys() - {"key", "consume"}:
+                raise ConfigError("Unknown key setting")
+            return
         if backend == "mouse":
             button = settings.get("button")
             if type(button) is not int or button < 2:

@@ -422,17 +422,24 @@ async def _voices(args: argparse.Namespace) -> None:
 async def _ptt_setup(args: argparse.Namespace) -> None:
     from familiar.config import USER_CONFIG, find_config_path
     from familiar.config_writer import save_ptt
-    from familiar.ptt.setup import detect
+    from familiar.ptt.key import ALLOWED_KEYS
+    from familiar.ptt.setup import detect, detectable_kinds
 
-    kind = "mouse" if sys.platform == "darwin" else "joystick"
-    print(f"Press the {kind} button you want for push-to-talk (30 s)…")
-    proposal = await detect()
-    label = f"Mouse button {proposal['button']}"
+    kinds = detectable_kinds()
+    kind = getattr(args, "kind", None) or next(iter(kinds), None)
+    control = {"key": "key", "mouse": "mouse button", "joystick": "joystick button"}.get(
+        kind, "control"
+    )
+    print(f"Press the {control} you want for push-to-talk (30 s)…")
+    proposal = await detect(kind=kind)
+    label = f"Mouse button {proposal.get('button')}"
+    if proposal["backend"] == "key":
+        label = f"Key {ALLOWED_KEYS[proposal['key']]}"
     if proposal["backend"] == "evdev":
         label = f"{proposal['button']} on {proposal['device']}"
     print(f"Got {label}. Press it once more to confirm…")
-    if await detect() != proposal:
-        print("That was a different button; nothing saved. Run it again.")
+    if await detect(kind=kind) != proposal:
+        print("That was a different control; nothing saved. Run it again.")
         raise SystemExit(1)
     path = find_config_path(args.config) or USER_CONFIG.expanduser()
     settings = {key: value for key, value in proposal.items() if key != "backend"}
@@ -484,9 +491,10 @@ def main() -> None:
     gui.add_argument("--config")
     gui.add_argument("--session", metavar="PATH", help="Session file to edit and launch with")
     ptt_setup = commands.add_parser(
-        "ptt-setup", help="Assign mouse PTT on macOS or joystick PTT on Linux"
+        "ptt-setup", help="Assign mouse or key PTT on macOS or joystick PTT on Linux"
     )
     ptt_setup.add_argument("--config")
+    ptt_setup.add_argument("--kind", choices=("mouse", "key", "joystick"))
     voices = commands.add_parser("voices", help="List ElevenLabs voices and quota")
     voices.add_argument("--config")
     for plugin in command_plugins():

@@ -1006,20 +1006,33 @@ function addLanguageControl() {
 function renderPTT() {
   const locked = Boolean(state?.session.running || sessionBusy || pttBusy);
   $('#ptt-label').textContent = pttProposal?.label || ptt?.label || 'Unavailable';
-  $('#ptt-assign').disabled = locked || !ptt?.detectable;
+  const kinds = ptt?.kinds || (ptt?.kind ? [ptt.kind] : []);
+  const assignments = $('#ptt-assignments');
+  assignments.replaceChildren();
+  for (const kind of kinds.length ? kinds : [null]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = kinds.length > 1
+      ? ({ mouse: 'Assign mouse button…', key: 'Assign key…' }[kind] || 'Assign…')
+      : 'Assign…';
+    button.disabled = locked || !ptt?.detectable;
+    button.addEventListener('click', () => assignPTT(kind));
+    assignments.append(button);
+  }
   $('#ptt-save').hidden = $('#ptt-cancel').hidden = !pttProposal;
   $('#ptt-save').disabled = $('#ptt-cancel').disabled = locked;
 }
 
-async function assignPTT() {
+async function assignPTT(kind) {
+  const control = kind === 'key' ? 'key' : 'button';
   pttBusy = true;
   pttProposal = null;
-  $('#ptt-status').textContent = 'Press the button now…';
+  $('#ptt-status').textContent = `Press the ${control} now…`;
   renderPTT();
   updateStartAvailability();
   try {
-    pttProposal = await post('/api/ptt/detect', { timeout: 30 });
-    $('#ptt-status').textContent = 'Save this button for push-to-talk?';
+    pttProposal = await post('/api/ptt/detect', { timeout: 30, kind });
+    $('#ptt-status').textContent = `Save this ${control} for push-to-talk?`;
   } catch (error) {
     $('#ptt-status').textContent = error.message;
   } finally {
@@ -1036,7 +1049,7 @@ async function savePTT() {
   try {
     ptt = await put('/api/ptt', { backend: pttProposal.backend, settings: pttProposal.settings });
     pttProposal = null;
-    $('#ptt-status').textContent = 'Button saved.';
+    $('#ptt-status').textContent = 'Push-to-talk saved.';
   } catch (error) {
     $('#ptt-status').textContent = error.message;
   } finally {
@@ -1047,7 +1060,6 @@ async function savePTT() {
 }
 
 function bindControls() {
-  $('#ptt-assign').addEventListener('click', assignPTT);
   $('#ptt-save').addEventListener('click', savePTT);
   $('#ptt-cancel').addEventListener('click', () => {
     pttProposal = null;

@@ -29,3 +29,11 @@ Option 2: a `mouse` PushToTalk backend in core (`familiar.ptt.mouse`), macOS-onl
 Codex and agy both recommended option 2. agy reported that pynput's interception leaks
 suppressed events across macOS versions. Both flagged the timeout re-enable and the
 Accessibility requirement.
+
+## Addendum 2026-11-20: keyboard keys
+
+A `key` backend shares the event-tap lifecycle with mouse PTT and accepts only F1-F20 and
+keypad virtual keycodes. Assignment consumes those keys while passing ordinary typing through.
+Autorepeat is consumed without another press; tap disablement releases PTT and re-enables the
+tap. Remap a spare key or keyboard knob to F13; Secure Input pauses keyboard taps. GUI and CLI
+offer an explicit detection kind, with mouse remaining the macOS default.

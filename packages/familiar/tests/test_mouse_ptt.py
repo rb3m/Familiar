@@ -8,13 +8,17 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from familiar.interfaces import PluginError
-from familiar.ptt import mouse, setup
+from familiar.ptt import key, macos_tap, mouse, setup
 
 
 @pytest.fixture
 def native(monkeypatch):
     stopped = Event()
     q = SimpleNamespace(
+        kCGEventKeyDown=10,
+        kCGEventKeyUp=11,
+        kCGKeyboardEventKeycode=9,
+        kCGKeyboardEventAutorepeat=8,
         kCGEventOtherMouseDown=25,
         kCGEventOtherMouseUp=26,
         kCGEventOtherMouseDragged=27,
@@ -25,7 +29,9 @@ def native(monkeypatch):
         kCGHeadInsertEventTap=0,
         kCGEventTapOptionDefault=0,
         kCFRunLoopCommonModes="common",
-        CGEventGetIntegerValueField=lambda event, field: event,
+        CGEventGetIntegerValueField=lambda event, field: (
+            event.get(field, 0) if isinstance(event, dict) else event
+        ),
         CGEventTapCreate=Mock(return_value=object()),
         CGEventTapEnable=Mock(),
         CFRunLoopGetCurrent=Mock(return_value=object()),
@@ -42,7 +48,7 @@ def native(monkeypatch):
         kAXTrustedCheckOptionPrompt="prompt",
     )
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(mouse, "_prompted", False)
+    monkeypatch.setattr(macos_tap, "_prompted", False)
     monkeypatch.setitem(sys.modules, "Quartz", q)
     monkeypatch.setitem(sys.modules, "ApplicationServices", ax)
     return q, ax
@@ -71,12 +77,14 @@ async def test_mouse_events(native, consume):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("disabled", [99, 100])
-async def test_disabled_releases_and_reenables(native, disabled):
+@pytest.mark.parametrize("backend", ["mouse", "key"])
+async def test_disabled_releases_and_reenables(native, disabled, backend):
     q, _ = native
-    ptt = mouse.MousePTT({"button": 2})
+    ptt = {"mouse": mouse.MousePTT({"button": 2}), "key": key.KeyPTT({"key": 105})}[backend]
     await ptt._start()
     try:
-        ptt._callback(None, 25, 2, None)
+        kind, event = (25, 2) if backend == "mouse" else (10, {9: 105})
+        ptt._callback(None, kind, event, None)
         assert ptt._callback(None, disabled, None, None) is None
         await asyncio.sleep(0)
         assert ptt._queue.get_nowait() is True
@@ -155,7 +163,7 @@ async def test_dispatcher(monkeypatch, platform):
     monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setattr(setup, "detect_mouse_button", AsyncMock(return_value=4))
     monkeypatch.setattr(setup, "detect_button", AsyncMock(return_value=("Stick", "BTN_TRIGGER")))
-    result = await setup.detect(12)
+    result = await setup.detect(timeout=12)
     if platform == "darwin":
         assert result == {"backend": "mouse", "button": 4}
         setup.detect_mouse_button.assert_awaited_once_with(12)
@@ -219,3 +227,112 @@ async def test_cli_mouse_confirmation(monkeypatch, tmp_path, capsys, confirmatio
     await _ptt_setup(Namespace(config=str(path)))
     assert load_config(path).ptt.settings == {"button": 4}
     assert "Press the mouse button" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("consume", [True, False])
+async def test_key_events(native, consume):
+    q, _ = native
+    ptt = key.KeyPTT({"key": 105, "consume": consume})
+    await ptt._start()
+    try:
+        callback = q.CGEventTapCreate.call_args.args[4]
+        assert q.CGEventTapCreate.call_args.args[3] == (1 << 10) | (1 << 11)
+        other = {9: 0}
+        assert callback(None, 10, other, None) is other
+        assert callback(None, 11, other, None) is other
+        for kind, event in [(10, {9: 105}), (10, {9: 105}), (10, {9: 105, 8: 1}), (11, {9: 105})]:
+            assert callback(None, kind, event, None) == (None if consume else event)
+        await asyncio.sleep(0)
+        assert ptt._queue.get_nowait() is True
+        assert ptt._queue.get_nowait() is False
+        assert ptt._queue.empty()
+    finally:
+        await ptt.aclose()
+
+
+@pytest.mark.parametrize("code", [0, 1, True, "105", None, 999])
+def test_invalid_key(code):
+    with pytest.raises(PluginError, match="Only function keys F1-F20 and keypad keys"):
+        key.KeyPTT({"key": code})
+
+
+def test_invalid_key_consume():
+    with pytest.raises(PluginError, match="boolean"):
+        key.KeyPTT({"key": 105, "consume": 1})
+
+
+@pytest.mark.asyncio
+async def test_key_non_darwin(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    with pytest.raises(PluginError, match="key PTT is available only on macOS"):
+        await anext(key.KeyPTT({"key": 105}).events())
+
+
+@pytest.mark.asyncio
+async def test_key_detector(native):
+    q, _ = native
+    task = asyncio.create_task(setup.detect_key())
+    try:
+        while not q.CGEventTapCreate.called:
+            await asyncio.sleep(0)
+        callback = q.CGEventTapCreate.call_args.args[4]
+        for kind in (10, 11):
+            event = {9: 0}
+            assert callback(None, kind, event, None) is event
+        assert callback(None, 10, {9: 105, 8: 1}, None) is None
+        assert callback(None, 11, {9: 105}, None) is None
+        await asyncio.sleep(0)
+        assert not task.done()
+        assert callback(None, 10, {9: 87}, None) is None
+        assert await task == 87
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_key_detector_timeout(native):
+    q, _ = native
+    with pytest.raises(TimeoutError):
+        await setup.detect_key(0.02)
+    q.CFMachPortInvalidate.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_key_dispatcher(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    detector = AsyncMock(return_value=105)
+    monkeypatch.setattr(setup, "detect_key", detector)
+    assert setup.detectable_kinds() == ("mouse", "key")
+    assert await setup.detect("key", 12) == {"backend": "key", "key": 105}
+    detector.assert_awaited_once_with(12)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "platform,kind",
+    [("darwin", "joystick"), ("linux", "key"), ("win32", None), ("darwin", "unknown")],
+)
+async def test_unsupported_detection(monkeypatch, platform, kind):
+    monkeypatch.setattr(sys, "platform", platform)
+    with pytest.raises(PluginError, match="Unsupported"):
+        await setup.detect(kind)
+
+
+@pytest.mark.asyncio
+async def test_cli_key_confirmation(monkeypatch, tmp_path, capsys):
+    from argparse import Namespace
+
+    from familiar.cli import _ptt_setup
+    from familiar.config import load_config
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    detector = AsyncMock(return_value={"backend": "key", "key": 105})
+    monkeypatch.setattr(setup, "detect", detector)
+    path = tmp_path / "config.toml"
+    await _ptt_setup(Namespace(config=str(path), kind="key"))
+    assert load_config(path).ptt.settings == {"key": 105}
+    assert detector.await_count == 2
+    detector.assert_awaited_with(kind="key")
+    assert "Press the key" in capsys.readouterr().out
