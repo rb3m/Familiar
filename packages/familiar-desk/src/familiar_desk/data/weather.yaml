@@ -1,0 +1,53 @@
+# Weather defaults and provider vocabularies. Override in ~/.config/familiar/data/familiar_desk/weather.yaml.
+
+interval_s: 3600          # how often the helper fetches weather
+providers: [open-meteo, metar]  # tried in order; later ones fill what earlier ones lack
+station: null             # METAR ICAO station, e.g. MMQT (Querétaro); null skips METAR
+max_station_km: 60        # refuse a METAR station farther than this from the coordinates
+max_age_s: 10800          # an observation older than this is not reported
+timeout_s: 10             # per request
+remark_every_h: 6         # unprompted temperature report cadence in hours; 0 = never
+outlook_hour: 7           # local hour from which the morning outlook may be given
+active_hours: [0, 24]     # local hours for unprompted weather remarks; all day by default
+
+# Normalised conditions, mildest to most severe. Outlook windows report their most severe one.
+severity: [clear, partly_cloudy, cloudy, fog, drizzle, rain, showers, snow, thunderstorm]
+wet: [drizzle, rain, showers, snow, thunderstorm]
+
+open_meteo:
+  url: https://api.open-meteo.com/v1/forecast
+  wet_min_chance_pct: 30   # forecast hours below this rain chance count as dry
+  # WMO weather interpretation codes.
+  codes:
+    clear: [0, 1]
+    partly_cloudy: [2]
+    cloudy: [3]
+    fog: [45, 48]
+    drizzle: [51, 53, 55, 56, 57]
+    rain: [61, 63, 65, 66, 67]
+    snow: [71, 73, 75, 77, 85, 86]
+    showers: [80, 81, 82]
+    thunderstorm: [95, 96, 99]
+
+metar:
+  url: https://aviationweather.gov/api/data/metar
+  # Present-weather groups (substring match, most severe first) and sky cover codes.
+  weather:
+    thunderstorm: [TS]
+    snow: [SN, SG, PL, GR, GS]
+    showers: [SH]
+    rain: [RA]
+    drizzle: [DZ]
+    fog: [FG, BR, HZ]
+  cover:
+    clear: [SKC, CLR, NSC, NCD, CAVOK, FEW]
+    partly_cloudy: [SCT]
+    cloudy: [BKN, OVC, OVX, VV]
+  # Cloud cover percentage per sky cover code (midpoint of its oktas).
+  cover_pct: {SKC: 0, CLR: 0, NSC: 0, NCD: 0, CAVOK: 0, FEW: 19, SCT: 44, BKN: 75, OVC: 100, OVX: 100, VV: 100}
+
+# Day windows for the outlook: name, start hour, end hour (local).
+windows:
+  - [morning, 6, 12]
+  - [afternoon, 12, 18]
+  - [evening, 18, 24]

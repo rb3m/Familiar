@@ -7,6 +7,7 @@ import logging
 import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from familiar.interfaces import PLUGIN_API_VERSION
 from familiar.interfaces.service import CompanionService, ServiceTool, SpeechState
@@ -14,6 +15,8 @@ from familiar.interfaces.types import GameEvent
 
 from familiar_desk.feed import utc_now
 from familiar_desk.paths import feed_path, lock_path
+from familiar_desk.sources.weather import place_for
+from familiar_desk.weather import text, weather_settings
 
 
 class DeskService(CompanionService):
@@ -25,6 +28,10 @@ class DeskService(CompanionService):
         self.settings = settings
         self.clock = clock
         self.started = clock()
+        sources = settings.get("sources", ["clock"])
+        self.weather = weather_settings(settings.get("weather")) if "weather" in sources else None
+        place = place_for(settings, self.weather or {})
+        self.weather_zone = ZoneInfo(place.timezone) if place.timezone else None
         self._seen = set()
         self._snapshot = None
         self._child = None
@@ -100,11 +107,24 @@ class DeskService(CompanionService):
         self._read(consume=False)
         if self._snapshot is None:
             return ""
+        lines = [line for line in (self._clock_line(), self._weather_line()) if line]
+        notes = self.settings.get("location_notes")
+        if lines and notes:
+            lines.append(notes)
+        return "\n".join(lines)
+
+    def _entry(self, name: str) -> dict | None:
+        entry = self._snapshot["sources"].get(name)
+        if entry is None or entry["status"] != "ok":
+            return None
+        return entry
+
+    def _clock_line(self) -> str:
         try:
-            entry = self._snapshot["sources"]["clock"]
-            observed = datetime.fromisoformat(entry["observed_at"])
-            if entry["status"] != "ok":
+            entry = self._entry("clock")
+            if entry is None:
                 return ""
+            observed = datetime.fromisoformat(entry["observed_at"])
             if (self.clock() - observed).total_seconds() > 3 * self.settings.get("interval_s", 60):
                 return ""
             data = entry["data"]
@@ -115,9 +135,30 @@ class DeskService(CompanionService):
                 verb = "was" if local >= sunset else "is at"
                 detail += f"; sunset {verb} {sunset:%H:%M}"
             where = f" in {data['location']}" if data.get("location") else ""
-            line = f"Local time{where}: {data['weekday']} {local:%Y-%m-%d %H:%M} ({detail})."
-            notes = self.settings.get("location_notes")
-            return f"{line}\n{notes}" if notes else line
+            return f"Local time{where}: {data['weekday']} {local:%Y-%m-%d %H:%M} ({detail})."
+        except (ValueError, KeyError, TypeError):
+            return ""
+
+    def _weather_line(self) -> str:
+        """Uses the observation's own time, so a failing provider never looks fresh."""
+        if self.weather is None:
+            return ""
+        try:
+            entry = self._snapshot["sources"].get("weather")
+            if entry is None:
+                return ""
+            data = entry["data"]
+            now = self.clock()
+            current = data.get("current")
+            if current is not None:
+                observed = datetime.fromisoformat(current["observed_at"])
+                if (now - observed).total_seconds() > self.weather["max_age_s"]:
+                    current = None
+            today = data.get("today")
+            zone = self.weather_zone
+            if today is not None and today["date"] != now.astimezone(zone).date().isoformat():
+                today = None
+            return text.describe(current, today, data.get("location"))
         except (ValueError, KeyError, TypeError):
             return ""
 

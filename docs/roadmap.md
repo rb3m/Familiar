@@ -182,7 +182,8 @@ which alerts matter most is still undecided, so pick sources before building. St
    and that the Accessibility grant to Familiar.app survives. A keyboard hotkey is the fallback.
 2. Built 2026-11-20, **live check pending**: the `familiar-desk` pack, a `CompanionService`
    (not a `GameAdapter`, ADR 0016) fed by the `familiar desk-feed` helper. The clock source
-   (time of day, sunrise/sunset) is done. Further sources, each a feed source:
+   (time of day, sunrise/sunset) is done. Weather (Open-Meteo, METAR fallback; ADR 0019) built
+   2026-11-21, **live check pending**. Further sources, each a feed source:
    - Local webhook (`POST` to localhost) as the core: scripts, cron, Home Assistant, Claude
      Code / agy / codex hooks ("build finished") and CI can all hand Mira something to say.
      No permissions needed.

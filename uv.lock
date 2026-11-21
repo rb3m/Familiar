@@ -291,12 +291,14 @@ version = "0.1.0"
 source = { editable = "packages/familiar-desk" }
 dependencies = [
     { name = "familiar" },
+    { name = "httpx" },
     { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "familiar", editable = "packages/familiar" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 

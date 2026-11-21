@@ -6,10 +6,10 @@ import math
 import signal
 import sys
 
-from familiar.interfaces import PLUGIN_API_VERSION
+from familiar.interfaces import PLUGIN_API_VERSION, ConfigError
 
 from familiar_desk.feed import Feed, WriterBusyError
-from familiar_desk.sources.clock import ClockSource
+from familiar_desk.sources import load_sources
 
 
 class DeskFeedCommand:
@@ -29,13 +29,18 @@ class DeskFeedCommand:
         if not math.isfinite(interval) or interval <= 0:
             print("Desk feed interval must be a finite positive number", file=sys.stderr)
             return 2
+        try:
+            sources = load_sources(settings)
+        except ConfigError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
         signals = (signal.SIGINT, signal.SIGTERM)
         for sig in signals:
             loop.add_signal_handler(sig, stop.set)
         try:
-            await Feed([ClockSource(settings)]).run(stop, once=args.once)
+            await Feed(sources).run(stop, once=args.once)
         except WriterBusyError as exc:
             print(str(exc), file=sys.stderr)
             return 1

@@ -21,9 +21,9 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   through the kRPC mod (enable auto-start servers and auto-accept clients).
 - **Launcher GUI** (`familiar gui`): pick the game and crew, who takes the controls and who
   plays the music, assign push-to-talk, watch the conversation, and create or edit personas, with optional AI drafting and voice previews.
-- **Desk companion** (`familiar-desk`): a local feed of your surroundings, time of day and
-  sunrise/sunset first, so the companion has something to remark on at the desk or beside a
-  game without telemetry.
+- **Desk companion** (`familiar-desk`): a local feed of your surroundings (time of day,
+  sunrise/sunset and, optionally, the weather), so the companion has something to remark on at
+  the desk or beside a game without telemetry.
 - **Voice-set telemetry alerts** in KSP, ATS and ETS2: ask “tell me at 4,000 metres”,
   “warn me when we're 50 km out” or “tell me when fuel drops under 25%”. Alerts fire once,
   last for the session and can be listed or cancelled by voice. Configure `[alerts]` in TOML.
@@ -225,3 +225,26 @@ dusk (computed offline), otherwise day periods follow the clock. Voice sessions 
 (`$XDG_RUNTIME_DIR/familiar/`, or the per-user temp folder on macOS) and stops with the session.
 The companion knows the local time and may remark when the evening starts or sunset is near.
 Run `familiar desk-feed --once` to write a single snapshot by hand.
+
+Add weather with `sources = ["clock", "weather"]`. It is fetched hourly from
+[Open-Meteo](https://open-meteo.com/) (free, no key) at your `latitude`/`longitude`, with an
+airport METAR as the fallback when you name a nearby `station`:
+
+```toml
+[desk]
+enabled = true
+sources = ["clock", "weather"]
+latitude = 20.59
+longitude = -100.39
+location = "Querétaro"
+
+[desk.weather]
+station = "MMQT"      # METAR fallback: current conditions only
+remark_every_h = 6    # unprompted temperature reports; 0 = never
+```
+
+The companion always knows the current conditions and today's outlook, but only brings them up
+on its own sparingly: a morning outlook, when rain starts or stops, and a temperature report
+every `remark_every_h` hours, at any hour by default (narrow it with `active_hours`).
+Providers are plugins (`familiar_desk.weather_providers`), so another service can replace
+either one.

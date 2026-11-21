@@ -167,6 +167,15 @@ max_alerts = 8            # integer from 1 to 8
 # timezone = "America/Mexico_City" # defaults to the system local zone
 # location = "Mexico City"  # place name the companion may mention
 # location_notes = "Locals call it CDMX." # free text about the place, added to the prompt
+# sources = ["clock"]    # desk feed sources; add "weather" for hourly weather
+# [desk.weather]         # defaults in familiar_desk/data/weather.yaml
+# providers = ["open-meteo", "metar"] # tried in order; later ones fill gaps
+# station = "MMAA"       # METAR ICAO station near you (the fallback; current only)
+# remark_every_h = 6     # unprompted temperature reports in hours; 0 = never
+# active_hours = [0, 24] # local hours for unprompted weather remarks (default: all day)
+# outlook_hour = 7       # morning outlook from this local hour (until noon)
+# interval_s = 3600      # fetch interval in seconds
+# latitude/longitude/timezone/location here override [desk] for weather only
 
 [music]
 enabled = false          # companion DJ, beside any game or in desk voice mode

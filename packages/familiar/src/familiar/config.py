@@ -44,6 +44,7 @@ DESK_DEFAULTS = {
     "timezone": None,
     "location": None,
     "location_notes": None,
+    "sources": ["clock"],
 }
 
 
@@ -239,6 +240,11 @@ def _desk(data: dict) -> dict:
             raise ConfigError(f"desk.{key} must be between {-limit} and {limit}")
     if (settings["latitude"] is None) != (settings["longitude"] is None):
         raise ConfigError("desk.latitude and desk.longitude must be set together")
+    sources = settings["sources"]
+    if not isinstance(sources, list) or not all(isinstance(s, str) and s for s in sources):
+        raise ConfigError("desk.sources must be a list of source names")
+    if not isinstance(settings.get("weather", {}), dict):
+        raise ConfigError("[desk.weather] must be a table")
     for key in ("location", "location_notes"):
         value = settings[key]
         if value is not None and (not isinstance(value, str) or not value.strip()):

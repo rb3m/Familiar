@@ -211,5 +211,7 @@ The optional `[desk]` service (`familiar-desk`, ADR 0016) starts the `familiar d
 unless another writer holds its lock, and stops it on close. The helper samples each source on
 its own interval into a versioned envelope (`sources` plus a bounded `events` list with stable
 ids) written atomically to `<runtime>/familiar/desk-feed.json`. The service turns unseen events
-into ambient remarks and adds the local time to the prompt. The first source is the clock;
-RSS, email and the other sources from the roadmap plug in as further sources.
+into ambient remarks and adds the local time and weather to the prompt. Sources are plugins
+(`familiar_desk.sources`) chosen by `[desk] sources`: the clock and, hourly, the weather
+(ADR 0019), which asks pluggable `familiar_desk.weather_providers` (Open-Meteo, METAR) in order,
+later ones filling gaps. RSS, email and the other sources from the roadmap plug in the same way.

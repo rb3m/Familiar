@@ -281,3 +281,28 @@ means the Director admitted that event; use it to restart schedules instead of c
 service; settings other than `enabled` and `service` pass through to its constructor. Core
 injects `dislike_read()` and `dislike_write(video_id, artists)` callbacks when memory is enabled;
 plugins must import only `familiar.interfaces`, never core memory or voice implementations.
+
+## Add a desk source or weather provider
+
+The `familiar-desk` pack has its own two extension points (ADR 0019). They live in the pack,
+not in `familiar.interfaces`, because core never sees them; a plugin for either depends on
+`familiar_desk`.
+
+| Group | Interface | Example |
+|---|---|---|
+| `familiar_desk.sources` | `familiar_desk.sources.Source` | `weather = "familiar_desk.sources.weather:WeatherSource"` |
+| `familiar_desk.weather_providers` | `familiar_desk.weather.WeatherProvider` | `metar = "familiar_desk.weather.metar:MetarProvider"` |
+
+A **source** is built from the whole `[desk]` table, has `name` and `interval_s`, and
+`sample(now)` returns `(data, events)`: JSON-ready data under its name in the feed, and events
+with stable `id`s (include the date or slot so a restart never repeats one), `ts`, `kind`,
+`priority`, `summary` and `ttl_s`. Raising keeps the previous data and records the error. Users
+enable it by name in `[desk] sources`. Add a matching line to `DeskService.describe` only if the
+prompt should carry it.
+
+A **weather provider** is built from the merged `[desk.weather]` settings (data defaults in
+`familiar_desk/data/weather.yaml`, so put endpoints and code tables there) and implements
+`async fetch(place, client) -> WeatherReport` with the shared `httpx.AsyncClient`. Fill what
+the service knows, in SI units, and leave the rest `None`; raise `ValueError` or an
+`httpx.HTTPError` when it cannot answer for that place. Users list it in `providers`, in
+fallback order.
