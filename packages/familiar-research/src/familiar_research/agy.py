@@ -69,6 +69,7 @@ class AgyRunner:
         scope: str,
         conversation_id: str | None = None,
         permissions: dict | None = None,
+        schema: str = SCHEMA,
     ) -> list[str]:
         permissions = permissions or self.permissions(scope)
         args = [
@@ -80,7 +81,7 @@ class AgyRunner:
             "--output-format",
             "json",
             "--json-schema",
-            SCHEMA,
+            schema,
             "--print-timeout",
             f"{self.settings['timeout_s']}s",
             "--sandbox",
@@ -149,8 +150,16 @@ class AgyRunner:
             output = await self._execute(self.argv(prompt, scope, conversation_id), cwd)
         return self._parse(output)
 
+    async def run_structured(self, prompt: str, schema: dict) -> dict:
+        """Run a fresh web lookup with a caller-provided output contract."""
+        args = self.argv(prompt, "web", schema=json.dumps(schema))
+        with tempfile.TemporaryDirectory(prefix="familiar-research-") as cwd:
+            output = await self._execute(args, cwd)
+        result, _ = self._envelope(output)
+        return result
+
     @staticmethod
-    def _parse(output: bytes) -> tuple[dict, str | None]:
+    def _envelope(output: bytes) -> tuple[dict, str | None]:
         try:
             payload = json.loads(output)
         except (ValueError, UnicodeError):
@@ -160,14 +169,19 @@ class AgyRunner:
         result = payload.get("structured_output")
         if not isinstance(result, dict):
             raise ResearchError("Missing structured output")
+        cid = payload.get("conversation_id")
+        if cid is not None and not isinstance(cid, str):
+            raise ResearchError("Invalid conversation id")
+        return result, cid
+
+    @staticmethod
+    def _parse(output: bytes) -> tuple[dict, str | None]:
+        result, cid = AgyRunner._envelope(output)
         if not all(isinstance(result.get(key), str) for key in ("short_answer", "details")):
             raise ResearchError("Invalid answer fields")
         sources = result.get("sources")
         if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
             raise ResearchError("Invalid sources")
-        cid = payload.get("conversation_id")
-        if cid is not None and not isinstance(cid, str):
-            raise ResearchError("Invalid conversation id")
         return {key: result[key] for key in ("short_answer", "details", "sources")}, cid
 
     async def check(self, scope: str) -> bool:

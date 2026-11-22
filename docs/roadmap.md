@@ -203,7 +203,7 @@ Next, in this order (the Commander's plan 2026-11-22):
    line, agy looks it up in the vault or on the web in the background, and the answer comes back
    as a 2–3 sentence remark; follow-ups use the session cache, then resume the agy conversation.
    Read-only by agy deny rules plus a self-test; booking codes masked. Phase 2: OS sandbox.
-2. **Watched topics** (ADR 0024): private topic files with an active window (the
+2. **Watched topics** (ADR 0024; built 2026-11-22, Japan trip watch running, **live voice check pending**): private topic files with an active window (the
    Japan trip watch switches off at departure, 2027-01-13), checked twice a day whenever
    Familiar runs by one agy web call covering every area, with per-area coverage. New means a
    new source URL; the model proposes severity and rules in the topic file confirm `action`

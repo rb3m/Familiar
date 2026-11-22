@@ -1,0 +1,19 @@
+id: sample-trip
+title: Sample trip
+timezone: Etc/UTC
+active_until: '2032-06-10T06:00:00+00:00'
+check_times: ['08:00', '20:00']
+lookback_days: 14
+context: >-
+  A traveller from Example City visits Sample Bay and Fictional Port
+  from 2032-06-10 to 2032-06-20.
+relevance: ['2032-06-14', 'June 14', 'Sample Bay', 'Fictional Port']
+areas:
+  - id: rail
+    question: Announced works affecting Sample Bay to Fictional Port on 2032-06-14?
+    remarks: true
+    official_domains: [rail.example]
+  - id: fx
+    question: Current sample currency exchange rate and notable moves this week?
+    remarks: false
+    official_domains: []

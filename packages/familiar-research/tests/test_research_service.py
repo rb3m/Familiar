@@ -13,6 +13,7 @@ from familiar_research.service import ResearchService
 @pytest.fixture
 def checked(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     monkeypatch.setattr(AgyRunner, "version", AsyncMock(return_value="agy test"))
     path = check_path()
     path.parent.mkdir(parents=True)
@@ -76,7 +77,7 @@ async def test_busy_cache_masking_and_followups(checked):
     assert service.describe() == ""
     await service.speech_state(None)
     tools = service.service_tools()
-    assert [tool.spec.name for tool in tools] == ["research", "research_details"]
+    assert [tool.spec.name for tool in tools] == ["topic_status", "research", "research_details"]
     assert not any(tool.autonomous for tool in tools)
     await service.aclose()
     assert not service._cache

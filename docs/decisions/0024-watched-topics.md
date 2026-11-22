@@ -74,6 +74,15 @@ Option 3, in `familiar-research`.
 - A false or injected "action" needs an official domain on the allow-list and is spoken as
   "worth checking", which limits but does not remove the risk of a misleading flag.
 
+## Built (2026-11-22)
+
+First live check of the Japan topic: one agy call, 46 s, all eight areas reported searched with
+their sources; two new items (a health notice and the exchange rate, both ask-only areas), no
+action, so no remark. A lookup the player asks for cancels a running check, which retries at the
+next slot. Official domains were fetched before going into the topic file; the SRE traveller
+guide subdomain no longer resolves (`gob.mx` used instead) and New Chitose's site now redirects
+to `hokkaido-airports.com`, which was added.
+
 ## Who agreed
 
 - Commander: all eight areas; remarks only for action items, everything else on request; off at

@@ -275,3 +275,17 @@ speech. The model, permission profiles, MCP tool names and mask patterns are in
 `familiar_research/data/agy.yaml`; override them in
 `~/.config/familiar/data/familiar_research/agy.yaml`. See ADR 0023 for the limits (Gemini's
 own web tools are not covered by agy's permissions).
+
+#### Watched topics
+
+Keep an eye on something for a while, such as an upcoming trip: put a topic file in
+`~/.config/familiar/topics/` (start from `familiar_research/data/topic.example.yaml`). It holds an
+end date, two daily check times, a short private context, and areas, each with a question,
+whether it may ever speak up, and the official sites that can confirm an action. With research
+enabled, each check is one agy web search covering every area, run whenever Familiar is on (a
+missed time is caught up once). Ask "anything new on the watch?" for the findings and what was
+searched; an empty answer is never an all clear. To hear urgent items unprompted at the desk, add
+`"topics"` to `[desk] sources`: the companion only speaks when the model's "action" is confirmed
+by rules (an allowed area, an official site, your dates or places, first seen), and says the
+watch *flagged* a notice worth checking rather than stating it as fact. The watch switches off at
+its end date. Topic files and their state stay on your machine (ADR 0024).

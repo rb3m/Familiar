@@ -14,6 +14,8 @@ from familiar.interfaces.types import GameEvent, ToolSpec
 from familiar_research.agy import AgyRunner, ResearchError, profile_hash, settings_for
 from familiar_research.commands import check_path
 from familiar_research.masking import Masker
+from familiar_research.topic_source import topic_status
+from familiar_research.watch import TopicWatch
 
 
 class ResearchService(CompanionService):
@@ -30,9 +32,12 @@ class ResearchService(CompanionService):
         self._job: asyncio.Task | None = None
         self._pending_question = ""
         self._start_lock = asyncio.Lock()
+        self._request_lock = asyncio.Lock()
         self._checked = False
         self._available = False
         self._closed = False
+        self._watch = TopicWatch(self)
+        self._watch_task: asyncio.Task | None = None
 
     async def _start(self) -> None:
         async with self._start_lock:
@@ -52,8 +57,14 @@ class ResearchService(CompanionService):
         except (OSError, ValueError, ResearchError, TimeoutError):
             self._available = False
         self._checked = True
+        if self._available:
+            self._watch_task = asyncio.create_task(self._watch.run())
 
     async def research(self, question: str, scope: str, follow_up_of: str | None = None) -> dict:
+        async with self._request_lock:
+            return await self._research(question, scope, follow_up_of)
+
+    async def _research(self, question: str, scope: str, follow_up_of: str | None) -> dict:
         await self._start()
         if self._closed or not self._available:
             return {"status": "unavailable", "reason": "Run `familiar research check` first."}
@@ -65,6 +76,9 @@ class ResearchService(CompanionService):
         cid = entry["conversation_id"] if entry and entry["scope"] == scope else None
         research_id = uuid4().hex
         self._pending_question = self.masker.mask(question)
+        await self._watch.interrupt()
+        if self._closed:
+            return {"status": "unavailable"}
         self._job = asyncio.create_task(self._lookup(research_id, question, scope, cid))
         return {
             "status": "started",
@@ -141,9 +155,18 @@ class ResearchService(CompanionService):
                 return
             yield event
 
+    async def topic_status(self, topic: str | None = None, area: str | None = None) -> dict:
+        return topic_status(topic, area, datetime.now(UTC))
+
     def service_tools(self) -> list[ServiceTool]:
         string = {"type": "string"}
         definitions = {
+            "topic_status": (
+                "Read saved web watch coverage and findings. Empty does not mean all clear.",
+                {"topic": string, "area": string},
+                [],
+                self.topic_status,
+            ),
             "research": (
                 "Look up a question in the vault or on the web. On started, say only the "
                 "holding line; the answer arrives later. Use follow_up_of for more digging.",
@@ -188,6 +211,11 @@ class ResearchService(CompanionService):
 
     async def aclose(self) -> None:
         self._closed = True
+        if self._watch_task is not None:
+            self._watch_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._watch_task
+        await self._watch.interrupt()
         if self._job is not None:
             self._job.cancel()
             with suppress(asyncio.CancelledError):

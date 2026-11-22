@@ -21,3 +21,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/familiar_research"]
+
+[project.entry-points."familiar_desk.sources"]
+topics = "familiar_research.topic_source:TopicSource"

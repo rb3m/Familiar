@@ -234,3 +234,8 @@ background (argv only, private temp dir, keys stripped, per-scope allow/deny pro
 `--sandbox`, JSON schema); the answer arrives as a `notable` `research_result` cue keyed by
 research id and is spoken in a tool-free turn. `research_details` answers follow-ups from a
 masked, bounded session cache; deeper follow-ups resume the agy conversation.
+Watched topics (ADR 0024) also live there: private topic files in
+`$XDG_CONFIG_HOME/familiar/topics/`, checked silently by the research service at each topic's
+check times (one agy call, per-area coverage, URL seen-set, rule-confirmed `action`) into
+`$XDG_STATE_HOME/familiar/topics/<id>.json`; `topic_status` reads it. A structurally typed
+`topics` desk source in the same package voices confirmed action items once, desk only.
