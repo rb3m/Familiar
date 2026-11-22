@@ -203,16 +203,20 @@ Next, in this order (the Commander's plan 2026-11-22):
    line, agy looks it up in the vault or on the web in the background, and the answer comes back
    as a 2–3 sentence remark; follow-ups use the session cache, then resume the agy conversation.
    Read-only by agy deny rules plus a self-test; booking codes masked. Phase 2: OS sandbox.
-2. **Watched topics** (desk feed source): each topic has an active window (the Japan trip turns
-   itself off after 2027-01-26), searches through the research backend, feeds and keywords. RSS
-   is a feed type inside a topic. Trip weather is out: a separate app covers it. Design notes
-   from the 2026-11-22 consensus round (agy, Codex, Grok) to carry into its ADR: per-source
-   independent switches `context` / `remarks` / `lookup` (not a ladder), in `[desk.<name>]`
-   tables beside `[desk.weather]`; lookups read the last snapshot and report its age; fix
-   `feed.py` so a failed sample keeps the last good observation time; RSS dedupe persisted
-   outside the runtime file (capped JSON in the state dir), first fetch silent, title-only
-   keywords, titles plus short plain snippets to the LLM (feed text is untrusted), cooldowns and
-   per-hour caps.
+2. **Watched topics** (ADR 0024): private topic files with an active window (the
+   Japan trip watch switches off at departure, 2027-01-13), checked twice a day whenever
+   Familiar runs by one agy web call covering every area, with per-area coverage. New means a
+   new source URL; the model proposes severity and rules in the topic file confirm `action`
+   (official domains, trip dates/places, first seen). Remarks only for confirmed action items,
+   desk only, worded as "the watch flagged … worth checking"; everything else through
+   `topic_status`. Trip weather is out (a separate app). RSS deferred.
+   Desk-feed notes from the first 2026-11-22 consensus round, for system health and later RSS:
+   per-source independent switches `context` / `remarks` / `lookup` (not a ladder), in
+   `[desk.<name>]` tables beside `[desk.weather]`; lookups read the last snapshot and report its
+   age; fix `feed.py` so a failed sample keeps the last good observation time; RSS dedupe
+   persisted outside the runtime file (capped JSON in the state dir), first fetch silent,
+   title-only keywords, titles plus short plain snippets to the LLM (feed text is untrusted),
+   cooldowns and per-hour caps.
 3. **System health** (desk feed source, ask-only by default): disk/NVMe, CPU, GPU and RAM
    temperatures (hwmon on Linux, no root; unprivileged readers on macOS), free space, load,
    uptime. Reader protocol with a Linux/macOS map, every field optional. Optional alerts with
