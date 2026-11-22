@@ -3,6 +3,13 @@ storage_interval_s: 60
 read_timeout_s: 5
 plausible_c: [1, 120]
 network_fstypes: [cifs, smb3, smbfs, nfs, nfs4, fuse.sshfs, fuse.rclone, afpfs, webdav, davfs, 9p]
+skip_fstypes: [squashfs, iso9660, udf, cd9660]   # read-only media: always full, never alert
+skip_mount_prefixes:   # OS internals that are full by design or duplicate another volume
+  - /System/Volumes            # macOS system volumes; `/` reports the shared APFS container
+  - /Library/Developer/CoreSimulator
+  - /Volumes/Recovery
+  - /private/var/vm
+  - /snap
 free_alert_pct: 10
 free_rearm_pct: 12
 dwell_samples: 2

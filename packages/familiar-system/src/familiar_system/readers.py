@@ -89,9 +89,15 @@ def _attempt(function, default=None):
         return default
 
 
+def skipped_mount(mountpoint: str, prefixes: tuple[str, ...]) -> bool:
+    return any(mountpoint == prefix or mountpoint.startswith(prefix + "/") for prefix in prefixes)
+
+
 class PsutilReader:
     def __init__(self, settings: dict, *, backend=psutil) -> None:
         self.network_fstypes = set(settings["network_fstypes"])
+        self.skip_fstypes = set(settings.get("skip_fstypes", []))
+        self.skip_mounts = tuple(settings.get("skip_mount_prefixes", []))
         self.backend = backend
 
     def temperatures(self) -> list[Temperature]:
@@ -102,11 +108,17 @@ class PsutilReader:
 
     def filesystems(self) -> list[Filesystem]:
         # Select before probing: network paths must never reach disk_usage.
-        local = [p for p in self.partitions() if p.fstype not in self.network_fstypes]
+        local = [p for p in self.partitions() if self.wanted(p)]
         selected = {}
         for partition in sorted(local, key=lambda p: (len(p.mountpoint), p.mountpoint)):
             selected.setdefault(partition.device, partition)
         return [self._filesystem(p) for p in selected.values()]
+
+    def wanted(self, partition) -> bool:
+        """Local, writable, user-facing filesystems: no network, read-only media or OS internals."""
+        if partition.fstype in self.network_fstypes | self.skip_fstypes:
+            return False
+        return not skipped_mount(partition.mountpoint, self.skip_mounts)
 
     def _filesystem(self, partition) -> Filesystem:
         usage = _attempt(lambda: self.backend.disk_usage(partition.mountpoint))

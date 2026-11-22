@@ -4,6 +4,7 @@ import argparse
 
 from familiar.interfaces import PLUGIN_API_VERSION
 
+from familiar_system.readers import skipped_mount
 from familiar_system.sensors import match_rule, plausible, warning_line
 from familiar_system.service import SystemService
 
@@ -78,6 +79,10 @@ class SystemCommand:
         status = "deduplicated"
         if partition.mountpoint in included:
             status = "included"
+        if partition.fstype in settings.get("skip_fstypes", []):
+            status = "skipped read-only"
+        if skipped_mount(partition.mountpoint, tuple(settings.get("skip_mount_prefixes", []))):
+            status = "skipped system"
         if partition.fstype in settings["network_fstypes"]:
             status = "skipped network"
         print(f"{partition.mountpoint} | {partition.fstype} | {status}")

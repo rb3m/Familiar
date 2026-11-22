@@ -71,6 +71,26 @@ def test_local_dedupe_and_network_never_probed(settings):
     assert {call.args[0] for call in backend.disk_usage.call_args_list} == {"/pool", "/other"}
 
 
+def test_os_internal_and_read_only_filesystems_skipped(settings):
+    """macOS system volumes and read-only media are full by design: never probed or alerted."""
+    backend = Mock()
+    backend.disk_partitions.return_value = [
+        partition("/dev/mock1s1", "/", "apfs"),
+        partition("/dev/mock1s2", "/System/Volumes/Preboot", "apfs"),
+        partition("/dev/mock1s3", "/System/Volumes/Data", "apfs"),
+        partition("/dev/mock2s1", "/Volumes/Recovery", "apfs"),
+        partition("/dev/mock3", "/Library/Developer/CoreSimulator/Volumes/iOS_1", "apfs"),
+        partition("/dev/loop1", "/snap/mock/1", "squashfs"),
+        partition("/dev/mock4s1", "/Volumes/External", "apfs"),
+        partition("/dev/mock5", "/Systemic", "ext4"),  # a prefix match needs a path boundary
+    ]
+    backend.disk_usage.return_value = SimpleNamespace(total=1000, free=500)
+    result = PsutilReader(settings, backend=backend).filesystems()
+    assert {fs.mountpoint for fs in result} == {"/", "/Volumes/External", "/Systemic"}
+    probed = {call.args[0] for call in backend.disk_usage.call_args_list}
+    assert probed == {"/", "/Volumes/External", "/Systemic"}
+
+
 def test_unavailable_resources_and_macos_temperatures(settings):
     backend = Mock()
     backend.disk_partitions.return_value = []
