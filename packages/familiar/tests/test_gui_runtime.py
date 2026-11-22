@@ -4,6 +4,7 @@ import stat
 
 import httpx
 from familiar.gui import runtime
+from familiar.gui.timeouts import RUNNING_CHECK_TIMEOUT_S
 
 
 def test_write_is_private_and_stale_file_is_removed(tmp_path, monkeypatch):
@@ -25,9 +26,13 @@ def test_live_server_is_reused(tmp_path, monkeypatch):
     seen = {}
 
     def ok(url, headers, timeout):
-        seen.update(url=url, token=headers["X-Familiar-Token"])
+        seen.update(url=url, token=headers["X-Familiar-Token"], timeout=timeout)
         return httpx.Response(200, json={})
 
     monkeypatch.setattr(runtime.httpx, "get", ok)
     assert runtime.running_url(path) == "http://127.0.0.1:8765/?token=abc"
-    assert seen == {"url": "http://127.0.0.1:8765/api/state", "token": "abc"}
+    assert seen == {
+        "url": "http://127.0.0.1:8765/api/state",
+        "token": "abc",
+        "timeout": RUNNING_CHECK_TIMEOUT_S,
+    }

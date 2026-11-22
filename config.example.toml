@@ -160,7 +160,7 @@ max_alerts = 8            # integer from 1 to 8
 # en = ["hold on"]
 
 # [desk]
-# enabled = false        # local time context beside games and at the desk
+# enabled = false        # local time and weather in desk sessions only (not with a game)
 # interval_s = 60        # feed sampling interval in seconds
 # latitude = 19.4326     # set both coordinates for offline solar context
 # longitude = -99.1332

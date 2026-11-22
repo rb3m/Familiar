@@ -71,6 +71,33 @@ async def test_shared_service_registration(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("game, expected_services", [("test-game", []), (None, ["desk"])])
+async def test_desk_service_only_in_desk_mode(monkeypatch, game, expected_services):
+    adapter = Mock(spec=["game", "describe", "aclose"], game="test-game", aclose=AsyncMock())
+    service = Mock(service_tools=Mock(return_value=[]), aclose=AsyncMock())
+    plugins = {("games", "test-game"): adapter, ("services", "desk"): service}
+    load = Mock(side_effect=lambda kind, name, settings: plugins[kind, name])
+    monkeypatch.setattr("familiar.cli.load", load)
+    conversation = Mock()
+    conversation.crew.members = []
+    monkeypatch.setattr("familiar.cli.Conversation", Mock(return_value=conversation))
+    config = AppConfig(
+        game=game,
+        desk={"enabled": True},
+        memory={"enabled": False},
+        flavor={"enabled": False},
+    )
+    async with AsyncExitStack() as stack:
+        runtime = _Runtime(config, Mock(chattiness=0.5), "en", stack)
+        monkeypatch.setattr(runtime, "backend", Mock())
+        runtime.conversation(argparse.Namespace(game=None))
+        assert [
+            call.args[1] for call in load.call_args_list if call.args[0] == "services"
+        ] == expected_services
+        assert runtime.services == [service] * len(expected_services)
+
+
+@pytest.mark.asyncio
 async def test_service_load_failure_isolated(monkeypatch):
     monkeypatch.setattr("familiar.cli.load", Mock(side_effect=RuntimeError("broken")))
     async with AsyncExitStack() as stack:

@@ -214,7 +214,8 @@ or playback changes. An external pause command issued while playback is already 
 be distinguished through Pear's state-only API. Dislikes use injected MemoryStore callbacks,
 independent of games/personas; disabled memory uses process-local taste instead.
 
-The optional `[desk]` service (`familiar-desk`, ADR 0016) starts the `familiar desk-feed` helper
+The optional `[desk]` service (`familiar-desk`, ADR 0016) runs only in desk sessions, never
+beside a game adapter (ADR 0022). It starts the `familiar desk-feed` helper
 unless another writer holds its lock, and stops it on close. The helper samples each source on
 its own interval into a versioned envelope (`sources` plus a bounded `events` list with stable
 ids) written atomically to `<runtime>/familiar/desk-feed.json`. The service turns unseen events

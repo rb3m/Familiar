@@ -23,7 +23,8 @@ worth mentioning happens: a famous landmark near your truck, fuel running low, a
   plays the music, assign push-to-talk, watch the conversation, and create or edit personas, with optional AI drafting and voice previews.
 - **Desk companion** (`familiar-desk`): a local feed of your surroundings (time of day,
   sunrise/sunset and, optionally, the weather), so the companion has something to remark on at
-  the desk or beside a game without telemetry.
+  the desk or beside a game without telemetry. Game sessions never get it: the game brings its
+  own time and weather.
 - **Voice-set telemetry alerts** in KSP, ATS and ETS2: ask “tell me at 4,000 metres”,
   “warn me when we're 50 km out” or “tell me when fuel drops under 25%”. Alerts fire once,
   last for the session and can be listed or cancelled by voice. Configure `[alerts]` in TOML.

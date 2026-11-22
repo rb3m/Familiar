@@ -142,9 +142,7 @@ class _Runtime:
             )
             self.stack.push_async_callback(conversation.aclose)
         self._music(conversation)
-        if self.config.desk.get("enabled", False):
-            settings = {**self.config.desk, "config_path": self.config.config_path}
-            self._service(conversation, "desk", settings)
+        self._desk(conversation, adapter)
         contexts.extend(self.services)
         if self.services:
             conversation.context = lambda: self._describe(contexts)
@@ -199,6 +197,12 @@ class _Runtime:
             except Exception:
                 logging.getLogger(__name__).exception("Prompt context unavailable")
         return "\n".join(filter(None, lines))
+
+    def _desk(self, conversation: Conversation, adapter: GameAdapter | None) -> None:
+        if adapter is not None or not self.config.desk.get("enabled", False):
+            return
+        settings = {**self.config.desk, "config_path": self.config.config_path}
+        self._service(conversation, "desk", settings)
 
     def _music(self, conversation: Conversation) -> None:
         if not self.config.music.get("enabled", False):

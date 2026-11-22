@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 
+from familiar.gui.timeouts import RUNNING_CHECK_TIMEOUT_S
+
 RUNTIME_FILE = (
     Path(os.environ.get("XDG_RUNTIME_DIR") or Path.home() / ".cache") / "familiar-gui.json"
 )
@@ -30,7 +32,9 @@ def running_url(path: Path = RUNTIME_FILE) -> str | None:
         info = json.loads(path.read_text())
         base = info["url"].split("/?", 1)[0]
         response = httpx.get(
-            f"{base}/api/state", headers={"X-Familiar-Token": info["token"]}, timeout=2
+            f"{base}/api/state",
+            headers={"X-Familiar-Token": info["token"]},
+            timeout=RUNNING_CHECK_TIMEOUT_S,
         )
     except (OSError, ValueError, KeyError, httpx.HTTPError):
         remove(path)

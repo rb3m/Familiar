@@ -191,10 +191,31 @@ which alerts matter most is still undecided, so pick sources before building. St
      via `gh` (reviews, failed runs), and system state (battery, disk space, network/Tailscale).
 3. Manners: respect Focus/Do Not Disturb, stay quiet while another app uses the mic (calls),
    and keep quiet hours.
+4. Done 2026-11-22: the desk feed (clock and weather) runs in desk sessions only, never beside
+   a game (ADR 0022). Games bring their own time and weather (MSFS: the destination airport).
 Not planned: reading other apps' notifications from Notification Center's private database. It
 needs Full Disk Access, the format is undocumented and it breaks across macOS versions. If a
 permission like that is ever needed, put it in a small signed Swift helper rather than granting
 it to Terminal/Python. Get agy/codex consensus and an ADR on the pack design first.
+
+Planned (the Commander's request 2026-11-22): **keyboard and mouse push-to-talk on Linux**,
+beside the HOTAS. The `evdev` backend already accepts any device and any `EV_KEY` code
+(`KEY_PAUSE`, `KEY_F13`, `BTN_SIDE`), but:
+- **Access:** the user is not in the `input` group; only devices that udev tags `uaccess` are
+  readable (the Razer Tartarus V2 today; not the BY Tech keyboard or the HUGE PLUS trackball).
+  Prefer a narrow udev rule for the chosen device over joining `input`, which lets any process
+  read every keystroke. Document the rule; it needs root, so the Commander installs it.
+- **Several bindings at once:** PTT is one backend with one device/button today. Allow a list
+  (HOTAS button *or* a key, either one talks), keeping the current `device`/`button` keys
+  valid. Linux only; macOS `mouse`/`key` backends unchanged.
+- **Setup:** `ptt-setup` on Linux detects joystick buttons only; add `--kind key|mouse` there,
+  ignoring keys already held and ordinary typing keys.
+
+Outside this project, research first: **Elecom HUGE trackball Fn1–Fn3.** On the Mac those
+buttons weren't readable without Elecom's software, which doesn't exist for Linux. Look for an
+alternative (whether they show up in evdev/hidraw on Linux at all, community HID mappings);
+failing that, build a bridge like the ones for the Tartarus and the Thrustmaster HOTAS, so
+Familiar sees ordinary button events.
 
 Planned, **test before building: expressive speech with ElevenLabs Eleven v3.** v3 acts out
 inline audio tags (`[excited]`, `[sighs]`, `[whispers]`, `[laughs]`), so the LLM could tag each
