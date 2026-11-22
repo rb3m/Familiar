@@ -1,0 +1,42 @@
+# Phrases that mark a player request as a job for a crew role (ADR 0028). A matching request
+# makes the speaker's first round a tool call over that role's tools: the DJ plays, or anyone
+# else passes the job to the DJ. Matched as whole words, case-insensitively.
+# Override at ~/.config/familiar/data/familiar/action_phrases.yaml with only the keys you change;
+# false or null removes a phrase. Quote every key.
+"dj":
+  "en":
+    "play": true
+    "put on": true
+    "skip": true
+    "next song": true
+    "next track": true
+    "another song": true
+    "change the song": true
+    "change the music": true
+    "queue": true
+    "pause": true
+    "unpause": true
+    "resume the music": true
+    "stop the music": true
+    "turn it up": true
+    "turn it down": true
+    "louder": true
+    "quieter": true
+    "volume": true
+  "es":
+    "pon": true
+    "ponme": true
+    "pongan": true
+    "toca": true
+    "tócame": true
+    "reproduce": true
+    "salta": true
+    "siguiente canción": true
+    "otra canción": true
+    "cambia la canción": true
+    "cambia la música": true
+    "pausa": true
+    "quita la música": true
+    "sube el volumen": true
+    "baja el volumen": true
+    "volumen": true

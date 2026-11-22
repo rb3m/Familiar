@@ -29,6 +29,7 @@ from familiar.history import (
     HistoryRenderer,
     strip_history_labels,
 )
+from familiar.intents import action_roles
 from familiar.interfaces import (
     REQUIRE_TOOL,
     GameEvent,
@@ -571,8 +572,16 @@ class Conversation:
         # A hand-off target was given this because it is her job: she acts, then speaks
         # (ADR 0021). Without this, chatty personas describe the action instead of calling it.
         required = bool(visited) and player_turn and any(spec.name != HANDOFF for spec in specs)
+        # A request that names a role's job ("play some funk") must act on its first round,
+        # over that job's tools only (ADR 0028). Chat stays free.
+        first = self._job_specs(text, specs) if player_turn and not visited else []
         reply = self._reply_round(
-            system, specs, request=text, visited=visited, require_tool=required
+            system,
+            specs,
+            request=text,
+            visited=visited,
+            require_tool=required or bool(first),
+            first_specs=first,
         )
         async with aclosing(reply) as sentences:
             async for sentence in sentences:
@@ -586,11 +595,14 @@ class Conversation:
         request: str = "",
         visited: tuple[Persona, ...] = (),
         require_tool: bool = False,
+        first_specs: list[ToolSpec] | None = None,
     ) -> AsyncIterator[str]:
         calls: list[ToolCall] = []
         offered = []
         if round_index < 3:
             offered = specs
+        if round_index == 0 and first_specs:
+            offered = first_specs
         # Passing the job on (hand_off) counts as acting, so chains still work.
         required = require_tool and round_index == 0
         async with aclosing(self._stream_round(system, offered, calls, required)) as sentences:
@@ -637,6 +649,15 @@ class Conversation:
         if "to" not in handoff.arguments and len(targets) == 1:
             return next(iter(targets.values()))
         return targets.get(handoff.arguments.get("to"))
+
+    def _job_specs(self, text: str, specs: list[ToolSpec]) -> list[ToolSpec]:
+        """The named job's tools (own or relayed) plus hand_off; empty when no job is named."""
+        roles = action_roles(text, self.language)
+        jobs = [spec for spec in specs if self.tools.role_of(spec.name) in roles]
+        if not jobs:
+            return []
+        handoff = [spec for spec in specs if spec.name == HANDOFF]
+        return [*jobs, *handoff]
 
     def _relay_specs(self, specs: list[ToolSpec], visited) -> list[ToolSpec]:
         """Other role holders' tools, offered as the act of passing the job on (ADR 0027)."""
