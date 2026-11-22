@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-from familiar.crew import ROLE_DUTIES, ROLES, Crew, persona_id
+from familiar.crew import DJ, RELAY_ROLES, ROLE_DUTIES, ROLES, Crew, persona_id
 from familiar.interfaces import Message, ToolCall
 from familiar.persona import Persona
 
@@ -26,6 +26,10 @@ def strip_history_labels(text: str) -> str:
     if count:
         return cleaned.strip()
     return text
+
+
+# ADR 0027: a music tool, called by anyone but the DJ, passes the request to the DJ.
+RELAY_HINTS = {DJ: "Calling a music tool hands the request to the DJ, who plays it. "}
 
 
 @dataclass(frozen=True)
@@ -111,7 +115,8 @@ class DefaultHistoryRenderer:
         return (
             f"\n{jobs} When the player asks for one of those, call hand_off when offered, "
             "with an optional short in-character remark, after doing your own part. "
-            "Do not claim to do it yourself. Never say a tool's name aloud."
+            + "".join(RELAY_HINTS[role] for role in others if role in RELAY_ROLES)
+            + "Do not claim to do it yourself. Never say a tool's name aloud."
         )
 
     def _own_history(self, system: str, records: list[HistoryRecord]) -> tuple[str, list[Message]]:

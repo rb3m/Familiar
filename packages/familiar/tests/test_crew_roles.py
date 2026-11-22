@@ -155,7 +155,7 @@ async def test_carrier_hands_music_to_the_dj(tmp_path, crew):
     assert spoken == [("mira", "Ruslana's call."), ("frieren", "Spinning now.")]
     assert played == ["play"]
     first, second = chat.llm.requests[0][2], chat.llm.requests[1][2]
-    assert names(first) == {"now_playing", "hand_off"}
+    assert names(first) == {"now_playing", "hand_off", "play_music"}
     handoff = next(spec for spec in first if spec.name == "hand_off")
     assert handoff.parameters["properties"]["to"]["enum"] == ["frieren"]
     assert "playing or changing music" in handoff.description
@@ -380,3 +380,58 @@ async def test_chained_target_may_pass_the_job_on_in_her_required_round(tmp_path
     assert actuator.performed == ["move"] and played == ["play"]
     assert [required for _, required in chat.llm.required] == [False, True, True, False]
     assert "hand_off" in chat.llm.required[1][0]
+
+
+async def test_carrier_calling_the_dj_tool_passes_the_job_on(tmp_path, crew):
+    """ADR 0027: the carrier's play_music is the act of handing over; the DJ plays."""
+    played = []
+    chat = conversation(
+        tmp_path,
+        split(crew),
+        [
+            [LLMChunk(tool_call=ToolCall("p1", "play_music", {}))],
+            [LLMChunk(tool_call=ToolCall("p2", "play_music", {}))],
+            [LLMChunk(text="Spinning now.")],
+        ],
+        tools=music_tools(played),
+    )
+    spoken = [(chat.speaker.id, line) async for line in chat.ask("Mira, play something")]
+    assert spoken == [("frieren", "Spinning now.")]
+    assert played == ["play"]  # only the DJ's call ran
+    relay = next(spec for spec in chat.llm.requests[0][2] if spec.name == "play_music")
+    assert relay.description.startswith("Passes this request to Frieren, who does it")
+
+
+async def test_relay_tool_never_runs_beside_an_explicit_handoff(tmp_path, crew):
+    played = []
+    chat = conversation(
+        tmp_path,
+        split(crew),
+        [
+            [
+                LLMChunk(tool_call=ToolCall("h", "hand_off", {})),
+                LLMChunk(tool_call=ToolCall("p1", "play_music", {})),
+            ],
+            [LLMChunk(tool_call=ToolCall("p2", "play_music", {}))],
+            [LLMChunk(text="Spinning now.")],
+        ],
+        tools=music_tools(played),
+    )
+    spoken = [(chat.speaker.id, line) async for line in chat.ask("Mira, play something")]
+    assert spoken == [("frieren", "Spinning now.")]
+    assert played == ["play"]
+
+
+async def test_relayed_job_still_requires_the_dj_to_act(tmp_path, crew):
+    played = []
+    chat = conversation(tmp_path, split(crew), [], tools=music_tools(played))
+    chat.llm = RequiringLLM(
+        [
+            [LLMChunk(tool_call=ToolCall("p1", "play_music", {}))],
+            [LLMChunk(tool_call=ToolCall("p2", "play_music", {}))],
+            [LLMChunk(text="Spinning now.")],
+        ]
+    )
+    assert await consume(chat.ask("Play some funky music")) == ["Spinning now."]
+    assert played == ["play"]
+    assert [required for _, required in chat.llm.required] == [False, True, False]

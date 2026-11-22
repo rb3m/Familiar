@@ -88,6 +88,9 @@ class ToolRegistry:
         if autonomous:
             self._autonomous.add(spec.name)
 
+    def role_of(self, name: str) -> str | None:
+        return self._roles.get(name)
+
     @property
     def roles_in_use(self) -> frozenset[str]:
         """Roles that own at least one registered tool."""

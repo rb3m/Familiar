@@ -5,9 +5,9 @@ import logging
 import random
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Collection
 from contextlib import aclosing
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from functools import partial
 
 from familiar.alerts import AlertKeeper
@@ -19,7 +19,7 @@ from familiar.banter import (
     opening_avoidance,
     parse_scene,
 )
-from familiar.crew import GUEST, ROLE_DUTIES, ROLES, Crew, persona_id
+from familiar.crew import GUEST, RELAY_ROLES, ROLE_DUTIES, ROLES, Crew, persona_id
 from familiar.fallback import llm_budget_blocked
 from familiar.flavor import FlavorKeeper, flavor_hint
 from familiar.hands import ActionKeeper
@@ -563,6 +563,7 @@ class Conversation:
         targets = self._handoff_targets(visited)
         if player_turn and targets:
             specs.append(handoff_spec(targets, self.crew))
+            specs.extend(self._relay_specs(specs, visited))
         if any(spec.name == "set_alert" for spec in specs):
             system += ALERT_RULE
         if any(spec.name.startswith("act_") for spec in specs):
@@ -601,8 +602,13 @@ class Conversation:
         if not any(spec.name == HANDOFF for spec in offered):
             handoff = None  # a hallucinated hand-off is dispatched, and refused, like any tool
         target = self._handoff_target(handoff, offered, visited)
+        relayed, relay_target = self._relayed(calls, offered, visited)
+        if handoff is None and relay_target is not None:
+            # The speaker used the job's own tool: pass the job on instead of running it.
+            handoff, target = relayed, relay_target
         decide = partial(self._handoff_result, target)
-        outcome = await self._execute_calls(calls, offered, handoff, decide)
+        blocked = self._relay_names(offered)
+        outcome = await self._execute_calls(calls, offered, handoff, decide, blocked)
         if target is not None and outcome.get("status") == "handed_off":
             async with aclosing(self._hand_off(handoff, target, request, visited)) as sentences:
                 async for sentence in sentences:
@@ -632,6 +638,40 @@ class Conversation:
             return next(iter(targets.values()))
         return targets.get(handoff.arguments.get("to"))
 
+    def _relay_specs(self, specs: list[ToolSpec], visited) -> list[ToolSpec]:
+        """Other role holders' tools, offered as the act of passing the job on (ADR 0027)."""
+        names = {spec.name for spec in specs}
+        targets = self._handoff_targets(visited).values()
+        return [
+            replace(
+                spec,
+                description=f"Passes this request to {holder.display_name}, who does it: "
+                + spec.description,
+            )
+            for spec in self.tools.specs(None)
+            if spec.name not in names
+            and self.tools.role_of(spec.name) in RELAY_ROLES
+            and (holder := self.crew.holder(self.tools.role_of(spec.name) or "")) in targets
+        ]
+
+    def _relay_names(self, offered: list[ToolSpec]) -> set[str]:
+        """Offered tools the speaker may only pass on: other roles' tools beside hand_off."""
+        names = {spec.name for spec in offered}
+        if HANDOFF not in names:
+            return set()
+        own = {spec.name for spec in self.tools.specs(self.crew.roles_of(self.speaker))}
+        return names - own - {HANDOFF}
+
+    def _relayed(self, calls, offered, visited) -> tuple[ToolCall | None, Persona | None]:
+        """The first call to a relay tool and the role holder it passes the job to."""
+        relays = self._relay_names(offered)
+        targets = list(self._handoff_targets(visited).values())
+        for call in calls:
+            holder = self.crew.holder(self.tools.role_of(call.name) or "")
+            if call.name in relays and holder in targets:
+                return call, holder
+        return None, None
+
     def _handoff_result(self, target: Persona | None, own: list[dict]) -> dict:
         """Hand off only once the speaker's own part needs nothing more from the player."""
         if target is None:
@@ -650,7 +690,8 @@ class Conversation:
         # The speaker's own tools in this round already ran ("gear down and play something": the
         # controls holder lowers the gear, then the DJ picks the music). The target sees the
         # outcomes, and can hand on only to crew who have not spoken in this reply.
-        async with aclosing(self._handoff_line(handoff.arguments.get("line", ""))) as sentences:
+        line = handoff.arguments.get("line", "") if handoff.name == HANDOFF else ""
+        async with aclosing(self._handoff_line(line)) as sentences:
             async for sentence in sentences:
                 yield sentence
         visited = (*visited, self.speaker)
@@ -681,13 +722,14 @@ class Conversation:
         offered: list[ToolSpec],
         held: ToolCall | None = None,
         decide: Callable[[list[dict]], dict] | None = None,
+        blocked: Collection[str] = (),
     ) -> dict:
         """Run calls in order; ``held`` is answered last by ``decide`` from the others' results.
 
         Returns the held call's result (empty without one).
         """
         outcomes: dict[int, dict] = {}
-        allowed = {spec.name for spec in offered} - {HANDOFF}
+        allowed = {spec.name for spec in offered} - {HANDOFF} - set(blocked)
         try:
             for index, call in enumerate(calls):
                 if call is held:

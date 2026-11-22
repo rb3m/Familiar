@@ -19,6 +19,8 @@ ROLES = (CONTROLS, DJ)
 # "carrier" predates the split and still means the controls holder in event data.
 ROLE_ALIASES = {"carrier": CONTROLS, CONTROLS: CONTROLS, DJ: DJ}
 ROLE_DUTIES = {CONTROLS: "operating the ship or game", DJ: "playing or changing music"}
+# Roles whose tools other members may call to pass the job on (ADR 0027): music only.
+RELAY_ROLES = frozenset({DJ})
 # Event speaker for a turn lent to the rest of the crew in rotation (e.g. a guest music pick);
 # the event's offered tools are open to that guest for the one turn.
 GUEST = "guest"
