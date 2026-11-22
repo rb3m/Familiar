@@ -144,6 +144,7 @@ class _Runtime:
         self._music(conversation)
         self._desk(conversation, adapter)
         self._research(conversation)
+        self._system(conversation)
         contexts.extend(self.services)
         if self.services:
             conversation.context = lambda: self._describe(contexts)
@@ -198,6 +199,11 @@ class _Runtime:
             except Exception:
                 logging.getLogger(__name__).exception("Prompt context unavailable")
         return "\n".join(filter(None, lines))
+
+    def _system(self, conversation: Conversation) -> None:
+        if not self.config.system.get("enabled", False):
+            return
+        self._service(conversation, "system", self.config.system.copy())
 
     def _research(self, conversation: Conversation) -> None:
         if not self.config.research.get("enabled", False):
@@ -277,6 +283,12 @@ async def _runtime(args: argparse.Namespace) -> AsyncIterator[_Runtime]:
         yield _Runtime(config, crew.carrier, language, stack, crew, session=selection)
 
 
+async def _feed_service(service: CompanionService, director: Director) -> None:
+    async with aclosing(service.events()) as events:
+        async for event in events:
+            director.submit(event)
+
+
 async def _chat(args: argparse.Namespace) -> None:
     async with _runtime(args) as runtime:
         conversation, adapter, director = runtime.conversation(args)
@@ -321,6 +333,10 @@ async def _chat(args: argparse.Namespace) -> None:
         if adapter is not None and director is not None:
             tasks.append(asyncio.create_task(feed_events(adapter, director, conversation.memory)))
         if director is not None:
+            tasks.extend(
+                asyncio.create_task(_feed_service(service, director))
+                for service in getattr(runtime, "services", ())
+            )
             tasks.append(asyncio.create_task(events()))
         if director is not None and conversation.alerts is not None:
             tasks.append(asyncio.create_task(conversation.alerts.run(director.submit)))

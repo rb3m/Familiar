@@ -1,0 +1,24 @@
+thermal_interval_s: 10
+storage_interval_s: 60
+read_timeout_s: 5
+plausible_c: [1, 120]
+network_fstypes: [cifs, smb3, smbfs, nfs, nfs4, fuse.sshfs, fuse.rclone, afpfs, webdav, davfs, 9p]
+free_alert_pct: 10
+free_rearm_pct: 12
+dwell_samples: 2
+clear_c: 5
+cooldown_s: 900
+notice_ttl_s: 180
+spoken_names:   # how alerts name each role aloud; {device} is the short device name
+  cpu: the CPU
+  gpu: the GPU
+  gpu_limit: the GPU
+  drive: drive {device}
+  ram: a RAM stick
+rules:
+  - {driver: coretemp, label: 're:^Package id \d+$', role: cpu, alert: true, limit: max, margin_c: 0, fallback_c: 90}
+  - {driver: k10temp, label: Tctl, role: cpu, alert: true, limit: max, margin_c: 0, fallback_c: 90}
+  - {driver: amdgpu, label: edge, role: gpu, alert: false}
+  - {driver: amdgpu, label: junction, role: gpu_limit, alert: true, limit: crit, margin_c: 15, fallback_c: 100}
+  - {driver: nvme, label: Composite, role: drive, alert: true, limit: max, margin_c: 0, fallback_c: 70}
+  - {driver: spd5118, label: 're:.*', role: ram, alert: false}

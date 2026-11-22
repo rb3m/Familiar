@@ -9,9 +9,9 @@ behind `typing.Protocol` interfaces, chosen in `config.toml`; personas are YAML 
 API tier) is the first backend; others plug in via entry points.
 
 ## Current step
-- Live OK: KSP, ETS2 recall/stereo, Elite, DJ blend, Mac desk assistant. Awaiting live: research + watched topics (ADR 0023/0024), desk weather (ADR 0019), controls/DJ split + guest picks (ADR 0018; music on Mac, Elite on Linux), **M5** SCS keys, callbacks, Elite hand-off; desk-feed remarks (period/sunset).
-- Next task: live checks above; build system health (ADR 0025); tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal, KWin focus; M7 Vic2 adapter.
-- Known: 429s park a model 15 min, then `fallback_api_key_env`. GUI needs a non-terminal PTT (evdev on Linux, mouse or F-key/keypad on macOS). Key presses go to the focused window (guard: fresh, unpaused telemetry).
+- Live OK: KSP, ETS2 recall/stereo, Elite, DJ blend, Mac desk assistant. Awaiting live: research, topics, system health, desk weather, desk-feed remarks (period/sunset), controls/DJ split + guest picks (music on Mac, Elite on Linux), **M5** SCS keys, callbacks, Elite hand-off.
+- Next: live checks above; tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal, KWin focus; M7 Vic2 adapter.
+- Known: 429s park a model 15 min, then `fallback_api_key_env`. GUI needs non-terminal PTT (evdev; macOS mouse, F-key or keypad). Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
 ## Rules
 - Python 3.12 via uv: `uv sync --all-packages`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
@@ -39,6 +39,7 @@ API tier) is the first backend; others plug in via entry points.
 - `packages/familiar-elite/src/familiar_elite/`: Elite journal/status, events, `.binds` writer (`elite-bindings`), hands.
 - `packages/familiar-desk/src/familiar_desk/`: `desk-feed` helper, source and weather-provider plugins, `desk` service.
 - `packages/familiar-research/src/familiar_research/`: `research` service (agy lookups), `research check`.
+- `packages/familiar-system/src/familiar_system/`: `system` service (health lookups, alerts), `system sensors`.
 - `packages/familiar-music/src/familiar_music/`: DJ service: Pear + mpv players, sources, `library/` index, `music` CLI.
 - `docs/knowledge-packs.md`: landmark packs and `familiar landmarks`. Read before editing landmarks.
 - `scripts/`: data builders; landmark scripts wrap `familiar_scs/curation.py`.

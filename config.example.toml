@@ -182,6 +182,11 @@ max_alerts = 8            # integer from 1 to 8
 # model = "gemini-3.8-flash-low" # agy model; defaults in familiar_research/data/agy.yaml
 # timeout_s = 90
 
+# [system]               # system health lookups and alerts, desk and games (ADR 0025)
+# enabled = false
+# thermal_interval_s = 10 # sensors and thresholds: familiar_system/data/sensors.yaml
+# storage_interval_s = 60
+
 [music]
 enabled = false          # companion DJ, beside any game or in desk voice mode
 service = "blend"        # familiar.services entry point; "pear" keeps YouTube-only playback

@@ -34,6 +34,9 @@ FLAVOR_DEFAULTS = {
 ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.0, "max_alerts": 8}
 
 
+SYSTEM_DEFAULTS = {"enabled": False}
+
+
 RESEARCH_DEFAULTS = {"enabled": False}
 
 
@@ -89,6 +92,7 @@ class AppConfig:
     music: dict = field(default_factory=lambda: MUSIC_DEFAULTS.copy())
     desk: dict = field(default_factory=lambda: DESK_DEFAULTS.copy())
     research: dict = field(default_factory=lambda: RESEARCH_DEFAULTS.copy())
+    system: dict = field(default_factory=lambda: SYSTEM_DEFAULTS.copy())
     config_path: Path | None = None
 
 
@@ -225,6 +229,20 @@ def _music(data: dict) -> dict:
     return settings
 
 
+def _system(data: dict) -> dict:
+    section = data.get("system", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[system] must be a table")
+    settings = {**SYSTEM_DEFAULTS, **section}
+    if type(settings["enabled"]) is not bool:
+        raise ConfigError("system.enabled must be a boolean")
+    for key in ("thermal_interval_s", "storage_interval_s"):
+        value = settings.get(key, 1)
+        if type(value) not in {int, float} or not math.isfinite(value) or value <= 0:
+            raise ConfigError(f"system.{key} must be a finite positive number")
+    return settings
+
+
 def _research(data: dict) -> dict:
     section = data.get("research", {})
     if not isinstance(section, dict):
@@ -358,6 +376,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         music=_music(data),
         desk=_desk(data),
         research=_research(data),
+        system=_system(data),
         config_path=source.resolve() if source is not None else None,
         language=language,
         persona=persona,

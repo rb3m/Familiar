@@ -217,7 +217,7 @@ Next, in this order (the Commander's plan 2026-11-22):
    persisted outside the runtime file (capped JSON in the state dir), first fetch silent,
    title-only keywords, titles plus short plain snippets to the LLM (feed text is untrusted),
    cooldowns and per-hour caps.
-3. **System health** (ADR 0025: its own `system` service in desk and game sessions, lookups plus once-per-crossing alerts; supersedes the desk-source plan below): disk/NVMe, CPU, GPU and RAM
+3. **System health** (built 2026-11-22, **live voice check pending**; ADR 0025: its own `system` service in desk and game sessions, lookups plus once-per-crossing alerts; supersedes the desk-source plan below): disk/NVMe, CPU, GPU and RAM
    temperatures (hwmon on Linux, no root; unprivileged readers on macOS), free space, load,
    uptime. Reader protocol with a Linux/macOS map, every field optional. Optional alerts with
    hysteresis, cooldown, never on the first or a stale sample. Deferred: SMART health, pending

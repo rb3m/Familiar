@@ -43,6 +43,7 @@ then `fallback_api_key_env`); ElevenLabs is on the Pro plan, with Gemini TTS as 
 | Memory | `packages/familiar/src/familiar/memory/` | SQLite trip facts, local retrieval, gated recall and shutdown summaries (ADR 0005). |
 | GUI | `packages/familiar/src/familiar/gui/` | Local web launcher: aiohttp server owning one voice subprocess, vanilla frontend in `static/` (ADR 0003, `docs/gui-api.md`). |
 | Desk | `packages/familiar-desk/src/familiar_desk/` | `desk-feed` helper (pluggable sources, atomic JSON feed) and the `desk` companion service (ADR 0016). |
+| System | `packages/familiar-system/src/familiar_system/` | `system` service: platform readers (own hwmon reader on Linux, psutil elsewhere), data-driven sensor rules, once-per-crossing `system_notice` alerts, `system_status` tool; `familiar system sensors` inventory (ADR 0025). |
 | Research | `packages/familiar-research/src/familiar_research/` | `research` service: background vault/web lookups through `agy`, answered as `research_result` cues; `familiar research check` permission self-test (ADR 0023). |
 | SCS games | `packages/familiar-scs/src/familiar_scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
 | Backends | `packages/familiar/src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |

@@ -289,3 +289,19 @@ searched; an empty answer is never an all clear. To hear urgent items unprompted
 by rules (an allowed area, an official site, your dates or places, first seen), and says the
 watch *flagged* a notice worth checking rather than stating it as fact. The watch switches off at
 its end date. Topic files and their state stay on your machine (ADR 0024).
+
+### System health (optional)
+
+Ask "how hot is my GPU?", "how much disk is left?" or "how's the machine doing?" at any time, in
+games too. With `[system] enabled = true` the companion also speaks up once when something
+crosses a line: a drive at its own warning temperature, the CPU or GPU near its limit, or a
+local filesystem under 10% free (re-armed above 12%). A reading must stay over the line for two
+samples, each part speaks at most once every 15 minutes, and these notices never cut into a
+game's urgent callouts. Nothing goes into the prompt.
+
+Readings come from hwmon on Linux and need no root; on macOS v1 reports load, memory, disk
+space and uptime (no temperatures). Which sensors count, their limits and the spoken names are
+in `familiar_system/data/sensors.yaml`: the device's own published limit is used first, then the
+file's fallback. Run `familiar system sensors` to see every sensor found, which rule matched and
+where it alerts; add rules for other hardware in
+`~/.config/familiar/data/familiar_system/sensors.yaml`. Network mounts are never probed (ADR 0025).
