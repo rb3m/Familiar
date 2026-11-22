@@ -23,15 +23,12 @@ scopes:
       - mcp(ipad-vault-mcp/get_note)
       - mcp(ipad-vault-mcp/get_backlinks)
       - mcp(ipad-vault-mcp/get_forward_links)
-      - mcp(rag-mcp-server/search)
-      - mcp(rag-mcp-server/list_documents)
     extra_deny: ["read_url(*)"]
     instructions: >-
       Use only the vault MCP tools; never read files directly (file reading is disabled). First
       search with the ipad-vault-mcp search_vault tool, then open the best matching notes with
       the ipad-vault-mcp get_note tool, giving the search result's path as its path_or_title
-      argument, before answering. rag-mcp-server search is a
-      secondary index that may be out of date; use it only if search_vault finds nothing.
+      argument, before answering.
       Never send vault text to web tools or web search.
   web:
     allow: []

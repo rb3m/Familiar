@@ -86,8 +86,9 @@ Option 3, in a new `familiar-research` package (a `familiar.services` plugin, `r
   sees the masked short answer. Phase 2: an OS sandbox around agy and the MCP servers.
 - The vault profile must list every read tool the model may reach for; a missing one gives an
   empty answer (seen in testing).
-- The RAG index (`rag-mcp-server`) was stale (no `JapanTrip2027`); vault search used
-  `ipad-vault-mcp` instead. Refreshing it is outside Familiar.
+- Correction (2026-11-22): `rag-mcp-server` is not a vault index (on the development machine it
+  indexes an ebook library), so it was never "stale". It was removed from the vault profile; vault
+  lookups use the vault MCP server's tools only.
 - Not in v1: concurrent lookups, ACP, a core deferred-result mechanism, note writing.
 
 ### Found while building (2026-11-22)
