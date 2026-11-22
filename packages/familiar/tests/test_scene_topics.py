@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from familiar.banter import content_words, near_duplicate, opening_avoidance
 from familiar.cli import _Runtime
+from familiar.crew import persona_id
 from familiar.history import HistoryRecord
 from familiar.interfaces import LLMChunk, Message, SceneContext, SceneTopic
 from familiar.topics import FREE_TOPIC, TUNING, TopicPicker
@@ -221,3 +222,25 @@ async def test_chosen_topic_is_not_forbidden(tmp_path, crew):
     assert "Topic for this scene: Now playing X." in text
     assert "Do not mention the city or its nickname." in text
     assert "current song" not in text
+
+
+def test_persona_topics_share_one_weight_per_persona():
+    picker = TopicPicker(lambda: 0, random.Random(1))
+    many = [SceneTopic("persona", f"ruslana:{n}", str(n)) for n in range(10)]
+    weather = SceneTopic("weather", "weather", "Drizzle.")
+    picks = []
+    for _ in range(2000):
+        picker.history.clear()
+        picks.append(picker.pick([*many, weather]).family)
+    # persona 3 vs weather 1 vs free 1.5: about 0.18 weather, not 1/14.5.
+    assert 0.14 < picks.count("weather") / len(picks) < 0.22
+
+
+def test_scene_topics_only_from_the_speaking_pair(tmp_path, crew):
+    first, second, *rest = crew.members
+    crew.members = (replace(first, topics=["lanterns"]), replace(second, topics=["toads"]), *rest)
+    conversation = chat(tmp_path, crew)
+    topics = conversation._scene_topics(SceneContext("", ()), (persona_id(first), "nobody"))
+    assert [topic.text for topic in topics] == [
+        f"{first.display_name} likes talking about lanterns"
+    ]

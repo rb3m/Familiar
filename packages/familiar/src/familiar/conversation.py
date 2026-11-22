@@ -351,7 +351,9 @@ class Conversation:
             for _, previous in self._recent_lines
         )
 
-    def _scene_topics(self, scene: SceneContext) -> tuple[SceneTopic, ...]:
+    def _scene_topics(self, scene: SceneContext, pair=()) -> tuple[SceneTopic, ...]:
+        """Shared topics plus the speaking pair's own (all members' when no pair is given)."""
+        speakers = set(pair) or {persona_id(member) for member in self.crew.members}
         personal = tuple(
             SceneTopic(
                 "persona",
@@ -359,6 +361,7 @@ class Conversation:
                 f"{member.display_name} likes talking about {text}",
             )
             for member in self.crew.members
+            if persona_id(member) in speakers
             for text in getattr(member, "topics", ())
         )
         return (*scene.topics, *personal)
@@ -366,7 +369,7 @@ class Conversation:
     async def _generate_scene(self, pair, scene: SceneContext | None) -> list[tuple[str, str]]:
         excluded = []
         for _ in range(2):
-            topic = self._pick_scene_topic(scene, excluded)
+            topic = self._pick_scene_topic(scene, excluded, pair)
             if scene is not None and topic is None:
                 return []
             excluded.append(topic)
@@ -376,10 +379,10 @@ class Conversation:
             logging.getLogger(__name__).debug("Dropping near-duplicate banter scene")
         return []
 
-    def _pick_scene_topic(self, scene, excluded) -> SceneTopic | None:
+    def _pick_scene_topic(self, scene, excluded, pair=()) -> SceneTopic | None:
         if scene is None:
             return None
-        return self.picker.pick(self._scene_topics(scene), exclude=excluded)
+        return self.picker.pick(self._scene_topics(scene, pair), exclude=excluded)
 
     def _scene_background(self, scene: SceneContext | None, topic: SceneTopic | None) -> str:
         if scene is None:

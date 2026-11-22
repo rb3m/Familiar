@@ -1,7 +1,7 @@
 """Weighted scene topics and shared cooldowns for scenes and event remarks."""
 
 import random
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Callable, Collection
 
 from familiar.interfaces import SceneTopic
@@ -64,9 +64,11 @@ class TopicPicker:
         ]
         if not candidates:
             return None
-        chosen = self.rng.choices(
-            candidates, weights=[TUNING["weights"].get(t.family, 1) for t in candidates], k=1
-        )[0]
+        groups = Counter(_group(topic) for topic in candidates)
+        weights = [
+            TUNING["weights"].get(topic.family, 1) / groups[_group(topic)] for topic in candidates
+        ]
+        chosen = self.rng.choices(candidates, weights=weights, k=1)[0]
         self.note(chosen.family, chosen.key)
         return chosen
 
@@ -85,3 +87,9 @@ class TopicPicker:
         cutoff = self.clock() - max(TUNING["cooldowns"].values())
         while self.history and self.history[0][2] <= cutoff:
             self.history.popleft()
+
+
+def _group(topic: SceneTopic) -> str:
+    """A persona's topics share one weight ("ruslana:art" -> "persona:ruslana")."""
+    owner = topic.key.split(":", 1)[0]
+    return {"persona": f"persona:{owner}"}.get(topic.family, topic.family)
