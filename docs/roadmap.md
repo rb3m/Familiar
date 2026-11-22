@@ -199,7 +199,7 @@ permission like that is ever needed, put it in a small signed Swift helper rathe
 it to Terminal/Python. Get agy/codex consensus and an ADR on the pack design first.
 
 Next, in this order (the Commander's plan 2026-11-22):
-1. **Research through agy** (ADR 0023, proposed): `research(question, scope)` says a holding
+1. **Research through agy** (ADR 0023; built 2026-11-22, **live voice check pending**): `research(question, scope)` says a holding
    line, agy looks it up in the vault or on the web in the background, and the answer comes back
    as a 2–3 sentence remark; follow-ups use the session cache, then resume the agy conversation.
    Read-only by agy deny rules plus a self-test; booking codes masked. Phase 2: OS sandbox.

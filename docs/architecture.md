@@ -21,6 +21,9 @@ the core works without any game pack. The commands are in `README.md`.
  Transcript log (JSONL, every event and utterance) ◄──────────────────────┘ ──► speakers
 ```
 
+Current accounts: Gemini flash-lite runs on the free API key (429s park a model for 15 min,
+then `fallback_api_key_env`); ElevenLabs is on the Pro plan, with Gemini TTS as the fallback.
+
 ## Modules
 
 | Module | Path | Role |
@@ -40,6 +43,7 @@ the core works without any game pack. The commands are in `README.md`.
 | Memory | `packages/familiar/src/familiar/memory/` | SQLite trip facts, local retrieval, gated recall and shutdown summaries (ADR 0005). |
 | GUI | `packages/familiar/src/familiar/gui/` | Local web launcher: aiohttp server owning one voice subprocess, vanilla frontend in `static/` (ADR 0003, `docs/gui-api.md`). |
 | Desk | `packages/familiar-desk/src/familiar_desk/` | `desk-feed` helper (pluggable sources, atomic JSON feed) and the `desk` companion service (ADR 0016). |
+| Research | `packages/familiar-research/src/familiar_research/` | `research` service: background vault/web lookups through `agy`, answered as `research_result` cues; `familiar research check` permission self-test (ADR 0023). |
 | SCS games | `packages/familiar-scs/src/familiar_scs/` | ATS/ETS2 adapter: telemetry, projection, places, landmark packs, event rules, `describe()`. |
 | Backends | `packages/familiar/src/familiar/backends/<vendor>/` | Built-in plugins. Gemini first. |
 
@@ -223,3 +227,10 @@ into ambient remarks and adds the local time and weather to the prompt. Sources 
 (`familiar_desk.sources`) chosen by `[desk] sources`: the clock and, hourly, the weather
 (ADR 0019), which asks pluggable `familiar_desk.weather_providers` (Open-Meteo, METAR) in order,
 later ones filling gaps. RSS, email and the other sources from the roadmap plug in the same way.
+
+The optional `[research]` service (`familiar-research`, ADR 0023) runs in desk and game sessions.
+Its `research(question, scope)` tool returns "started" at once and runs one `agy` lookup in the
+background (argv only, private temp dir, keys stripped, per-scope allow/deny profile,
+`--sandbox`, JSON schema); the answer arrives as a `notable` `research_result` cue keyed by
+research id and is spoken in a tool-free turn. `research_details` answers follow-ups from a
+masked, bounded session cache; deeper follow-ups resume the agy conversation.

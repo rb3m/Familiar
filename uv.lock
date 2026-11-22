@@ -9,6 +9,7 @@ members = [
     "familiar-elite",
     "familiar-ksp",
     "familiar-music",
+    "familiar-research",
     "familiar-scs",
 ]
 
@@ -355,6 +356,21 @@ requires-dist = [
     { name = "mutagen", specifier = ">=1.47.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ytmusicapi", specifier = ">=1.12.4" },
+]
+
+[[package]]
+name = "familiar-research"
+version = "0.1.0"
+source = { editable = "packages/familiar-research" }
+dependencies = [
+    { name = "familiar" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "familiar", editable = "packages/familiar" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]

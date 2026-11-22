@@ -249,3 +249,29 @@ on its own sparingly: a morning outlook, when rain starts or stops, and a temper
 every `remark_every_h` hours, at any hour by default (narrow it with `active_hours`).
 Providers are plugins (`familiar_desk.weather_providers`), so another service can replace
 either one.
+
+### Research (optional)
+
+Ask about something saved in your Obsidian vault or a quick fact from the web ("which hotel am
+I in at Sendai?", "is the airport train running?"). The companion says it will look, the
+lookup runs in the background through the [Antigravity CLI](https://antigravity.google/)
+(`agy`), and the answer comes back as a short remark, typically 15–45 s later. Follow-ups
+answer from the session's cache or continue the same lookup. It works at the desk and in
+games, and only ever speaks when asked.
+
+Needs `agy` on `PATH`, signed in, with your vault's MCP servers configured in agy (Familiar
+never sees the vault path). Then:
+
+```toml
+[research]
+enabled = true
+```
+
+and run `familiar research check` once (again after each agy update). It asks agy to write a
+file and run a command under each permission profile, first unrestricted in a throwaway folder
+to prove the model really tries, then restricted; lookups stay off until both scopes pass.
+Lookups are read-only by agy deny rules; booking codes and ticket numbers are masked from
+speech. The model, permission profiles, MCP tool names and mask patterns are in
+`familiar_research/data/agy.yaml`; override them in
+`~/.config/familiar/data/familiar_research/agy.yaml`. See ADR 0023 for the limits (Gemini's
+own web tools are not covered by agy's permissions).

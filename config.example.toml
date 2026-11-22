@@ -177,6 +177,11 @@ max_alerts = 8            # integer from 1 to 8
 # interval_s = 3600      # fetch interval in seconds
 # latitude/longitude/timezone/location here override [desk] for weather only
 
+# [research]             # vault/web lookups through agy (ADR 0023); run `familiar research check`
+# enabled = false
+# model = "gemini-3.8-flash-low" # agy model; defaults in familiar_research/data/agy.yaml
+# timeout_s = 90
+
 [music]
 enabled = false          # companion DJ, beside any game or in desk voice mode
 service = "blend"        # familiar.services entry point; "pear" keeps YouTube-only playback

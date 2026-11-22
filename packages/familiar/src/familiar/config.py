@@ -34,6 +34,9 @@ FLAVOR_DEFAULTS = {
 ALERT_DEFAULTS = {"enabled": True, "lead_s": 1.0, "max_alerts": 8}
 
 
+RESEARCH_DEFAULTS = {"enabled": False}
+
+
 MUSIC_DEFAULTS = {"enabled": False, "service": "pear"}
 
 DESK_DEFAULTS = {
@@ -85,6 +88,7 @@ class AppConfig:
     hands: dict = field(default_factory=lambda: HANDS_DEFAULTS.copy())
     music: dict = field(default_factory=lambda: MUSIC_DEFAULTS.copy())
     desk: dict = field(default_factory=lambda: DESK_DEFAULTS.copy())
+    research: dict = field(default_factory=lambda: RESEARCH_DEFAULTS.copy())
     config_path: Path | None = None
 
 
@@ -221,6 +225,23 @@ def _music(data: dict) -> dict:
     return settings
 
 
+def _research(data: dict) -> dict:
+    section = data.get("research", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[research] must be a table")
+    settings = {**RESEARCH_DEFAULTS, **section}
+    if type(settings["enabled"]) is not bool:
+        raise ConfigError("research.enabled must be a boolean")
+    if "model" in settings and (
+        not isinstance(settings["model"], str) or not settings["model"].strip()
+    ):
+        raise ConfigError("research.model must be a non-empty string")
+    timeout = settings.get("timeout_s", 1)
+    if type(timeout) not in {int, float} or not math.isfinite(timeout) or timeout <= 0:
+        raise ConfigError("research.timeout_s must be a finite positive number")
+    return settings
+
+
 def _desk(data: dict) -> dict:
     section = data.get("desk", {})
     if not isinstance(section, dict):
@@ -336,6 +357,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         hands=_hands(data),
         music=_music(data),
         desk=_desk(data),
+        research=_research(data),
         config_path=source.resolve() if source is not None else None,
         language=language,
         persona=persona,

@@ -90,6 +90,23 @@ Option 3, in a new `familiar-research` package (a `familiar.services` plugin, `r
   `ipad-vault-mcp` instead. Refreshing it is outside Familiar.
 - Not in v1: concurrent lookups, ACP, a core deferred-result mechanism, note writing.
 
+### Found while building (2026-11-22)
+
+- **Notes are read through the vault server, never `read_file`.** Denying `read_file(*)` stays:
+  in agy a deny beats a path-scoped allow, and without the deny a vault lookup read a probe file
+  outside the vault. The vault instructions name `get_note` and its `path_or_title` argument;
+  loosely worded instructions made the fast model send the wrong argument name.
+- **agy gets the user's interpreter.** Run from Familiar's virtualenv, agy started the vault MCP
+  server (`python3 server.py`) with our venv's Python, which lacked its dependencies, so the
+  server died at start. `AgyRunner.environment()` drops `VIRTUAL_ENV` and our venv's `bin` from
+  `PATH`.
+- **The self-test has a positive control.** Each scope first runs unrestricted in a throwaway
+  directory; if the markers don't appear there the model never tried, and the check fails
+  instead of passing vacuously.
+- The profile hash covers only allow/deny rules, so rewording instructions needs no re-check.
+- Measured end to end through the service: vault lookup 58 s, resumed follow-up 23.5 s, booking
+  codes masked in answers and details.
+
 ## Who agreed
 
 - Commander: agy as the backend; holding line then 2–3 sentences; faster follow-ups; read-only;
