@@ -32,6 +32,7 @@ from familiar.transcript import TranscriptLog
 
 # Longest wait for companion services (e.g. music ducking) before audio or recording starts.
 SERVICE_FLUSH_S = 0.5
+MIN_AUDIO_S_PER_CHAR = 0.03
 
 
 class VoiceSession:
@@ -181,6 +182,8 @@ class VoiceSession:
         async with aclosing(self.tts.synthesize(sentence, voice, self.language)) as chunks:
             async for chunk in chunks:
                 self._sentence_audio = True
+                self._sentence_pcm_bytes += len(chunk.pcm)
+                self._sentence_audio_s += len(chunk.pcm) / (2 * chunk.sample_rate)
                 if timings["first_audio_ms"] is None:
                     timings["first_audio_ms"] = (monotonic() - released) * 1000
                 yield chunk
@@ -243,9 +246,22 @@ class VoiceSession:
                         self.conversation.acknowledge_playback()
                         continue
                     self._sentence_audio = False
+                    self._sentence_pcm_bytes = 0
+                    self._sentence_audio_s = 0.0
                     await self.player.play(self._audio(spoken, released, timings), pan=self._pan())
                     # Resuming the sentence generator acknowledges actual playback.
                     await self.player.wait_idle()
+                    if (
+                        not self._sentence_pcm_bytes
+                        or self._sentence_audio_s < len(spoken) * MIN_AUDIO_S_PER_CHAR
+                    ):
+                        logging.getLogger(__name__).warning(
+                            "Short sentence audio: speaker=%s chars=%d seconds=%.3f text=%s",
+                            persona_id(self.conversation.speaker),
+                            len(spoken),
+                            self._sentence_audio_s,
+                            spoken[:60],
+                        )
                     if self._sentence_audio:
                         self.conversation.acknowledge_playback()
             await self.player.wait_idle()

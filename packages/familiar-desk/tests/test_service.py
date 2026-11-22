@@ -123,3 +123,50 @@ async def test_context_adds_location_notes():
     )
     service = DeskService({"location_notes": "The Big Q."}, clock=lambda: NOW)
     assert service.describe() == "Local time: Friday 2026-11-20 18:42 (dusk).\nThe Big Q."
+
+
+@pytest.mark.asyncio
+async def test_scene_context_frame_topics_and_freshness():
+    await snapshot()
+    data = json.loads(feed_path().read_text())
+    clock = data["sources"]["clock"]["data"]
+    clock.update(location="Secret city", sunset=(NOW + timedelta(minutes=30)).isoformat())
+    data["sources"]["weather"] = {
+        "status": "ok",
+        "data": {
+            "location": "Secret city",
+            "current": {
+                "observed_at": NOW.isoformat(),
+                "condition": "light_rain",
+                "temperature_c": 15,
+            },
+        },
+    }
+    feed_path().write_text(json.dumps(data))
+    now = NOW
+    service = DeskService(
+        {"sources": ["clock", "weather"], "location_notes": "The Big Q."}, clock=lambda: now
+    )
+    scene = service.scene_context()
+    assert scene.frame == "dusk; light rain"
+    topics = {topic.family: topic.text for topic in scene.topics}
+    assert topics["time"] == service._clock_line()
+    assert "sunset is at 19:12" in topics["time"]
+    assert topics["weather"] == service._weather_line()
+    assert topics["location"] == "The Big Q."
+    assert "Secret city" not in scene.frame and not any(char.isdigit() for char in scene.frame)
+    assert len(service._read()) == 1  # context did not consume events
+    now += timedelta(seconds=service.weather["max_age_s"] + 181)
+    assert service.scene_context().frame == ""
+    assert [topic.family for topic in service.scene_context().topics] == ["location"]
+
+
+@pytest.mark.asyncio
+async def test_scene_context_empty_and_optional_location():
+    service = DeskService({}, clock=lambda: NOW)
+    assert service.scene_context().topics == ()
+    service.settings["location_notes"] = "The Big Q."
+    assert service.scene_context().topics[0].text == "The Big Q."
+    service.settings.pop("location_notes")
+    await snapshot()
+    assert [topic.family for topic in service.scene_context().topics] == ["time"]

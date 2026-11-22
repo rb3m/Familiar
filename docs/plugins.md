@@ -52,7 +52,7 @@ Familiar finds backends through Python entry points, so a plugin can live in thi
 ## Plugin API 2.0: structured tool history
 
 API 2.0 is a breaking interface change; all in-repo plugins use the shared
-`PLUGIN_API_VERSION` (currently `"2.1"`). External plugins must declare API major 2 after updating their
+`PLUGIN_API_VERSION` (currently `"2.5"`). External plugins must declare API major 2 after updating their
 message translation; the loader rejects API 1 plugins.
 
 `Message` retains `role` and `text` and adds `tool_calls: tuple[ToolCall, ...] = ()` for assistant
@@ -111,6 +111,9 @@ Internal telemetry and GameEvents stay numeric; Watchables stay numeric SI.
 Personas are YAML, not plugins: copy `packages/familiar/src/familiar/personas/mira.yaml`, change the prompt and voices, and pick
 `truthfulness: strict` or `playful`. Voice
 ids are scoped by TTS backend and language, so one persona can sound right in English and Japanese.
+The optional `topics` field is a list of non-empty strings, for example
+`topics: [small discoveries, imaginary lantern adventures]`. These become individual persona
+banter topics with a 30-minute cooldown per item (ADR 0026).
 
 ## Adding a command
 
@@ -285,6 +288,13 @@ means the Director admitted that event; use it to restart schedules instead of c
 service; settings other than `enabled` and `service` pass through to its constructor. Core
 injects `dislike_read()` and `dislike_write(video_id, artists)` callbacks when memory is enabled;
 plugins must import only `familiar.interfaces`, never core memory or voice implementations.
+
+API 2.5 (additive, ADR 0026): sources may implement `scene_context() -> SceneContext` from
+`familiar.interfaces`, with a quiet `frame` and a tuple of `SceneTopic(family, key, text)`
+candidates. Core discovers this optional method with `getattr`; `describe()` remains the
+exact context for player replies and the fallback frame for sources without the hook.
+Events may set `data["lean"]` to `"dj"` or `"controls"` to double that role holder's
+speaker weight without assigning the turn.
 
 ## Add a desk source or weather provider
 

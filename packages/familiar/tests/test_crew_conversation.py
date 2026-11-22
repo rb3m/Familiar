@@ -205,7 +205,9 @@ async def test_carrier_confirmation_survives_noncarrier_turn_and_interjections_n
     await consume(chat.ask("Frieren, yes"))
     assert actions.pending is pending
     assert actuator.performed == []
-    await consume(chat.interject(event()))
+    cue = event()
+    cue.data["speaker_id"] = "frieren"
+    await consume(chat.interject(cue))
     assert chat.speaker.id == "frieren"
     assert chat.llm.requests[-1][2] == []
     chat.llm.rounds = iter(

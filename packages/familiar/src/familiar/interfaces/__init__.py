@@ -14,13 +14,13 @@ from .game import GameAdapter
 from .llm import REQUIRE_TOOL, LLMProvider
 from .ptt import PushToTalk
 from .quantity import spoken
-from .service import CompanionService, ServiceTool, SpeechState
+from .service import CompanionService, SceneContext, SceneTopic, ServiceTool, SpeechState
 from .stt import SpeechToText
 from .tts import TextToSpeech
 from .types import AudioChunk, AudioClip, GameEvent, LLMChunk, Message, ToolCall, ToolSpec
 from .watch import Watchable, WatchSample, WatchSpec
 
-PLUGIN_API_VERSION = "2.4"
+PLUGIN_API_VERSION = "2.5"
 
 __all__ = [
     "PLUGIN_API_VERSION",
@@ -42,6 +42,8 @@ __all__ = [
     "PluginError",
     "GameAdapter",
     "CompanionService",
+    "SceneContext",
+    "SceneTopic",
     "ServiceTool",
     "SpeechState",
     "LLMProvider",

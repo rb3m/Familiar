@@ -90,6 +90,8 @@ class Persona:
     # Free-text likes per topic, e.g. {"music": ["70s city pop", "quiet folk"]}.
     tastes: dict[str, list[str]] = field(default_factory=dict)
 
+    topics: list[str] = field(default_factory=list)
+
     def names(self, language: str) -> list[str]:
         """The display name is an alias in every language."""
         return list(dict.fromkeys([self.display_name, *self.aliases.get(language, [])]))
@@ -189,8 +191,14 @@ def validate_persona(data: object) -> dict:
         for topic, likes in tastes.items()
     ):
         raise ConfigError("Persona tastes must map topics to lists of non-empty strings")
+    topics = data.get("topics", [])
+    if not isinstance(topics, list) or any(
+        not isinstance(topic, str) or not topic.strip() for topic in topics
+    ):
+        raise ConfigError("Persona topics must be a list of non-empty strings")
     return {
         **data,
+        "topics": topics,
         "style_rules": rules,
         "game_hooks": hooks,
         "truthfulness": truthfulness,

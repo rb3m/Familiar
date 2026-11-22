@@ -1730,3 +1730,24 @@ def test_entry_points_pass_the_core_plugin_check(name):
     from familiar.plugins import load_class
 
     assert load_class("services", name).api_version == PLUGIN_API_VERSION
+
+
+def test_scene_context_and_remark_lean():
+    service = PearMusicService({}, player=FakePlayer(), searcher=FakeSearch())
+    assert service.scene_context().frame == ""
+    assert service.scene_context().topics == ()
+    service._current = service.player.current
+    scene = service.scene_context()
+    assert scene.frame == "music playing"
+    assert len(scene.topics) == 1
+    topic = scene.topics[0]
+    assert (topic.family, topic.key, topic.text) == (
+        "song",
+        service._current.uri,
+        service.describe(),
+    )
+    service.remarks.count = service.remarks.due
+    assert service._remark().data["lean"] == "dj"
+    service._current = replace(service._current, paused=True)
+    assert service.scene_context().frame == ""
+    assert service.scene_context().topics[0].text == service.describe()

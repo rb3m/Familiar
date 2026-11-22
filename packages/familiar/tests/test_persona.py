@@ -154,3 +154,22 @@ def test_spoken_units_keep_the_units_given_in_data():
     assert "never convert to another unit" in SPOKEN_RULE
     assert "gallons" not in SPOKEN_RULE
     assert "pounds" not in SPOKEN_RULE
+
+
+@pytest.mark.parametrize("topics", [None, "forest", [""], ["  "], [4], {}])
+def test_invalid_topics(persona, topics):
+    from familiar.persona import validate_persona
+
+    with pytest.raises(ConfigError, match="topics"):
+        validate_persona({**asdict(persona), "topics": topics})
+
+
+def test_optional_topics_roundtrip(tmp_path, persona):
+    from familiar.persona import validate_persona
+
+    data = asdict(persona)
+    data.pop("topics")
+    assert validate_persona(data)["topics"] == []
+    data["topics"] = ["quiet forests", "ancient spells"]
+    (tmp_path / "test.yaml").write_text(yaml.safe_dump(data))
+    assert load_persona(tmp_path, "test", tmp_path).topics == data["topics"]

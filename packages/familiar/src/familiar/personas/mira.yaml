@@ -11,6 +11,10 @@ aliases:
 # Event kind or prefix -> nonnegative weight (exact wins, then longest prefix).
 # Effective event preference is weight * chattiness; omitted matches default to 1.
 interests: {}
+# Optional conversation topics, rotated individually (ADR 0026).
+topics:
+  - small discoveries
+  - imaginary lantern adventures
 # Likes per topic, used as hints (e.g. the DJ's own music picks, ADR 0014, 0018).
 tastes:
   music:

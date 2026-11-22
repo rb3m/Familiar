@@ -8,6 +8,21 @@ from .types import GameEvent, ToolSpec
 
 
 @dataclass(frozen=True)
+class SceneTopic:
+    family: str
+    key: str
+    text: str
+
+
+@dataclass(frozen=True)
+class SceneContext:
+    frame: str
+    topics: tuple[SceneTopic, ...]
+    # Exact facts from sources without scene_context() (game telemetry): shown as before.
+    situation: str = ""
+
+
+@dataclass(frozen=True)
 class ServiceTool:
     spec: ToolSpec
     handler: Callable[..., Awaitable[dict]]

@@ -9,7 +9,15 @@ from datetime import UTC, datetime
 from functools import partial
 from threading import Event
 
-from familiar.interfaces import PLUGIN_API_VERSION, GameEvent, ServiceTool, ToolSpec, spoken
+from familiar.interfaces import (
+    PLUGIN_API_VERSION,
+    GameEvent,
+    SceneContext,
+    SceneTopic,
+    ServiceTool,
+    ToolSpec,
+    spoken,
+)
 
 from .dj import DJ, Dislikes
 from .library.enrich import Enricher
@@ -184,6 +192,12 @@ class MusicService:
             return ""
         state = {True: "Paused", False: "Now playing"}[self._current.paused]
         return f"{state}: {self._current.summary()}."
+
+    def scene_context(self) -> SceneContext:
+        if self._current is None:
+            return SceneContext("", ())
+        frame = {True: "", False: "music playing"}[self._current.paused]
+        return SceneContext(frame, (SceneTopic("song", self._current.uri, self.describe()),))
 
     async def _health_error(self):
         health = await self.player.health()
@@ -463,7 +477,9 @@ class MusicService:
     def _remark(self):
         if not self.remarks.ready:
             return None
-        return self._cue("music_track", f"Now playing: {self._remark_summary()}.", ttl_s=15)
+        return self._cue(
+            "music_track", f"Now playing: {self._remark_summary()}.", ttl_s=15, lean="dj"
+        )
 
     def _cue(self, kind, summary, **data):
         """A moment-bound event: it waits for silence but skips the Director's quiet gaps."""

@@ -208,6 +208,13 @@ and waits for coordination before playback. Hook/feed/cleanup failures are logge
 Service events retain Director deadlines, busy gates and cooldowns but bypass game connection
 and pause gates. A service also creates a desk Director when there is no game or crew banter.
 
+Sources may optionally expose `scene_context() -> SceneContext` (API 2.5, ADR 0026): a quiet
+background frame plus `SceneTopic` candidates. Core merges frames and picks one topic with
+family cooldowns, including event remarks and per-item persona topics; sources without the
+hook contribute `describe()` as their frame. Banter and event turns use the frame while
+player replies retain exact context. Recent opening hints and a 45-minute similarity guard
+reduce repeated scenes; a duplicate gets one retry with another topic, then silence.
+
 The optional `[music]` service is disabled by default. `familiar-music` owns Pear playback,
 threaded YouTube Music discovery, radio selection and a single duck/pause coordinator.
 Track remarks pause music; ordinary speech ducks against a separately remembered base volume.

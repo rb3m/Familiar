@@ -3,6 +3,7 @@
 import json
 import logging
 import random
+import time
 from collections import deque
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
@@ -10,7 +11,14 @@ from dataclasses import asdict
 from functools import partial
 
 from familiar.alerts import AlertKeeper
-from familiar.banter import Casting, parse_scene
+from familiar.banter import (
+    TUNING,
+    Casting,
+    content_words,
+    near_duplicate,
+    opening_avoidance,
+    parse_scene,
+)
 from familiar.crew import GUEST, ROLE_DUTIES, ROLES, Crew, persona_id
 from familiar.fallback import llm_budget_blocked
 from familiar.flavor import FlavorKeeper, flavor_hint
@@ -26,6 +34,8 @@ from familiar.interfaces import (
     GameEvent,
     LLMProvider,
     Message,
+    SceneContext,
+    SceneTopic,
     TextToSpeech,
     ToolCall,
     ToolSpec,
@@ -36,7 +46,14 @@ from familiar.persona import Persona
 from familiar.pipeline.sentences import SentenceSplitter
 from familiar.speech import MARKUP_RULE
 from familiar.tools import ToolRegistry, validate_arguments
+from familiar.topics import TopicPicker
 from familiar.transcript import TranscriptLog
+
+# Optional high-salience facts the model latches onto: named only when they are the topic.
+HIDDEN_RULES = {
+    "location": "Do not mention the city or its nickname.",
+    "song": "Do not mention the current song or artist.",
+}
 
 ALERT_RULE = (
     "\n\nAlerts: you cannot watch telemetry on your own. Whenever the player asks to be "
@@ -104,6 +121,8 @@ class Conversation:
         actions: ActionKeeper | None = None,
         crew: Crew | None = None,
         renderer: HistoryRenderer | None = None,
+        scene_context: Callable[[], SceneContext] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if history_limit < 1:
             raise ValueError("history_limit must be positive")
@@ -117,6 +136,10 @@ class Conversation:
         self.transcript = transcript
         self.tts = tts
         self.context = context
+        self.scene_context = scene_context
+        self.clock = clock
+        self.picker = TopicPicker(clock, self.rng)
+        self._recent_lines: deque[tuple[float, frozenset[str]]] = deque(maxlen=1000)
         self.game = game
         self.memory = memory
         self.flavor = flavor
@@ -150,6 +173,8 @@ class Conversation:
         if message.role == "user":
             speaker = "player"
         kinds = {"user": "player", "assistant": "assistant", "tool": "tool_result"}
+        if message.role == "assistant" and heard:
+            self._note_line(message.text)
         self.records.append(
             HistoryRecord(
                 speaker,
@@ -209,6 +234,7 @@ class Conversation:
             return
         summary = event.data["summary"]
         self.speaker = self._event_speaker(event)
+        self.picker.note_event(event.kind)
         self.transcript.record(
             "event", event_kind=event.kind, priority=event.priority, summary=summary
         )
@@ -242,6 +268,9 @@ class Conversation:
         candidate = self.flavor.choose(event) if self.flavor is not None else None
         if candidate is not None:
             text += flavor_hint(candidate)
+        avoidance = opening_avoidance(self.records, persona_id(self.speaker))
+        if avoidance:
+            text += "\n" + avoidance
         recorded = False
         offered = tuple(event.data.get("tools", ()))
         granted = event.data.get("speaker") == GUEST
@@ -265,42 +294,9 @@ class Conversation:
             logging.getLogger(__name__).debug("Skipping banter: %s", reason)
             return
         pair = self.casting.pick(self.crew, self.rng)
-        renderer = DefaultHistoryRenderer()
-        situation = "desk mode"
-        if self.context is not None:
-            situation = self.context()
-        prompt = (
-            f"Write a short crew banter scene in session language {self.language}.\n"
-            f"Initiator: {pair[0]}; partner: {pair[1]}. Both must speak. "
-            "A third crew member may join for at most one line.\n"
-            "Output ONLY 2-4 short spoken lines, aiming for 2-3, each as "
-            "<persona_id>: <text>, with actual IDs and no angle brackets. "
-            "No stage directions, player lines or claims to take game actions. " + MARKUP_RULE + " "
-            "Strict members use only supplied facts. Playful members may joke but must "
-            "never misreport game state. Practical information must always be exact.\n"
-            "Crew roster (third-person roles and relationships):\n"
-            + renderer.roster(self.crew, self.game)
-            + "\nCurrent situation: "
-            + situation
-            + "\nRecent chronological transcript (unheard lines were NOT said):\n"
-            + renderer.chronological(self.records, self.crew)
-        )
-        if self.memory is not None:
-            prompt += self.memory.crew_callback()
-        async with aclosing(
-            self.llm.stream([Message("user", "Write the scene.")], prompt, [])
-        ) as source:
-            chunks = [chunk async for chunk in source]
-        if any(chunk.tool_call is not None for chunk in chunks):
-            logging.getLogger(__name__).debug("Dropping banter: unexpected tool call")
-            return
-        lines = parse_scene(
-            strip_history_labels("".join(chunk.text for chunk in chunks)), self.crew, self.language
-        )
-        speakers = {speaker for speaker, _ in lines}
-        extras = [speaker for speaker, _ in lines if speaker not in pair]
-        if not lines or not set(pair).issubset(speakers) or len(extras) > 1:
-            logging.getLogger(__name__).debug("Dropping malformed banter scene")
+        scene = self.scene_context() if self.scene_context is not None else None
+        lines = await self._generate_scene(pair, scene)
+        if not lines:
             return
         self.banter_started()
         self._crew_reply_candidate = None
@@ -321,6 +317,8 @@ class Conversation:
                     self._offer_crew_reply(record.speaker_id, record.text, heard)
         finally:
             self._remember_scene(records)
+            for record in filter(lambda record: record.heard, records):
+                self._note_line(record.text)
             self.records.extend(records)
             self._remember_many([])
             for record in records:
@@ -331,6 +329,113 @@ class Conversation:
                     heard=record.heard,
                     source="persona_claim",
                 )
+
+    def _note_line(self, text: str) -> None:
+        self._prune_lines()
+        now = self.clock()
+        self._recent_lines.extend(
+            (now, content_words(line)) for line in text.splitlines() if line.strip()
+        )
+
+    def _prune_lines(self) -> None:
+        cutoff = self.clock() - TUNING["duplicate_window_s"]
+        while self._recent_lines and self._recent_lines[0][0] <= cutoff:
+            self._recent_lines.popleft()
+
+    def _repeats(self, lines: list[tuple[str, str]]) -> bool:
+        self._prune_lines()
+        candidates = [content_words(text) for _, text in lines]
+        return any(
+            near_duplicate(candidate, previous)
+            for candidate in candidates
+            for _, previous in self._recent_lines
+        )
+
+    def _scene_topics(self, scene: SceneContext) -> tuple[SceneTopic, ...]:
+        personal = tuple(
+            SceneTopic(
+                "persona",
+                f"{persona_id(member)}:{text}",
+                f"{member.display_name} likes talking about {text}",
+            )
+            for member in self.crew.members
+            for text in getattr(member, "topics", ())
+        )
+        return (*scene.topics, *personal)
+
+    async def _generate_scene(self, pair, scene: SceneContext | None) -> list[tuple[str, str]]:
+        excluded = []
+        for _ in range(2):
+            topic = self._pick_scene_topic(scene, excluded)
+            if scene is not None and topic is None:
+                return []
+            excluded.append(topic)
+            lines = await self._scene_attempt(pair, scene, topic)
+            if not self._repeats(lines):
+                return lines
+            logging.getLogger(__name__).debug("Dropping near-duplicate banter scene")
+        return []
+
+    def _pick_scene_topic(self, scene, excluded) -> SceneTopic | None:
+        if scene is None:
+            return None
+        return self.picker.pick(self._scene_topics(scene), exclude=excluded)
+
+    def _scene_background(self, scene: SceneContext | None, topic: SceneTopic | None) -> str:
+        if scene is None:
+            situation = self.context() if self.context is not None else "desk mode"
+            return "Current situation: " + situation
+        lines = [f"Current situation: {scene.situation}"] if scene.situation else []
+        if scene.frame:
+            lines.append(f"Background (do not recite): {scene.frame}")
+        lines.append(f"Topic for this scene: {topic.text}")
+        hidden = {item.family for item in scene.topics} - {topic.family}
+        lines.extend(HIDDEN_RULES[family] for family in sorted(hidden & HIDDEN_RULES.keys()))
+        return "\n".join(lines)
+
+    async def _scene_attempt(self, pair, scene, topic) -> list[tuple[str, str]]:
+        renderer = DefaultHistoryRenderer()
+        situation = self._scene_background(scene, topic)
+        prompt = (
+            f"Write a short crew banter scene in session language {self.language}.\n"
+            f"Initiator: {pair[0]}; partner: {pair[1]}. Both must speak. "
+            "A third crew member may join for at most one line.\n"
+            "Output ONLY 2-4 short spoken lines, aiming for 2-3, each as "
+            "<persona_id>: <text>, with actual IDs and no angle brackets. "
+            "No stage directions, player lines or claims to take game actions. " + MARKUP_RULE + " "
+            "Strict members use only supplied facts. Playful members may joke but must "
+            "never misreport game state. Practical information must always be exact.\n"
+            "Crew roster (third-person roles and relationships):\n"
+            + renderer.roster(self.crew, self.game)
+            + "\n"
+            + situation
+            + "\nRecent chronological transcript (unheard lines were NOT said):\n"
+            + renderer.chronological(self.records[-TUNING["scene_transcript_records"] :], self.crew)
+        )
+        avoidance = [
+            f"{persona_id(member)}: {hint}"
+            for member in self.crew.members
+            if (hint := opening_avoidance(self.records, persona_id(member)))
+        ]
+        prompt += "\n" + "\n".join(avoidance)
+        if self.memory is not None:
+            prompt += self.memory.crew_callback()
+        async with aclosing(
+            self.llm.stream([Message("user", "Write the scene.")], prompt, [])
+        ) as source:
+            chunks = [chunk async for chunk in source]
+        if any(chunk.tool_call is not None for chunk in chunks):
+            logging.getLogger(__name__).debug("Dropping banter: unexpected tool call")
+            return []
+        lines = parse_scene(
+            strip_history_labels("".join(chunk.text for chunk in chunks)), self.crew, self.language
+        )
+        speakers = {speaker for speaker, _ in lines}
+        extras = [speaker for speaker, _ in lines if speaker not in pair]
+        if not lines or not set(pair).issubset(speakers) or len(extras) > 1:
+            logging.getLogger(__name__).debug("Dropping malformed banter scene")
+            return []
+        return lines
 
     def _remember_scene(self, records: list[HistoryRecord]) -> None:
         if self.memory is None or not all(record.heard for record in records):
@@ -366,7 +471,7 @@ class Conversation:
             return member
         if event.kind == "idle":
             return self.crew.pick_idle(self.rng)
-        return self.crew.pick_for_event(event)
+        return self.crew.pick_for_event(event, self.rng)
 
     def _log_line(self, text: str, heard: bool) -> None:
         self._crew_reply_candidate = None
@@ -419,6 +524,12 @@ class Conversation:
     def _handoff_targets(self, visited: tuple[Persona, ...]) -> dict[str, Persona]:
         return self.crew.handoff_targets(self.speaker, self.tools.roles_in_use, visited)
 
+    def _turn_context(self, player_turn: bool) -> str:
+        if not player_turn and self.scene_context is not None:
+            scene = self.scene_context()
+            return "\n".join(filter(None, (scene.situation, scene.frame)))
+        return self.context() if self.context is not None else ""
+
     async def _respond(
         self,
         text: str,
@@ -434,7 +545,7 @@ class Conversation:
         turn, ADR 0018).
         """
         system = ""
-        context = self.context() if self.context is not None else ""
+        context = self._turn_context(player_turn)
         if context:
             system += "\n\nCurrent situation (exact, from live telemetry):\n" + context
         memories = ""

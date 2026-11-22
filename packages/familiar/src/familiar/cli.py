@@ -31,6 +31,7 @@ from familiar.interfaces import (
     GameEvent,
     KeyboardUser,
     PluginError,
+    SceneContext,
     Watchable,
 )
 from familiar.memory import MemoryKeeper, MemoryStore
@@ -148,6 +149,8 @@ class _Runtime:
         contexts.extend(self.services)
         if self.services:
             conversation.context = lambda: self._describe(contexts)
+        if contexts:
+            conversation.scene_context = lambda: self._scene_context(contexts)
         banter = 0
         if self.session is not None:
             banter = self.session.banter
@@ -199,6 +202,24 @@ class _Runtime:
             except Exception:
                 logging.getLogger(__name__).exception("Prompt context unavailable")
         return "\n".join(filter(None, lines))
+
+    @staticmethod
+    def _scene_context(sources) -> SceneContext:
+        frames, topics, situation = [], [], []
+        for source in sources:
+            try:
+                describe = getattr(source, "scene_context", None)
+                if describe is None:
+                    situation.append(source.describe())
+                    continue
+                scene = describe()
+                frames.append(scene.frame)
+                topics.extend(scene.topics)
+            except Exception:
+                logging.getLogger(__name__).exception("Scene context unavailable")
+        return SceneContext(
+            "; ".join(filter(None, frames)), tuple(topics), "\n".join(filter(None, situation))
+        )
 
     def _system(self, conversation: Conversation) -> None:
         if not self.config.system.get("enabled", False):

@@ -1,5 +1,6 @@
 """Moment-bound service events: cue timing, carrier routing, offered tools and tastes."""
 
+import random
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 
@@ -42,7 +43,7 @@ def test_speaker_carrier_routes_to_the_carrier(crew):
     # Even a chattier member keen on the event kind does not take the carrier's job.
     keen = replace(crew.members[1], chattiness=1.0, interests={"music_dj_turn": 5})
     crew = Crew([crew.carrier, keen], persona_id(crew.carrier))
-    assert crew.pick_for_event(cue("music_dj_turn")) is keen
+    assert crew.pick_for_event(cue("music_dj_turn"), random.Random(0)) is keen
     assert crew.pick_for_event(cue("music_dj_turn", speaker="carrier")) is crew.carrier
 
 

@@ -1,4 +1,4 @@
-"""Roster order and deterministic speaker selection, independent of backends."""
+"""Crew roles, addressing and weighted speaker rotation, independent of backends."""
 
 import random
 import re
@@ -10,6 +10,7 @@ from familiar.interfaces import GameEvent
 from familiar.persona import Persona
 
 FOLLOW_UP_WINDOW_S = 30.0
+LEAN_WEIGHT = 2.0
 
 # Crew roles (ADR 0018): who operates the game and who runs the music. One member may hold both.
 CONTROLS = "controls"
@@ -77,6 +78,7 @@ class Crew:
         self.carrier = by_id[carrier]
         self.dj = by_id[dj]
         self._guest_turns = 0
+        self.previous_ambient: Persona | None = None
         self.last_speaker: Persona | None = None
         self.last_spoke_at = float("-inf")
         self.follow_up_window_s = follow_up_window_s
@@ -135,7 +137,7 @@ class Crew:
             return self.last_speaker
         return self.carrier
 
-    def pick_for_event(self, event: GameEvent) -> Persona:
+    def pick_for_event(self, event: GameEvent, rng: random.Random | None = None) -> Persona:
         if event.priority == "critical" or len(self.members) == 1:
             return self.carrier
         if event.data.get("speaker") == GUEST:
@@ -144,13 +146,28 @@ class Crew:
         holder = self.holder(str(event.data.get("speaker", "")))
         if holder is not None:
             return holder
-        return max(
-            self.members,
-            key=lambda member: (
-                interest(member, event.kind) * getattr(member, "chattiness", 0.5),
-                member == self.carrier,
-            ),
-        )
+        rng = rng or random
+        lean = self.holder(str(event.data.get("lean", "")))
+        weights = [
+            interest(member, event.kind)
+            * getattr(member, "chattiness", 0.5)
+            * (LEAN_WEIGHT if member == lean else 1.0)
+            for member in self.members
+        ]
+        candidates = list(zip(self.members, weights, strict=True))
+        others = [
+            (member, weight)
+            for member, weight in candidates
+            if member != self.previous_ambient and weight > 0
+        ]
+        if others:
+            candidates = others
+        members, weights = zip(*candidates, strict=True)
+        if not any(weights):
+            weights = [1.0] * len(members)
+        chosen = rng.choices(members, weights=weights, k=1)[0]
+        self.previous_ambient = chosen
+        return chosen
 
     def pick_idle(self, rng: random.Random) -> Persona:
         candidates = [member for member in self.members if member != self.last_speaker]

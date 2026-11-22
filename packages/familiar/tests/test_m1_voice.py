@@ -209,3 +209,32 @@ def test_voice_backend_error_keeps_session_alive(capsys):
 
     run(scenario())
     assert "Try speaking again" in capsys.readouterr().err
+
+
+def test_sentence_audio_diagnostics(caplog):
+    async def scenario():
+        class DiagnosticTTS(TTS):
+            async def synthesize(self, text, voice, language):
+                if text == "Missing audio.":
+                    return
+                if text == "Short audio.":
+                    yield AudioChunk(b"00", 24000)
+                    return
+                yield AudioChunk(b"00" * 12000, 24000)
+                yield AudioChunk(b"00" * 24000, 48000)
+
+        async def sentences():
+            for text in ("Missing audio.", "Short audio.", "Normal audio."):
+                yield text
+
+        session = make_session(tts=DiagnosticTTS())
+        timings = dict.fromkeys(("first_sentence_ms", "first_audio_ms"))
+        await session._speak(sentences(), 0, timings)
+
+    run(scenario())
+    warnings = [
+        record.message for record in caplog.records if "Short sentence audio" in record.message
+    ]
+    assert len(warnings) == 2
+    assert "speaker=test chars=14 seconds=0.000 text=Missing audio." in warnings[0]
+    assert "Short audio." in warnings[1]

@@ -49,18 +49,35 @@ def test_exact_longest_prefix_and_chattiness(crew):
     assert interest(frieren, "exploration_hint") == 3
     assert interest(frieren, "exploration_hint_more") == 3
     assert interest(frieren, "exploration_other") == 2
-    assert crew.pick_for_event(event()).id == "frieren"
-    assert crew.pick_for_event(event("combat_danger")).id == "megumin"
-    assert crew.pick_for_event(event(priority="critical")) == crew.carrier
-    quiet = replace(frieren, chattiness=0.01)
-    assert Crew([crew.carrier, quiet], "mira").pick_for_event(event()) == crew.carrier
+    assert crew.pick_for_event(event(priority="critical"), random.Random(0)) == crew.carrier
+    quiet = replace(frieren, chattiness=0)
+    assert (
+        Crew([crew.carrier, quiet], "mira").pick_for_event(event(), random.Random(0))
+        == crew.carrier
+    )
 
 
-def test_ties_carrier_then_roster(crew):
-    assert crew.pick_for_event(event("unknown")) == crew.carrier
-    members = [replace(member, interests={"test": 2}) for member in crew.members]
-    members[0] = replace(members[0], interests={"test": 0})
-    assert Crew(members, "mira").pick_for_event(event("test")) == members[1]
+def test_weighted_rotation_no_roster_monopoly_and_lean(crew):
+    members = [replace(member, interests={}, chattiness=0.5) for member in crew.members]
+    rotated = Crew(members, "mira", dj="frieren")
+    rng = random.Random(42)
+    cue = event("music_track", "ambient")
+    cue.data["lean"] = "dj"
+    ids = [rotated.pick_for_event(cue, rng).id for _ in range(2000)]
+    assert all(a != b for a, b in zip(ids, ids[1:], strict=False))
+    assert set(ids) == {member.id for member in members}
+    assert ids.count("frieren") > ids.count("mira") * 1.2
+    assert ids.count("frieren") > ids.count("megumin") * 1.2
+
+
+def test_event_zero_weights_uniform_and_only_positive_can_repeat(crew):
+    members = [replace(member, chattiness=0) for member in crew.members]
+    quiet = Crew(members, "mira")
+    rng = random.Random(42)
+    ids = [quiet.pick_for_event(event(), rng).id for _ in range(100)]
+    assert set(ids) == {member.id for member in members}
+    only = Crew([replace(members[0], chattiness=1), *members[1:]], "mira")
+    assert all(only.pick_for_event(event(), rng) == only.carrier for _ in range(10))
 
 
 def test_idle_weights_no_consecutive_repeat_and_zero_fallback(crew):
@@ -93,7 +110,7 @@ def test_director_assigns_and_critical_preempts(crew):
     director = Director(0.5, {}, crew=crew, rng=random.Random(0))
     director.set_game_state(True, False)
     director.submit(event())
-    assert director._take().data["speaker_id"] == "frieren"
+    assert director._take().data["speaker_id"] in {member.id for member in crew.members}
     director.set_busy("speaking", True)
     director.submit(event("danger", "critical"))
     assert director._take().data["speaker_id"] == "mira"

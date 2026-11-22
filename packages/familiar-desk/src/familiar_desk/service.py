@@ -9,7 +9,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from familiar.interfaces import PLUGIN_API_VERSION
+from familiar.interfaces import PLUGIN_API_VERSION, SceneContext, SceneTopic
 from familiar.interfaces.service import CompanionService, ServiceTool, SpeechState
 from familiar.interfaces.types import GameEvent
 
@@ -113,21 +113,45 @@ class DeskService(CompanionService):
             lines.append(notes)
         return "\n".join(lines)
 
+    def scene_context(self) -> SceneContext:
+        self._read(consume=False)
+        clock_data = self._clock_data()
+        current, today, _ = self._weather_data()
+        condition = (current or today or {}).get("condition")
+        frame = [clock_data.get("period", "").replace("_", " ")]
+        if condition:
+            frame.append(" ".join(text.condition(condition).split()[:2]))
+        candidates = (
+            ("weather", self._weather_line()),
+            ("time", self._clock_line()),
+            ("location", self.settings.get("location_notes", "")),
+        )
+        topics = tuple(SceneTopic(family, family, line) for family, line in candidates if line)
+        return SceneContext("; ".join(filter(None, frame)), topics)
+
     def _entry(self, name: str) -> dict | None:
         entry = self._snapshot["sources"].get(name)
         if entry is None or entry["status"] != "ok":
             return None
         return entry
 
-    def _clock_line(self) -> str:
+    def _clock_data(self) -> dict:
         try:
             entry = self._entry("clock")
             if entry is None:
-                return ""
+                return {}
             observed = datetime.fromisoformat(entry["observed_at"])
             if (self.clock() - observed).total_seconds() > 3 * self.settings.get("interval_s", 60):
+                return {}
+            return entry["data"]
+        except (ValueError, KeyError, TypeError):
+            return {}
+
+    def _clock_line(self) -> str:
+        try:
+            data = self._clock_data()
+            if not data:
                 return ""
-            data = entry["data"]
             local = datetime.fromisoformat(data["local_time"])
             detail = data["period"].replace("_", " ")
             if data.get("sunset"):
@@ -139,28 +163,35 @@ class DeskService(CompanionService):
         except (ValueError, KeyError, TypeError):
             return ""
 
-    def _weather_line(self) -> str:
+    def _weather_data(self) -> tuple[dict | None, dict | None, str | None]:
         """Uses the observation's own time, so a failing provider never looks fresh."""
         if self.weather is None:
-            return ""
+            return None, None, None
         try:
             entry = self._snapshot["sources"].get("weather")
             if entry is None:
-                return ""
+                return None, None, None
             data = entry["data"]
             now = self.clock()
-            current = data.get("current")
-            if current is not None:
-                observed = datetime.fromisoformat(current["observed_at"])
-                if (now - observed).total_seconds() > self.weather["max_age_s"]:
-                    current = None
+            current = self._fresh_current(data.get("current"), now)
             today = data.get("today")
             zone = self.weather_zone
             if today is not None and today["date"] != now.astimezone(zone).date().isoformat():
                 today = None
-            return text.describe(current, today, data.get("location"))
+            return current, today, data.get("location")
         except (ValueError, KeyError, TypeError):
-            return ""
+            return None, None, None
+
+    def _fresh_current(self, current: dict | None, now: datetime) -> dict | None:
+        if current is None:
+            return None
+        observed = datetime.fromisoformat(current["observed_at"])
+        if (now - observed).total_seconds() > self.weather["max_age_s"]:
+            return None
+        return current
+
+    def _weather_line(self) -> str:
+        return text.describe(*self._weather_data())
 
     def service_tools(self) -> list[ServiceTool]:
         return []

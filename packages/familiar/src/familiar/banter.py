@@ -16,6 +16,8 @@ TUNING = {
     "quota_fraction": 0.9,
     "relationship_weight": 3.0,
     "retry_s": 30.0,
+    "scene_transcript_records": 12,
+    "duplicate_window_s": 2700,
 }
 
 
@@ -137,3 +139,39 @@ def _parse_line(line: str, crew: Crew, language: str) -> tuple[str, str] | None:
     if not speakable(text) or re.search(r"[\[\]*]|[<>]|\([^)]*\)", leftover):
         return None
     return speaker, text
+
+
+def words(text: str) -> tuple[str, ...]:
+    """Spoken words without markup or punctuation, retaining Unicode letters."""
+    return tuple(re.findall(r"[^\W_]+", speakable(text).casefold()))
+
+
+def content_words(text: str) -> frozenset[str]:
+    return frozenset(word for word in words(text) if len(word) > 2)
+
+
+def opening_avoidance(records, speaker: str) -> str:
+    recent = [
+        line
+        for record in records
+        if record.speaker_id == speaker and record.kind in {"banter", "assistant"}
+        for line in record.text.splitlines()
+        if line.strip()
+    ][-8:]
+    openings = [" ".join(words(text)[:3]) for text in recent]
+    avoid = list(
+        dict.fromkeys(
+            opening
+            for opening in openings
+            if opening and (openings.count(opening) >= 2 or opening in openings[-2:])
+        )
+    )
+    if not avoid:
+        return ""
+    return "Do not open lines with: " + "; ".join(avoid)
+
+
+def near_duplicate(candidate: frozenset[str], previous: frozenset[str]) -> bool:
+    if not candidate or not previous:
+        return False
+    return candidate == previous or len(candidate & previous) / len(candidate | previous) >= 0.6
