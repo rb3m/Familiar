@@ -211,6 +211,28 @@ def test_voice_backend_error_keeps_session_alive(capsys):
     assert "Try speaking again" in capsys.readouterr().err
 
 
+def test_voice_microphone_failure_keeps_session_alive(capsys):
+    class FlakyRecorder(Recorder):
+        def start(self):
+            super().start()
+            if self.starts == 1:
+                raise OSError("Internal PortAudio error")
+
+    async def scenario():
+        class TwicePTT(PTT):
+            async def events(self):
+                for pressed in (True, False, True, False):
+                    yield pressed
+
+        session = make_session(ptt=TwicePTT(), recorder=FlakyRecorder())
+        await session.run()
+        assert session.recorder.starts == 2
+        assert session.player.audio == ["First sentence.", "Second sentence."]
+
+    run(scenario())
+    assert "microphone unavailable" in capsys.readouterr().out
+
+
 def test_sentence_audio_diagnostics(caplog):
     async def scenario():
         class DiagnosticTTS(TTS):

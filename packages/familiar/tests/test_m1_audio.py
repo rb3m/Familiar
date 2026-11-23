@@ -139,6 +139,32 @@ def test_recorder_injected_stream():
     assert all(stream.closed for stream in streams)
 
 
+def test_recorder_refreshes_devices_after_failed_open():
+    attempts = []
+    refreshes = []
+
+    def factory(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            raise OSError("stale device")
+        return InputStream(**kwargs)
+
+    recorder = Recorder(stream_factory=factory, refresh_devices=lambda: refreshes.append(1))
+    recorder.start()
+    assert recorder.stop() == AudioClip(b"\x01\x00" * 10, 16000)
+    assert len(attempts) == 2 and refreshes == [1]
+
+
+def test_recorder_raises_when_retry_fails():
+    def factory(**kwargs):
+        raise OSError("no microphone")
+
+    recorder = Recorder(stream_factory=factory, refresh_devices=lambda: None)
+    with pytest.raises(OSError):
+        recorder.start()
+    assert recorder.stop() == AudioClip(b"", 16000)
+
+
 class OutputStream:
     def __init__(self, **kwargs):
         self.rate = kwargs["samplerate"]

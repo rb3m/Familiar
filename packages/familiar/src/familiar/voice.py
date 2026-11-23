@@ -146,6 +146,11 @@ class VoiceSession:
         await self._flush_speech()
         try:
             await asyncio.to_thread(self.recorder.start)
+        except Exception as exc:
+            # A microphone that won't open must not end the session; the next press retries.
+            self._busy("user", False)
+            print(f"microphone unavailable: {exc}", flush=True)
+            return
         except BaseException:
             self._busy("user", False)
             raise
