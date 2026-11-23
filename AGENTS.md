@@ -11,7 +11,7 @@ API tier) is the first backend; others plug in via entry points.
 ## Current step
 - Live OK: KSP, ETS2 recall/stereo, Elite, DJ blend, Mac desk assistant. Awaiting live: scene topics + repetition guards (ADR 0026), research, topics, system health, desk weather, desk-feed remarks (period/sunset), controls/DJ split + guest picks (music on Mac, Elite on Linux), **M5** SCS keys, callbacks, Elite hand-off.
 - Next: live checks above; tune `JAM_*` (`familiar_scs/events.py`), `SOLAR_NOON_HOUR` (`geo.py`), recall gate (`memory/keeper.py`); Touch Portal, KWin focus; M7 Vic2 adapter.
-- Known: 429s park a model 15 min, then `fallback_api_key_env`. GUI needs non-terminal PTT (evdev; macOS mouse, F-key or keypad). Key presses go to the focused window (guard: fresh, unpaused telemetry).
+- Known: 429s park a model 15 min, then `fallback_api_key_env`. GUI needs non-terminal PTT (Linux evdev joystick, F-key/keypad or extra mouse button; macOS mouse, F-key or keypad). Key presses go to the focused window (guard: fresh, unpaused telemetry).
 
 ## Rules
 - Python 3.12 via uv: `uv sync --all-packages`, `uv run familiar …`. PEP-8; lint `uv run ruff check .`, format `uv run ruff format .`.
