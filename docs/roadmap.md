@@ -255,10 +255,11 @@ In progress, **local TTS (pilot 2026-11-23; results in `docs/local-tts.md`).** T
 stop spending ElevenLabs credits (desk ~3,100 characters an hour, gaming ~6,200) and get
 more control over inflection. On the M4, Qwen3-TTS 1.7B VoiceDesign via mlx-audio starts speaking
 in 251 ms (ElevenLabs 268 ms), scored 4.22/5 blind in en/es/ja, and needs 3.8 GiB. Steps:
-1. Score the round-2 clips (cloning Base 1.7B/0.6B, CustomVoice 0.6B) and the Ruslana spelling
-   test (transliterated, Cyrillic, phonetic Russian).
+1. Done 2026-11-23: round 2 scored. VoiceDesign is still top (4.50); 0.6B Base cloning is next
+   (4.39) and is the option when a persona's ElevenLabs voice identity matters. Respelling
+   Ruslana's Russian made no clear difference.
 2. Tune voice descriptions and instructions so "sleepy" delivery stays clear; try a shorter
-   cloning sample to cut the delay.
+   cloning sample to cut the delay; use standard transliteration in Ruslana's persona prompt.
 3. ADR with agy/codex consensus first, then a `local` TTS backend: an HTTP client for a separate
    local speech server (its own environment, so MLX/PyTorch stay out of the workspace), with
    ElevenLabs as fallback. Per-backend spelling for foreign words, using the `speech.yaml`
