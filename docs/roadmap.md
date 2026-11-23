@@ -262,9 +262,10 @@ in 251 ms (ElevenLabs 268 ms), scored 4.22/5 blind in en/es/ja, and needs 3.8 Gi
    her ElevenLabs voice scored 5.00 with it.
 2. Ruslana's persona prompt: Slavic words in Cyrillic. Tune voice descriptions and instructions
    so "sleepy" delivery stays clear; try a shorter cloning sample to cut the delay.
-3. ADR with agy/codex consensus first, then a `local` TTS backend: an HTTP client for a separate
-   local speech server (its own environment, so MLX/PyTorch stay out of the workspace), with
-   a model and voice mode per persona (designed voice or clone) and ElevenLabs as fallback.
+3. ADR 0029 (proposed 2026-11-23): a lease supervisor on the M1 Mac Mini loads the voice while
+   any Familiar holds a lease and frees it when the last lease ends. The `local` TTS backend
+   is an HTTP client; the chain is local → ElevenLabs → Gemini, with a per-sentence
+   first-audio deadline. Gate: stress test on the M1 under VM load, with a shorter cloning sample.
 4. Desk mode on the M4 first. Later, serve the Linux PC from the same server over the LAN or from
    a dedicated Mac Mini (16 GB, newer than M1; the 8 GB M1 runs the 1.7B model at real time with
    no margin).
