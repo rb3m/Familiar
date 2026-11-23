@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+from collections.abc import Callable
 from typing import Any
 
 from familiar.interfaces import PluginError
@@ -20,14 +21,45 @@ def _joystick(code: int, codes: Any) -> bool:
     )
 
 
-def _devices(module: Any) -> list[Any]:
+def _code_name(code: int, codes: Any) -> str:
+    name = getattr(codes, "KEY", {}).get(code, codes.BTN.get(code, str(code)))
+    if isinstance(name, (tuple, list)):
+        return name[0]
+    return name
+
+
+def _keyboard(code: int, codes: Any) -> bool:
+    name = _code_name(code, codes)
+    return (
+        name in {f"KEY_F{number}" for number in range(1, 25)}
+        or name.startswith("KEY_KP")
+        or name in {"KEY_SCROLLLOCK", "KEY_PAUSE"}
+    )
+
+
+def _mouse(code: int, codes: Any) -> bool:
+    return codes.BTN_SIDE <= code <= codes.BTN_TASK
+
+
+def _mouse_device(code: int, codes: Any) -> bool:
+    return code == codes.BTN_LEFT
+
+
+CodePredicate = Callable[[int, Any], bool]
+CODE_PREDICATES = {"joystick": _joystick, "key": _keyboard, "mouse": _mouse}
+DEVICE_PREDICATES = {**CODE_PREDICATES, "mouse": _mouse_device}
+DEVICE_LABELS = {"joystick": "joysticks", "key": "keyboards", "mouse": "mice"}
+PRESS_LABELS = {"joystick": "joystick button", "key": "key", "mouse": "mouse button"}
+
+
+def _devices(module: Any, accepts: CodePredicate) -> list[Any]:
     devices = []
     for path in module.list_devices():
         device = None
         try:
             device = module.InputDevice(path)
             keys = device.capabilities().get(module.ecodes.EV_KEY, [])
-            if any(_joystick(code, module.ecodes) for code in keys):
+            if any(accepts(code, module.ecodes) for code in keys):
                 devices.append(device)
                 continue
         except OSError:
@@ -45,24 +77,21 @@ def _held(device: Any) -> set[int]:
         return set()
 
 
-async def _press(device: Any, codes: Any) -> tuple[str, str]:
+async def _press(device: Any, codes: Any, accepts: CodePredicate) -> tuple[str, str]:
     held = _held(device)
     async for event in device.async_read_loop():
-        if event.type != codes.EV_KEY or not _joystick(event.code, codes):
+        if event.type != codes.EV_KEY or not accepts(event.code, codes):
             continue
         if event.value == 0:
             held.discard(event.code)
             continue
         if event.value != 1 or event.code in held:
             continue
-        name = codes.BTN.get(event.code, str(event.code))
-        if isinstance(name, (tuple, list)):
-            name = name[0]
-        return device.name, name
-    raise PluginError("Joystick disconnected during PTT setup")
+        return device.name, _code_name(event.code, codes)
+    raise PluginError("Device disconnected during PTT setup")
 
 
-async def _first_success(tasks: list[asyncio.Task], timeout: float) -> tuple[str, str]:
+async def _first_success(tasks: list[asyncio.Task], timeout: float, kind: str) -> tuple[str, str]:
     """First device to report a press wins; a device that drops out doesn't end setup."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
@@ -78,18 +107,21 @@ async def _first_success(tasks: list[asyncio.Task], timeout: float) -> tuple[str
         if winners:
             return winners[0].result()
     if not pending:
-        raise PluginError("All joysticks disconnected during PTT setup")
-    raise DetectionTimeoutError(f"No joystick button pressed within {timeout:g} seconds")
+        raise PluginError(f"All {DEVICE_LABELS[kind]} disconnected during PTT setup")
+    raise DetectionTimeoutError(f"No {PRESS_LABELS[kind]} pressed within {timeout:g} seconds")
 
 
-async def detect_button(timeout: float = 30) -> tuple[str, str]:
+async def detect_button(timeout: float = 30, *, kind: str = "joystick") -> tuple[str, str]:
     module = evdev_module()
-    devices = await asyncio.to_thread(_devices, module)
+    devices = await asyncio.to_thread(_devices, module, DEVICE_PREDICATES[kind])
     if not devices:
-        raise PluginError("No readable joysticks found; check /dev/input permissions")
-    tasks = [asyncio.create_task(_press(device, module.ecodes)) for device in devices]
+        raise PluginError(f"No readable {DEVICE_LABELS[kind]} found; check /dev/input permissions")
+    tasks = [
+        asyncio.create_task(_press(device, module.ecodes, CODE_PREDICATES[kind]))
+        for device in devices
+    ]
     try:
-        return await _first_success(tasks, timeout)
+        return await _first_success(tasks, timeout, kind)
     finally:
         for task in tasks:
             task.cancel()
@@ -159,7 +191,7 @@ async def detect_key(timeout: float = 30) -> dict:
         await detector.aclose()
 
 
-DETECTABLE_KINDS = {"darwin": ("mouse", "key"), "linux": ("joystick",)}
+DETECTABLE_KINDS = {"darwin": ("mouse", "key"), "linux": ("joystick", "key", "mouse")}
 
 
 def detectable_kinds() -> tuple[str, ...]:
@@ -174,9 +206,9 @@ async def detect(kind: str | None = None, timeout: float = 30) -> dict:
         kind = kinds[0]
     if kind not in kinds:
         raise PluginError(f"Unsupported PTT detection kind: {kind}")
+    if sys.platform == "linux":
+        device, button = await detect_button(timeout, kind=kind)
+        return {"backend": "evdev", "device": device, "button": button}
     if kind == "mouse":
         return {"backend": "mouse", "button": await detect_mouse_button(timeout)}
-    if kind == "key":
-        return {"backend": "key", **await detect_key(timeout)}
-    device, button = await detect_button(timeout)
-    return {"backend": "evdev", "device": device, "button": button}
+    return {"backend": "key", **await detect_key(timeout)}

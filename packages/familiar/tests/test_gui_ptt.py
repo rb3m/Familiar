@@ -156,7 +156,8 @@ async def test_evdev_save(ptt_client):
 
 
 @pytest.mark.parametrize(
-    "platform,kinds", [("darwin", ["mouse", "key"]), ("linux", ["joystick"]), ("win32", [])]
+    "platform,kinds",
+    [("darwin", ["mouse", "key"]), ("linux", ["joystick", "key", "mouse"]), ("win32", [])],
 )
 async def test_kinds(ptt_client, monkeypatch, platform, kinds):
     monkeypatch.setattr(sys, "platform", platform)

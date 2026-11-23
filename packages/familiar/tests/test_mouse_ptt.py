@@ -174,7 +174,7 @@ async def test_dispatcher(monkeypatch, platform):
         setup.detect_mouse_button.assert_awaited_once_with(12)
         return
     assert result == {"backend": "evdev", "device": "Stick", "button": "BTN_TRIGGER"}
-    setup.detect_button.assert_awaited_once_with(12)
+    setup.detect_button.assert_awaited_once_with(12, kind="joystick")
 
 
 @pytest.mark.asyncio
@@ -317,7 +317,7 @@ async def test_key_dispatcher(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "platform,kind",
-    [("darwin", "joystick"), ("linux", "key"), ("win32", None), ("darwin", "unknown")],
+    [("darwin", "joystick"), ("linux", "unknown"), ("win32", None), ("darwin", "unknown")],
 )
 async def test_unsupported_detection(monkeypatch, platform, kind):
     monkeypatch.setattr(sys, "platform", platform)

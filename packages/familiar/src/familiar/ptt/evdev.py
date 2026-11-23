@@ -28,7 +28,21 @@ def parse_button(button: str | int, codes: Any = None) -> int:
     return code
 
 
-def _find_device(module: Any, selector: str) -> Any:
+def _match_rank(device: Any, name: str, button: int, codes: Any) -> int | None:
+    """0 = exact name, 1 = substring, None = no match or the node lacks the button.
+
+    One device can expose several nodes with the same name (e.g. a trackball's keyboard and
+    mouse nodes), so the node must also report the configured button.
+    """
+    device_name = device.name.casefold()
+    if name not in device_name:
+        return None
+    if button not in device.capabilities().get(codes.EV_KEY, []):
+        return None
+    return int(name != device_name)
+
+
+def _find_device(module: Any, selector: str, button: int) -> Any:
     if selector.startswith("/dev/input/"):
         try:
             return module.InputDevice(selector)
@@ -36,14 +50,21 @@ def _find_device(module: Any, selector: str) -> Any:
             raise PluginError(
                 f"Cannot read {selector}; check /dev/input permissions: {exc}"
             ) from exc
+    fallback = None
+    name = selector.casefold()
     for path in module.list_devices():
         try:
             device = module.InputDevice(path)
+            rank = _match_rank(device, name, button, module.ecodes)
         except OSError:
             continue
-        if selector.casefold() in device.name.casefold():
+        if rank == 0:
             return device
+        if fallback is None and rank == 1:
+            fallback = path
         device.close()
+    if fallback is not None:
+        return module.InputDevice(fallback)
     raise PluginError(f"PTT device {selector!r} not found/readable; check /dev/input permissions")
 
 
@@ -62,7 +83,7 @@ class EvdevPTT:
         if not isinstance(selector, str) or not selector:
             raise PluginError("evdev PTT requires a device name or /dev/input path")
         button = parse_button(self.settings.get("button", "BTN_TRIGGER"), module.ecodes)
-        self._device = await asyncio.to_thread(_find_device, module, selector)
+        self._device = await asyncio.to_thread(_find_device, module, selector, button)
         try:
             async for event in self._device.async_read_loop():
                 if event.type != module.ecodes.EV_KEY or event.code != button:

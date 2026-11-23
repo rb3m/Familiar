@@ -1031,7 +1031,7 @@ function renderPTT() {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = kinds.length > 1
-      ? ({ mouse: 'Assign mouse button…', key: 'Assign key…' }[kind] || 'Assign…')
+      ? ({ mouse: 'Assign mouse button…', key: 'Assign key…', joystick: 'Assign joystick button…' }[kind] || 'Assign…')
       : 'Assign…';
     button.disabled = locked || !ptt?.detectable;
     button.addEventListener('click', () => assignPTT(kind));

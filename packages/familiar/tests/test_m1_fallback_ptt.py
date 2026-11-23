@@ -7,7 +7,8 @@ import pytest
 from familiar.config import load_config
 from familiar.fallback import FallbackSTT, FallbackTTS
 from familiar.interfaces import AudioChunk, AudioClip, BackendError, ConfigError, PluginError
-from familiar.ptt.evdev import EvdevPTT, parse_button
+from familiar.ptt import setup
+from familiar.ptt.evdev import EvdevPTT, _find_device, parse_button
 from familiar.ptt.setup import detect_button
 from m1_support import run
 
@@ -101,13 +102,32 @@ class Device:
 
 CODES = SimpleNamespace(
     EV_KEY=1,
+    KEY_A=30,
+    KEY_F1=59,
+    KEY_F13=183,
+    KEY_F24=194,
+    KEY_KPENTER=96,
+    KEY_SCROLLLOCK=70,
+    KEY_PAUSE=119,
+    KEY={
+        30: "KEY_A",
+        59: "KEY_F1",
+        183: ["KEY_F13", "KEY_ALIAS"],
+        194: "KEY_F24",
+        96: "KEY_KPENTER",
+        70: "KEY_SCROLLLOCK",
+        119: "KEY_PAUSE",
+    },
+    BTN_LEFT=272,
+    BTN_SIDE=275,
+    BTN_TASK=279,
     BTN_TRIGGER=288,
     BTN_BASE3=294,
     BTN_JOYSTICK=288,
     BTN_THUMBR=318,
     BTN_TRIGGER_HAPPY1=704,
     BTN_TRIGGER_HAPPY40=743,
-    BTN={288: "BTN_TRIGGER"},
+    BTN={272: "BTN_LEFT", 279: ["BTN_TASK", "BTN_ALIAS"], 288: "BTN_TRIGGER"},
 )
 
 
@@ -260,3 +280,106 @@ def test_terminal_enter_toggle_and_eof(monkeypatch, capsys):
 
     run(scenario())
     assert "Enter" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kind,keys,events,held,button",
+    [
+        (
+            "key",
+            [30, 59, 183],
+            [(1, 30, 1), (1, 59, 2), (1, 59, 1), (1, 183, 1)],
+            [59],
+            "KEY_F13",
+        ),
+        (
+            "mouse",
+            [272, 279],
+            [(1, 272, 1), (1, 279, 2), (1, 279, 0), (1, 279, 1)],
+            [279],
+            "BTN_TASK",
+        ),
+    ],
+)
+async def test_linux_detection_filters_controls(monkeypatch, kind, keys, events, held, button):
+    device = Device(events, keys=keys, held=held)
+    device.name = f"Keychron {kind}"
+    unrelated = Device([(1, 288, 1)])
+    devices = {"unrelated": unrelated, "wanted": device}
+    module = SimpleNamespace(
+        ecodes=CODES, list_devices=lambda: list(devices), InputDevice=devices.__getitem__
+    )
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(setup, "evdev_module", lambda: module)
+    assert setup.detectable_kinds() == ("joystick", "key", "mouse")
+    assert await setup.detect(kind) == {
+        "backend": "evdev",
+        "device": device.name,
+        "button": button,
+    }
+    assert device.closed and unrelated.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "code,name",
+    [
+        (59, "KEY_F1"),
+        (183, "KEY_F13"),
+        (194, "KEY_F24"),
+        (96, "KEY_KPENTER"),
+        (70, "KEY_SCROLLLOCK"),
+        (119, "KEY_PAUSE"),
+    ],
+)
+async def test_linux_key_detection_accepts_allowed_keys_after_release(monkeypatch, code, name):
+    device = Device([(1, code, 1), (1, code, 0), (1, code, 1)], keys=[code], held=[code])
+    module = SimpleNamespace(
+        ecodes=CODES, list_devices=lambda: ["key"], InputDevice=lambda _: device
+    )
+    monkeypatch.setattr(setup, "evdev_module", lambda: module)
+    assert await detect_button(kind="key") == (device.name, name)
+    assert device.closed
+
+
+@pytest.mark.asyncio
+async def test_linux_key_detection_ignores_autorepeat(monkeypatch):
+    device = Device([(1, 59, 2), (1, 183, 1)], keys=[59, 183])
+    module = SimpleNamespace(
+        ecodes=CODES, list_devices=lambda: ["key"], InputDevice=lambda _: device
+    )
+    monkeypatch.setattr(setup, "evdev_module", lambda: module)
+    assert await detect_button(kind="key") == (device.name, "KEY_F13")
+
+
+@pytest.mark.parametrize("selector", ["Keychron Keyboard", "KEYCHRON KEYBOARD"])
+def test_evdev_device_selection_prefers_exact_name(selector):
+    prefix = Device()
+    prefix.name = "Keychron Keyboard Mouse"
+    exact = Device()
+    exact.name = "Keychron Keyboard"
+    devices = {"prefix": prefix, "exact": exact}
+    module = SimpleNamespace(
+        ecodes=CODES, list_devices=lambda: list(devices), InputDevice=devices.__getitem__
+    )
+    selected = _find_device(module, selector, 288)
+    assert selected is exact
+    assert prefix.closed
+    assert not exact.closed
+    selected.close()
+
+
+def test_evdev_device_selection_skips_same_name_node_without_button():
+    """A trackball exposes a keyboard node and a mouse node under one name."""
+    keyboard_node = Device(keys=[30])
+    mouse_node = Device(keys=[272, 279])
+    keyboard_node.name = mouse_node.name = "HUGE PLUS HUGE PLUS"
+    devices = {"kbd": keyboard_node, "mouse": mouse_node}
+    module = SimpleNamespace(
+        ecodes=CODES, list_devices=lambda: list(devices), InputDevice=devices.__getitem__
+    )
+    selected = _find_device(module, "HUGE PLUS HUGE PLUS", 279)
+    assert selected is mouse_node
+    assert keyboard_node.closed
+    selected.close()
