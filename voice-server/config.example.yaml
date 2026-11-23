@@ -1,0 +1,21 @@
+listen: {host: 0.0.0.0, port: 8765}
+token_env: FAMILIAR_VOICE_TOKEN
+lease: {ttl_s: 30, grace_s: 60}
+worker: {stop_timeout_s: 10}
+model:
+  id: mlx-community/Qwen3-TTS-12Hz-0.6B-Base-6bit
+  streaming_interval_s: 0.32
+voices:
+  sarah:
+    mode: clone
+    ref_audio: voices/sarah-short.wav
+    ref_text: "Where to Push Back Slightly. Don't expect a local model to nail subtle comedic timing or complex sarcasm on the first click every time."
+  marichka:
+    mode: clone
+    ref_audio: voices/marichka-short.wav
+    ref_text: "Where to Push Back Slightly. Don't expect a local model to nail subtle comedic timing or complex sarcasm on the first click every time."
+  sakuya:
+    mode: clone
+    ref_audio: voices/sakuya-short.wav
+    ref_text: "Where to Push Back Slightly. Don't expect a local model to nail subtle comedic timing or complex sarcasm on the first click every time."
+languages: {en: english, es: spanish, ja: japanese}
