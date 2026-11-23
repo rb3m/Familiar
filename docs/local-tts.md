@@ -73,3 +73,19 @@ write-up is the Vault field report `SoftwareDevelopment/20261123-0634 Familiar L
   "…La Gran Q. Da, let…" together.
 - Qwen does not act out `[tags]` (ADR 0020); emotion comes from a written instruction instead.
   Fish is the only model tested that acts out tags.
+
+## M1 stress test (2026-11-23, gate for ADR 0029)
+
+The test ran 40 real multi-sentence turns (116 sentences), synthesized sentence by sentence
+back to back, with playback simulated from each chunk's ready time. The VM was running.
+
+| Run | Sentence first audio p50 / p95 | Over 1 s | Turns with a gap | RTF |
+|---|---:|---:|---:|---:|
+| 0.6B Base, 20 s sample | 886 / 1,112 ms | 29% | 23 / 40 | 1.01 |
+| 0.6B Base, 8–9 s sample | 717 / 903 ms | 1.7% | 8 / 40 | 0.91 |
+| 0.6B CustomVoice | 294 / 320 ms | 0% | 0 / 40 | 0.76 |
+
+- **A short sample is required for cloning on the M1.** Every gap fell at a sentence start (the
+  ~0.7 s re-read of the sample), none mid-sentence. The short sample leaves an occasional ~0.2 s
+  longer pause between sentences.
+- **`kill -9` of the worker freed its memory within 2 s.** Details and the go decision are in ADR 0029.

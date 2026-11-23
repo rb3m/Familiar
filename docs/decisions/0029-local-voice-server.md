@@ -1,7 +1,7 @@
 # 0029: Local voice server on the M1, leased by any Familiar
 
 Date: 2026-11-23
-Status: Proposed (not built; gated on the stress test below)
+Status: Accepted 2026-11-23 (gate passed with the short cloning sample; not built yet)
 
 ## Context
 
@@ -67,8 +67,10 @@ Model: 0.6B CustomVoice (most speed margin) or 0.6B Base cloning (better voices,
   - **First-audio deadline per sentence**, starting at ~1.0 s (configurable, tuned from p95).
     A miss cancels the local request and raises, and `FallbackTTS` speaks that sentence through
     ElevenLabs. It already falls back only before any audio has played.
-  - **Stall detection**: if the playback buffer drops below ~200 ms during a sentence, finish it
-    and send the rest of the turn to ElevenLabs. A sentence is never replayed.
+  - **Stall detection** (amended by the gate below): a gap *inside* a sentence counts as a stall.
+    The rest of the turn then goes to ElevenLabs, and a sentence is never replayed. A low buffer
+    alone is not a stall: in the stress test every turn dipped below 200 ms at startup, and no
+    gap ever happened mid-sentence.
   - **Prepare the next sentence while the current one plays**, so an RTF below 1 stays ahead.
   - **Repeated misses park the local voice for a while**, like the 15-minute LLM park.
 - **Spelling**: Ruslana writes Slavic words in Cyrillic (her persona prompt). No spelling layer.
@@ -83,6 +85,45 @@ A stress test on the M1, with the VM under its normal load:
 
 If 0.6B Base misses the deadline too often, try 0.6B CustomVoice there. Failing that, keep
 ElevenLabs and run the local voice on the M4 for desk sessions only.
+
+### Gate results (2026-11-23, M1 8 GB, VM running)
+
+Setup:
+- 40 real turns (10 per persona, 2–4 sentences, 116 sentences), synthesized sentence by sentence
+  back to back, as the voice loop does.
+- Playback simulated from each chunk's ready time; a gap over 50 ms counts as a stutter.
+- Data in the pilot folder (`bakeoff/stress-runs-m1/`).
+
+| Run | Sentence first audio p50 / p95 / max | Over 1 s deadline | Turns with a gap | Gap total | RTF | Cold first audio |
+|---|---:|---:|---:|---:|---:|---:|
+| 0.6B Base, 20 s sample | 886 / 1,112 / 3,604 ms | 34 (29%) | 23 / 40 | 11.0 s | 1.01 | 3.6 s |
+| **0.6B Base, 8–9 s sample** | **717 / 903 / 1,239 ms** | **2 (1.7%)** | 8 / 40 | 2.1 s | 0.91 | 1.2 s |
+| 0.6B CustomVoice | 294 / 320 / 386 ms | 0 | 0 / 40 | 0 | 0.76 | 0.4 s |
+
+- **The short sample passes the deadline gate.** The 20 s sample fails: it runs at real time and
+  misses 29% of deadlines.
+- **Every gap was at a sentence start, none mid-sentence.** Before each sentence the cloning
+  model re-reads the sample (~0.7 s). After a short sentence, too little audio is queued to cover
+  that, so the listener hears a slightly longer pause between sentences rather than a broken
+  word. With the short sample that happened 10 times in 40 turns, averaging ~210 ms (max ~450 ms).
+  Personas with short sentences are hit most (Mira 4/10 turns, Megumin 0/10).
+- **Memory is reclaimed when the worker exits.** Free memory went 73% → 31% loaded → 78% two
+  seconds after `kill -9`, with no orphan process. Swap grows by ~0.5–1 GB per load as VM pages
+  are pushed out, and only comes back as the VM needs them.
+- **Cold start**: the first sentence after loading took 1.2 s (short sample), and loading took
+  3.3 s once the files were cached (18 s on the very first load).
+- **Not testable without the supervisor**: two clients at once and a lease expiring after a
+  client crash. They move to the build's tests.
+
+**Outcome: go, with 0.6B Base and the short sample.** To be tuned while building:
+- Cache the processed reference prompt in the worker, so each sentence skips the ~0.7 s re-read.
+  That removes the pauses at their cause.
+- Failing that, hold back up to ~450 ms of audio at the start of a turn, which would cover every
+  gap seen.
+- The Commander judges by ear whether the occasional ~0.2 s longer pause between sentences is
+  noticeable at all.
+- 0.6B CustomVoice stays the fallback if cloning disappoints live; it was flawless on the M1 but
+  scored lowest of the Qwen models (3.67).
 
 ## Consequences
 
