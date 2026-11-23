@@ -3,6 +3,9 @@
 Familiar finds backends through Python entry points, so a plugin can live in this repo
 (`packages/familiar/src/familiar/backends/`) or in a separate pip-installable package.
 
+Built-in TTS backends: `gemini`, `elevenlabs`, and `local` (leased LAN voice server;
+see [the voice server contract](voice-server.md)).
+
 ## Entry point groups
 
 | Group | Interface | Example |

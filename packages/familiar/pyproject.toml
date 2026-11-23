@@ -34,6 +34,7 @@ gemini = "familiar.backends.gemini.stt:GeminiSTT"
 elevenlabs = "familiar.backends.elevenlabs.stt:ElevenLabsSTT"
 
 [project.entry-points."familiar.tts"]
+local = "familiar.backends.local.tts:LocalTTS"
 gemini = "familiar.backends.gemini.tts:GeminiTTS"
 elevenlabs = "familiar.backends.elevenlabs.tts:ElevenLabsTTS"
 

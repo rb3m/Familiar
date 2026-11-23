@@ -60,6 +60,20 @@ timeout_seconds = 30.0
 backend = "elevenlabs"
 fallback = "gemini"
 
+# For the LAN voice server: backend = "local", fallback = ["elevenlabs", "gemini"].
+# [tts.local]
+# url = "http://voice-server:8765" # required; no default
+# token_env = "FAMILIAR_VOICE_TOKEN"
+# client_name = "my-computer"     # default: system hostname
+# first_audio_deadline_ms = 1000
+# stall_margin_ms = 300
+# renew_s = 10
+# park_after_misses = 3
+# park_window_s = 120
+# park_s = 300           # after park_after_misses misses within park_window_s
+# stall_park_s = 20      # after a mid-sentence stall: the rest of the turn uses the fallback
+# timeout_seconds = 30
+
 [tts.elevenlabs]
 model = "eleven_flash_v2_5"
 api_key_env = "ELEVENLABS_API_KEY"

@@ -383,3 +383,21 @@ def test_evdev_device_selection_skips_same_name_node_without_button():
     assert selected is mouse_node
     assert keyboard_node.closed
     selected.close()
+
+
+def test_nested_tts_resolves_only_real_backend_voices():
+    async def scenario():
+        voices = {"local": "local-voice", "elevenlabs": "eleven-voice", "gemini": "gemini-voice"}
+        local = Speech("local", BackendError("warming", retryable=True))
+        eleven = Speech("elevenlabs", BackendError("busy", retryable=True))
+        gemini = Speech("gemini")
+        chain = FallbackTTS(
+            local, FallbackTTS(eleven, gemini, voices.__getitem__), voices.__getitem__
+        )
+        assert [c async for c in chain.synthesize("Hi", None, "en")] == [AudioChunk(b"\2\0", 24000)]
+        assert local.calls == ["local-voice"]
+        assert eleven.calls == ["eleven-voice"]
+        assert gemini.calls == ["gemini-voice"]
+        await chain.aclose()
+
+    run(scenario())
