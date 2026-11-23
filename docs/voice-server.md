@@ -65,7 +65,8 @@ Every request needs `Authorization: Bearer <token>`; otherwise **401**. JSON unl
 ## Client (`local` backend) behaviour
 Settings live in `[tts.local]`: `url`, `token_env` (default `FAMILIAR_VOICE_TOKEN`),
 `client_name`, `first_audio_deadline_ms` (1000), `stall_margin_ms` (300), `renew_s` (10),
-`park_after_misses` (3 within `park_window_s` 120), `park_s` (300), `timeout_seconds`.
+`park_after_misses` (3 within `park_window_s` 120), `park_s` (300), `stall_park_s` (20),
+`timeout_seconds`.
 - **Lease**: taken in the background at construction (the backend is built inside the running
   loop) and renewed every `renew_s`. On 404 it takes a new lease; on network errors it keeps
   retrying quietly. `aclose()` cancels renewal and sends `DELETE`.
@@ -78,7 +79,7 @@ Settings live in `[tts.local]`: `url`, `token_env` (default `FAMILIAR_VOICE_TOKE
   - **Stall**: after the first chunk, estimate queued audio as (audio received) − (time since
     the first chunk). If it falls below −`stall_margin_ms` (playback has caught up and is
     waiting), keep yielding the rest of this sentence but **park** the backend for the rest of
-    the turn: `park_s`, or until the next user turn if that is simpler.
+    the turn: `stall_park_s` (20 s). The stall also counts as a miss towards `park_s`.
   - **Parking**: deadline misses and stalls count as misses. `park_after_misses` misses within
     `park_window_s` park it for `park_s`. While parked, synthesize raises retryable immediately.
   - Errors map to `BackendError`: 401 → not retryable; 400 → not retryable; 503, 5xx and

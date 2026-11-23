@@ -149,12 +149,20 @@ def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig
     fallback = section.get("fallback")
     if fallback is None:
         return BackendConfig(name, settings.copy())
-    if not isinstance(fallback, str) or not fallback or fallback == name:
-        raise ConfigError(f"{kind}.fallback must name a different backend")
-    fallback_settings = section.get(fallback, {})
-    if not isinstance(fallback_settings, dict):
-        raise ConfigError(f"[{kind}.{fallback}] must be a table")
-    return BackendConfig(name, settings.copy(), BackendConfig(fallback, fallback_settings.copy()))
+    names = [fallback] if isinstance(fallback, str) else fallback
+    if not isinstance(names, list):
+        raise ConfigError(f"{kind}.fallback must be a backend name or list of names")
+    seen = {name}
+    chain = None
+    for item in names:
+        if not isinstance(item, str) or not item.strip() or item in seen:
+            raise ConfigError(f"{kind}.fallback must contain distinct non-empty backend names")
+        seen.add(item)
+        if not isinstance(section.get(item, {}), dict):
+            raise ConfigError(f"[{kind}.{item}] must be a table")
+    for item in reversed(names):
+        chain = BackendConfig(item, section.get(item, {}).copy(), chain)
+    return BackendConfig(name, settings.copy(), chain)
 
 
 def _path(value: object, base: Path) -> Path:

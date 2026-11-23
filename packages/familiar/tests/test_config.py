@@ -88,3 +88,48 @@ def test_resolve_secret(monkeypatch):
         resolve_secret({"api_key_env": "TEST_SECRET"})
     with pytest.raises(ConfigError):
         resolve_secret({})
+
+
+@pytest.mark.parametrize("kind", ["tts", "stt"])
+def test_fallback_list(tmp_path, kind):
+    path = tmp_path / "chain.toml"
+    path.write_text(f"""[{kind}]
+backend = "local"
+fallback = ["elevenlabs", "gemini"]
+[{kind}.elevenlabs]
+model = "second"
+[{kind}.gemini]
+model = "third"
+""")
+    spec = getattr(load_config(path), kind)
+    assert spec.backend == "local"
+    assert spec.fallback.backend == "elevenlabs"
+    assert spec.fallback.settings == {"model": "second"}
+    assert spec.fallback.fallback.backend == "gemini"
+    assert spec.fallback.fallback.settings == {"model": "third"}
+    assert spec.fallback.fallback.fallback is None
+
+
+@pytest.mark.parametrize(
+    "fallback",
+    [
+        '["local"]',
+        '["gemini", "gemini"]',
+        '[""]',
+        '[" "]',
+        "[42]",
+        "42",
+    ],
+)
+def test_invalid_fallback_list(tmp_path, fallback):
+    path = tmp_path / "chain.toml"
+    path.write_text(f'[tts]\nbackend = "local"\nfallback = {fallback}\n')
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
+def test_fallback_settings_must_be_table(tmp_path):
+    path = tmp_path / "chain.toml"
+    path.write_text('[tts]\nbackend = "local"\nfallback = ["gemini"]\ngemini = 42\n')
+    with pytest.raises(ConfigError, match="must be a table"):
+        load_config(path)

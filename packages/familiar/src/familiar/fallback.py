@@ -84,7 +84,8 @@ class FallbackTTS(_Fallback):
         spoken = speakable(text, backend)
         if not spoken:
             return
-        async for chunk in backend.synthesize(spoken, self.voice_for(backend.name), language):
+        voice = None if isinstance(backend, FallbackTTS) else self.voice_for(backend.name)
+        async for chunk in backend.synthesize(spoken, voice, language):
             yield chunk
 
     async def synthesize(
