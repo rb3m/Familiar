@@ -16,13 +16,16 @@ the core works without any game pack. The commands are in `README.md`.
  (ATS, ETS2, KSP, MSFS, Elite)        priorities, cooldowns,       │
    + knowledge packs (YAML POIs)      stale-drop, PTT barge-in     ├─ LLMProvider  (Gemini, …)
                                             ▲                      ├─ Persona      (YAML data)
- Mic ── push-to-talk ── SpeechToText ───────┘                      └─ TextToSpeech (Gemini, ElevenLabs, …)
+ Mic ── push-to-talk ── SpeechToText ───────┘                      └─ TextToSpeech (local, ElevenLabs, Gemini, …)
                                                                           │
  Transcript log (JSONL, every event and utterance) ◄──────────────────────┘ ──► speakers
 ```
 
 Current accounts: Gemini flash-lite runs on the free API key (429s park a model for 15 min,
-then `fallback_api_key_env`); ElevenLabs is on the Pro plan, with Gemini TTS as the fallback.
+then `fallback_api_key_env`). TTS goes local → ElevenLabs (Pro plan) → Gemini. The `local`
+backend talks to `voice-server/` on the M1 Mac Mini over the LAN (ADR 0029,
+`docs/voice-server.md`). Each fallback happens per sentence, and only before that sentence's
+audio starts.
 
 ## Modules
 

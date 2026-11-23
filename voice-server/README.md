@@ -22,10 +22,19 @@ Edit `~/.config/familiar-voice/config.yaml`. Put the reference WAVs at
 `voices/{sarah,marichka,sakuya}-short.wav` relative to that file, and set each
 `ref_text` to the clip's exact transcript. Clone voices require a Base checkpoint;
 `design` voices require a VoiceDesign checkpoint and `description`. Model ids are
-config data; the checkpoint must be available to mlx-audio on the M1. Restart after
-config changes. Reinstalling after changing the token file or `token_env` updates
-the plist; launchd may need a `launchctl bootout gui/$(id -u)/com.familiar.voice-server`
-followed by the installer to reload changed environment variables.
+config data; mlx-audio downloads the checkpoint on first load (about 80 s; later loads
+take about 10 s). Before reporting `ready`, the worker speaks a short warm-up phrase in
+each voice, so the first real sentence is not a cold start. Rerun the installer after
+changing the config, the token file or `token_env`. It unloads and reloads the
+LaunchAgent so the changes take effect, using the `gui/` domain when someone is logged in
+and `user/` otherwise.
+
+If the worker crashes, the state becomes `failed`. The next new lease, or a lease renewal
+at least 30 s after the crash, starts it again. Check with
+`curl -H "Authorization: Bearer $FAMILIAR_VOICE_TOKEN" http://<host>:8765/v1/status`.
+
+Short reference clips (8–10 s) are recommended. With a 20 s clip, the M1 synthesizes
+slower than real time (see `docs/local-tts.md`).
 
 The supervisor reads the token from the environment variable named by `token_env`
 (default `FAMILIAR_VOICE_TOKEN`). For a foreground run:

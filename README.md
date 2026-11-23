@@ -80,8 +80,30 @@ Language, confirmation-word and model defaults can be overridden in
 |---|---|---|
 | Gemini API (free tier works) | `GEMINI_API_KEY` | LLM, fallback STT/TTS |
 | ElevenLabs (free tier works) | `ELEVENLABS_API_KEY` | Fast STT and TTS (needs Text to Speech and Speech to Text access) |
+| Local voice server (optional) | `FAMILIAR_VOICE_TOKEN` | Local TTS on a LAN Mac (see below) |
 
 Without ElevenLabs, point `[stt]` and `[tts]` at `gemini` in `config.toml`.
+
+### Optional: local voice server
+
+On Apple Silicon you can run the voices locally, which saves TTS credits. `voice-server/`
+(its own uv project) runs Qwen3-TTS through mlx-audio on a Mac on your LAN and clones each
+persona's voice from a short sample. It loads the model only while some Familiar is running
+and unloads it afterwards. Familiar's `local` backend uses it first, falling back sentence by
+sentence:
+
+```toml
+[tts]
+backend = "local"
+fallback = ["elevenlabs", "gemini"]
+
+[tts.local]
+url = "http://voice-server.local:8765"   # token from FAMILIAR_VOICE_TOKEN
+```
+
+Personas name a server voice per language (`voices: {local: sarah, elevenlabs: ...}`).
+Setup and the HTTP API are in `voice-server/README.md` and `docs/voice-server.md`. Measurements
+and model choice are in `docs/local-tts.md` and ADR 0029.
 
 ## Use
 

@@ -89,3 +89,19 @@ back to back, with playback simulated from each chunk's ready time. The VM was r
   ~0.7 s re-read of the sample), none mid-sentence. The short sample leaves an occasional ~0.2 s
   longer pause between sentences.
 - **`kill -9` of the worker freed its memory within 2 s.** Details and the go decision are in ADR 0029.
+
+## Built (2026-11-23)
+
+The server is `voice-server/` (supervisor + worker, launchd on the M1) and the client is
+`backends/local/` (lease, 1 s first-audio deadline, stall parking). The contract is in
+`docs/voice-server.md`.
+
+End to end from the Mac through Familiar's chain:
+- First audio: Mira 836 ms, Ruslana 754 ms, Megumin (ja) 756 ms.
+- A persona without a local voice falls back per sentence.
+- A busy worker answers 503 at once.
+- The worker unloads 60 s after the last lease.
+
+Open:
+- Cache the processed reference prompt per sentence (the ~0.7 s re-read).
+- Samples for the voices that still use ElevenLabs only.
