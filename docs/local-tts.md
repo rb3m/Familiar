@@ -62,5 +62,14 @@ write-up is the Vault field report `SoftwareDevelopment/20261123-0634 Familiar L
 - **An M1 has no margin for the 1.7B model** (RTF 0.98). The 0.6B Base runs at RTF 0.86 there,
   and only the weakest model (0.6B CustomVoice) has real margin. For a dedicated server: 16 GB,
   newer than M1; 32 GB is not needed.
+- **Ruslana round 2 (27 clips, per-sentence synthesis, new "young, upbeat" description): Cyrillic
+  wins.** Averages: Cyrillic 4.11, phonetic 3.89 (sometimes strange emphasis), as written 3.22.
+  Every model said Пожалуйста and боже мой correctly in Cyrillic. 0.6B Base cloning her
+  ElevenLabs voice (Marichka) scored **5.00** with Cyrillic. VoiceDesign fell from 4.0 to 2.89 with
+  the new description, so its voice is very sensitive to wording. Decisions: Ruslana writes
+  Slavic words in Cyrillic, and the local voice server needs a model and voice mode per persona
+  (designed or cloned). Running VoiceDesign and 0.6B Base together needs about 10.5 GiB.
+- **Synthesize per sentence, as `voice.py` does.** The bake-off first fed whole lines, which ran
+  "…La Gran Q. Da, let…" together.
 - Qwen does not act out `[tags]` (ADR 0020); emotion comes from a written instruction instead.
   Fish is the only model tested that acts out tags.

@@ -258,12 +258,13 @@ in 251 ms (ElevenLabs 268 ms), scored 4.22/5 blind in en/es/ja, and needs 3.8 Gi
 1. Done 2026-11-23: round 2 scored. VoiceDesign is still top (4.50); 0.6B Base cloning is next
    (4.39) and is the option when a persona's ElevenLabs voice identity matters. Respelling
    Ruslana's Russian made no clear difference.
-2. Tune voice descriptions and instructions so "sleepy" delivery stays clear; try a shorter
-   cloning sample to cut the delay; use standard transliteration in Ruslana's persona prompt.
+   Ruslana round 2: Cyrillic beats transliterated and phonetic spelling, and 0.6B Base cloning of
+   her ElevenLabs voice scored 5.00 with it.
+2. Ruslana's persona prompt: Slavic words in Cyrillic. Tune voice descriptions and instructions
+   so "sleepy" delivery stays clear; try a shorter cloning sample to cut the delay.
 3. ADR with agy/codex consensus first, then a `local` TTS backend: an HTTP client for a separate
    local speech server (its own environment, so MLX/PyTorch stay out of the workspace), with
-   ElevenLabs as fallback. Per-backend spelling for foreign words, using the `speech.yaml`
-   vocabulary, if the spelling test shows it helps.
+   a model and voice mode per persona (designed voice or clone) and ElevenLabs as fallback.
 4. Desk mode on the M4 first. Later, serve the Linux PC from the same server over the LAN or from
    a dedicated Mac Mini (16 GB, newer than M1; the 8 GB M1 runs the 1.7B model at real time with
    no margin).
