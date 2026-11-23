@@ -251,6 +251,22 @@ connection and listen in en/es/ja. Only build if the delay is acceptable, and th
 only for event remarks, keeping Flash for alert callouts. A build would also strip tags from
 transcripts and before the Gemini TTS fallback.
 
+In progress, **local TTS (pilot 2026-11-23; results in `docs/local-tts.md`).** The goal is to
+stop spending ElevenLabs credits (desk ~3,100 characters an hour, gaming ~6,200) and get
+more control over inflection. On the M4, Qwen3-TTS 1.7B VoiceDesign via mlx-audio starts speaking
+in 251 ms (ElevenLabs 268 ms), scored 4.22/5 blind in en/es/ja, and needs 3.8 GiB. Steps:
+1. Score the round-2 clips (cloning Base 1.7B/0.6B, CustomVoice 0.6B) and the Ruslana spelling
+   test (transliterated, Cyrillic, phonetic Russian).
+2. Tune voice descriptions and instructions so "sleepy" delivery stays clear; try a shorter
+   cloning sample to cut the delay.
+3. ADR with agy/codex consensus first, then a `local` TTS backend: an HTTP client for a separate
+   local speech server (its own environment, so MLX/PyTorch stay out of the workspace), with
+   ElevenLabs as fallback. Per-backend spelling for foreign words, using the `speech.yaml`
+   vocabulary, if the spelling test shows it helps.
+4. Desk mode on the M4 first. Later, serve the Linux PC from the same server over the LAN or from
+   a dedicated Mac Mini (16 GB, newer than M1; the 8 GB M1 runs the 1.7B model at real time with
+   no margin).
+
 Later options: Gemini Live speech-to-speech `Conversation` backend, local backends (whisper.cpp
 Vulkan, Kokoro, Ollama), note taker to an Obsidian vault, standard SCS telemetry
 plugin for users without the TruckSim GPS port.
