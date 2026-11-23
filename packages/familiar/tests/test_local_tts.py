@@ -324,3 +324,17 @@ async def test_empty_and_incomplete_streams(factory, parts):
         assert stream.closed
     finally:
         await backend.aclose()
+
+
+@pytest.mark.asyncio
+async def test_missing_persona_voice_falls_back_without_disabling(factory):
+    """A persona without a local voice must not switch the local voice off for everyone."""
+    backend = factory(lease_response)
+    try:
+        await asyncio.sleep(0)
+        with pytest.raises(BackendError, match="No local voice") as info:
+            async for _ in backend.synthesize("Hola", None, "es"):
+                pass
+        assert info.value.retryable
+    finally:
+        await backend.aclose()

@@ -100,7 +100,10 @@ class LocalTTS:
         if self._closed or not self._ready or self._clock() < self._parked_until:
             raise BackendError("Local voice is not ready or is parked", retryable=True)
         if not voice:
-            raise BackendError("No local voice configured for this persona/language")
+            # Retryable: this sentence falls back, but other personas keep the local voice.
+            raise BackendError(
+                "No local voice configured for this persona/language", retryable=True
+            )
         with backend_errors():
             try:
                 # Include response headers in the deadline: a server can stall before them too.

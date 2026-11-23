@@ -1,7 +1,7 @@
 # 0029: Local voice server on the M1, leased by any Familiar
 
 Date: 2026-11-23
-Status: Accepted 2026-11-23 (gate passed with the short cloning sample; not built yet)
+Status: Accepted 2026-11-23; built and verified end to end on the M1 the same day (live session pending)
 
 ## Context
 

@@ -267,8 +267,11 @@ in 251 ms (ElevenLabs 268 ms), scored 4.22/5 blind in en/es/ja, and needs 3.8 Gi
    is an HTTP client; the chain is local → ElevenLabs → Gemini, with a per-sentence
    first-audio deadline. Gate passed 2026-11-23 (ADR accepted). With an 8–9 s cloning sample,
    98% of sentences start within 1 s, there are no mid-sentence gaps, and memory is freed
-   within 2 s of the worker exiting. Next: build the supervisor and the `local` backend, with
-   the reference prompt cached per sentence.
+   within 2 s of the worker exiting. Built 2026-11-23 (`voice-server/`, `backends/local/`), and
+   verified end to end from the Mac: first audio 750–840 ms over the LAN, busy answers 503, the
+   worker unloads 60 s after the last lease, and a persona without a local voice falls back per
+   sentence. Next: a live desk session; then the Linux PC (token in its shell config,
+   `[tts.local]`); cache the reference prompt per sentence to remove the ~0.7 s re-read.
 4. Desk mode on the M4 first. Later, serve the Linux PC from the same server over the LAN or from
    a dedicated Mac Mini (16 GB, newer than M1; the 8 GB M1 runs the 1.7B model at real time with
    no margin).

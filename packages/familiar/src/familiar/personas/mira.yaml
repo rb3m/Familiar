@@ -38,9 +38,9 @@ style_rules:
   - "Keep warmth understated and humour gentle."
 languages:
   en:
-    voices: {gemini: "Kore", elevenlabs: "EXAVITQu4vr4xnSDxMaL"}
+    voices: {gemini: "Kore", elevenlabs: "EXAVITQu4vr4xnSDxMaL", local: "sarah"}
   ja:
-    voices: {gemini: "Kore", elevenlabs: "EXAVITQu4vr4xnSDxMaL"}
+    voices: {gemini: "Kore", elevenlabs: "EXAVITQu4vr4xnSDxMaL", local: "sarah"}
 game_hooks:
   ats: "Accompany the driver across North America; notice supplied landmarks and road conditions."
   ets2: "Accompany the driver across Europe; notice supplied landmarks and road conditions."
