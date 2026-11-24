@@ -6,7 +6,7 @@
 # you, not root) holds `ssh -L 127.0.0.1:<port> -> <host>:8765`. Familiar then talks to loopback;
 # nothing else on the network becomes reachable, and the traffic is encrypted.
 #
-#   sudo packaging/macos/install-voice-tunnel.sh roberto@192.168.68.100 [~/.ssh/id_ed25519_m1] [8766]
+#   sudo packaging/macos/install-voice-tunnel.sh you@voice-server-ip [~/.ssh/your_key] [8766]
 #   sudo packaging/macos/install-voice-tunnel.sh --uninstall
 #
 # Then set [tts.local] url = "http://127.0.0.1:8766" in config.toml.
