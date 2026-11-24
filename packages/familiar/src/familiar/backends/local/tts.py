@@ -1,6 +1,7 @@
 """Lease lifecycle and deadline-protected PCM streaming for the LAN voice server."""
 
 import asyncio
+import logging
 import time
 from collections import deque
 from collections.abc import AsyncIterator, Callable
@@ -10,6 +11,8 @@ from urllib.parse import quote
 from familiar.interfaces import PLUGIN_API_VERSION, AudioChunk, BackendError
 
 from .client import backend_errors, check_response, make_client, validate
+
+_LOG = logging.getLogger(__name__)
 
 
 class LocalTTS:
@@ -59,14 +62,25 @@ class LocalTTS:
 
     async def _renew(self) -> None:
         backoff = 1.0
+        failing = False
         while True:
             try:
                 await self._lease()
-            except (BackendError, ValueError, KeyError):
+            except (BackendError, ValueError, KeyError) as exc:
+                if not failing:
+                    _LOG.warning(
+                        "Local voice server unreachable at %s: %s",
+                        self.settings["url"],
+                        str(exc) or type(exc).__name__,
+                    )
+                failing = True
                 self._ready = False
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, self.settings["renew_s"])
                 continue
+            if failing:
+                _LOG.info("Local voice server recovered at %s", self.settings["url"])
+            failing = False
             backoff = 1.0
             await asyncio.sleep(self.settings["renew_s"])
 

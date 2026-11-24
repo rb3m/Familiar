@@ -243,6 +243,7 @@ def test_lazy_lease_start(factory):
 
 @pytest.mark.asyncio
 async def test_lease_connection_failure_retries_with_backoff(factory, monkeypatch, caplog):
+    caplog.set_level("INFO", logger="familiar.backends.local.tts")
     real_sleep = asyncio.sleep
     delays = []
     attempts = 0
@@ -270,7 +271,10 @@ async def test_lease_connection_failure_retries_with_backoff(factory, monkeypatc
         await asyncio.wait_for(ready.wait(), 1)
         assert backend._ready
         assert delays[:3] == [1, 2, 4]
-        assert not caplog.records
+        assert [record.levelname for record in caplog.records] == ["WARNING", "INFO"]
+        assert "http://voice.invalid" in caplog.records[0].message
+        assert "offline" in caplog.records[0].message
+        assert "recovered" in caplog.records[1].message
     finally:
         await backend.aclose()
 
@@ -338,3 +342,39 @@ async def test_missing_persona_voice_falls_back_without_disabling(factory):
         assert info.value.retryable
     finally:
         await backend.aclose()
+
+
+@pytest.mark.asyncio
+async def test_fallback_backend_attribution():
+    from familiar.fallback import FallbackTTS
+
+    class Backend:
+        def __init__(self, name):
+            self.name = name
+            self.fail = False
+            self.empty = False
+
+        async def synthesize(self, *args):
+            if self.fail:
+                raise BackendError("offline", retryable=True)
+            if self.empty:
+                return
+            yield AudioChunk(b"00", 24000)
+
+    local, eleven, gemini = (Backend(name) for name in ("local", "elevenlabs", "gemini"))
+    inner = FallbackTTS(eleven, gemini, lambda _: None)
+    chain = FallbackTTS(local, inner, lambda _: None)
+    assert chain.last_backend is None
+    assert await collect(chain)
+    assert chain.last_backend == "local"
+    local.fail = True
+    assert await collect(chain)
+    assert chain.last_backend == "elevenlabs"
+    eleven.fail = True
+    assert await collect(chain)
+    assert chain.last_backend == inner.last_backend == "gemini"
+    gemini.empty = True
+    assert await collect(chain) == []
+    assert chain.last_backend is None
+    with pytest.raises(AttributeError):
+        chain.last_backend = "other"

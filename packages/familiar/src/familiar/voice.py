@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import aclosing, suppress
@@ -267,6 +268,9 @@ class VoiceSession:
                             self._sentence_audio_s,
                             spoken[:60],
                         )
+                    if self._sentence_pcm_bytes and os.environ.get("FAMILIAR_VOICE_MARKERS") == "1":
+                        backend = getattr(self.tts, "last_backend", None) or self.tts.name
+                        print(f"[voice] {backend}", flush=True)
                     if self._sentence_audio:
                         self.conversation.acknowledge_playback()
             await self.player.wait_idle()

@@ -68,4 +68,6 @@ def backend_errors() -> Iterator[None]:
     try:
         yield
     except httpx.TransportError as exc:
-        raise BackendError(f"Local voice connection failed: {exc}", retryable=True) from exc
+        raise BackendError(
+            f"Local voice connection failed: {str(exc) or type(exc).__name__}", retryable=True
+        ) from exc

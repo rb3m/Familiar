@@ -29,6 +29,8 @@ let reconnectTimer;
 let reconnectDelay = 1000;
 let followTranscript = true;
 let lastBubble = null;
+let lastPersonaSentence = null;
+let localVoiceTimer;
 let replayCounts = new Map();
 const lineCounts = new Map();
 
@@ -441,6 +443,49 @@ function renderQuota() {
   root.append(bar);
 }
 
+function renderLocalVoice(status) {
+  const root = $('#local-voice');
+  root.replaceChildren();
+  root.hidden = !status;
+  if (!status) return;
+  const labels = {
+    ready: 'Ready', loading: 'Loading…', idle: 'Idle · loads when a session starts',
+    stopping: 'Stopping', failed: 'Worker failed', unreachable: 'Unreachable',
+    unauthorized: 'Unauthorized', unconfigured: 'Unconfigured',
+  };
+  root.dataset.state = status.state;
+  const heading = element('strong');
+  const dot = element('span', 'voice-status-dot');
+  dot.setAttribute('aria-hidden', 'true');
+  heading.append(dot, document.createTextNode(`Local voice · ${labels[status.state] || status.state}`));
+  root.append(heading);
+  const error = status.error || (status.state === 'unauthorized' ? 'Check the local voice bearer token.' : '');
+  if (error) root.append(element('div', '', error));
+  if (error.includes('No route to host')) {
+    root.append(element('div', '', 'Allow Familiar under System Settings › Privacy & Security › Local Network.'));
+  }
+}
+
+async function pollLocalVoice() {
+  clearTimeout(localVoiceTimer);
+  if (document.hidden || closed || !state) return;
+  try { renderLocalVoice(await api('/api/local-voice')); }
+  catch (error) { renderLocalVoice({ state: 'unreachable', error: error.message }); }
+  finally {
+    if (!document.hidden && !closed) localVoiceTimer = setTimeout(pollLocalVoice, 10000);
+  }
+}
+
+function tagVoice(name) {
+  if (!lastPersonaSentence) return;
+  const { sentence, heading } = lastPersonaSentence;
+  sentence.dataset.voice = name;
+  if (Array.from(heading.querySelectorAll('.voice-label')).some((label) => label.dataset.voice === name)) return;
+  const label = element('span', 'voice-label', new Map([['local', 'Local'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini']]).get(name) || name);
+  label.dataset.voice = name;
+  heading.append(label);
+}
+
 function updateStartAvailability() {
   const toggle = $('#session-toggle');
   toggle.disabled = sessionBusy || pttBusy || (!state.session.running && (saveFailed || !choices.crew.length || !choices.language));
@@ -519,6 +564,7 @@ function applyState(nextState) {
   renderLanguage();
   renderSession();
   renderQuota();
+  renderLocalVoice(state.local_voice);
 }
 
 async function refreshState() {
@@ -882,9 +928,11 @@ function scrollTranscript() {
 }
 
 function renderLine(line) {
+  const text = String(line.text ?? '');
+  const voice = line.stream === 'stdout' ? text.match(/^\[voice\] (\S+)\s*$/u) : null;
+  if (voice) { tagVoice(voice[1]); return; }
   const transcript = $('#transcript');
   $('#transcript-empty')?.remove();
-  const text = String(line.text ?? '');
   if (line.stream !== 'stderr' && /^listening(?:…|\.{3})?\s*$/iu.test(text.trim())) {
     $('#listening').hidden = false;
     return;
@@ -904,18 +952,22 @@ function renderLine(line) {
   }
   const [, speaker, kind = '', message] = match;
   const key = `${speaker}\u0000${kind}`;
+  const sentence = element('span', 'sentence', message);
   if (lastBubble?.key === key) {
-    lastBubble.body.append(document.createTextNode(` ${message}`));
+    lastBubble.body.append(document.createTextNode(' '), sentence);
+    if (speaker !== 'You') lastPersonaSentence = { sentence, heading: lastBubble.heading };
     scrollTranscript();
     return;
   }
   const bubble = element('article', `bubble${speaker === 'You' ? ' user' : ''}${criticalEvents.has(kind) ? ' alert' : ''}`);
   const heading = element('span', 'speaker', speaker);
   if (kind) heading.append(element('span', 'event-tag', kind.replaceAll('_', ' ')));
-  const body = element('span', '', message);
+  const body = element('span');
+  body.append(sentence);
+  if (speaker !== 'You') lastPersonaSentence = { sentence, heading };
   bubble.append(heading, body);
   transcript.append(bubble);
-  lastBubble = { key, body };
+  lastBubble = { key, body, heading };
   scrollTranscript();
 }
 
@@ -1145,7 +1197,8 @@ function bindControls() {
     event.preventDefault();
     event.returnValue = '';
   });
-  window.addEventListener('pagehide', () => { source?.close(); clearTimeout(reconnectTimer); });
+  document.addEventListener('visibilitychange', pollLocalVoice);
+  window.addEventListener('pagehide', () => { source?.close(); clearTimeout(reconnectTimer); clearTimeout(localVoiceTimer); });
   window.addEventListener('pageshow', (event) => { if (event.persisted && state && !closed) connectEvents(); });
 }
 
@@ -1184,6 +1237,7 @@ async function init() {
   $('#main').setAttribute('aria-busy', 'false');
   $('#main').inert = false;
   connectEvents();
+  localVoiceTimer = setTimeout(pollLocalVoice, 10000);
 }
 
 bindControls();

@@ -3,6 +3,7 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
 from familiar.conversation import Conversation
 from familiar.interfaces import AudioChunk, AudioClip, BackendError, LLMChunk
 from familiar.voice import VoiceSession
@@ -260,3 +261,35 @@ def test_sentence_audio_diagnostics(caplog):
     assert len(warnings) == 2
     assert "speaker=test chars=14 seconds=0.000 text=Missing audio." in warnings[0]
     assert "Short audio." in warnings[1]
+
+
+@pytest.mark.parametrize("markers", [None, "0", "1"])
+@pytest.mark.parametrize("backend", [None, "local"])
+def test_voice_markers(monkeypatch, capsys, markers, backend):
+    monkeypatch.delenv("FAMILIAR_VOICE_MARKERS", raising=False)
+    if markers is not None:
+        monkeypatch.setenv("FAMILIAR_VOICE_MARKERS", markers)
+
+    async def scenario():
+        session = make_session()
+        session.tts.last_backend = backend
+        await session.run()
+        assert len(session.player.audio) == 2
+
+    run(scenario())
+    output = capsys.readouterr().out
+    expected = f"[voice] {backend or 'fake'}"
+    assert output.count(expected) == (2 if markers == "1" else 0)
+
+
+@pytest.mark.parametrize("empty_chunk", [False, True])
+def test_voice_no_marker_without_audio(monkeypatch, capsys, empty_chunk):
+    monkeypatch.setenv("FAMILIAR_VOICE_MARKERS", "1")
+
+    class EmptyTTS(TTS):
+        async def synthesize(self, *args):
+            if empty_chunk:
+                yield AudioChunk(b"", 24000)
+
+    run(make_session(tts=EmptyTTS()).run())
+    assert "[voice]" not in capsys.readouterr().out

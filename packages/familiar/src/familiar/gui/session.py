@@ -136,7 +136,7 @@ class SessionManager:
             self.process = await asyncio.create_subprocess_exec(
                 *command,
                 cwd=self.config_path.parent if self.config_path else Path.cwd(),
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                env={**os.environ, "PYTHONUNBUFFERED": "1", "FAMILIAR_VOICE_MARKERS": "1"},
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

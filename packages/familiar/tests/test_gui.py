@@ -7,6 +7,7 @@ import sys
 from dataclasses import asdict
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from aiohttp.test_utils import TestClient, TestServer, make_mocked_request
 from familiar import session_settings
@@ -97,10 +98,10 @@ async def client(tmp_path, request):
     import socket
 
     try:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
     except PermissionError:
         pytest.skip("Sandbox denies loopback TCP sockets")
-    probe.close()
     async with TestClient(TestServer(app, shutdown_timeout=0.01)) as client:
         client.session.headers["X-Familiar-Token"] = "secret"
         yield client
@@ -122,7 +123,15 @@ async def test_auth_and_state(client):
     )
     assert response.status == 200
     state = await response.json()
-    assert set(state) == {"games", "personas", "languages", "defaults", "session", "quota"}
+    assert set(state) == {
+        "games",
+        "personas",
+        "languages",
+        "defaults",
+        "session",
+        "quota",
+        "local_voice",
+    }
     assert state["quota"] is None
     assert state["personas"][0]["builtin"] is True
     assert "roles" in state["personas"][0]
@@ -727,3 +736,72 @@ async def test_packaged_persona_override_and_reset(tmp_path):
     await api.delete_persona(request)
     assert api.persona("mira") == (original, True)
     assert not api.overrides_builtin("mira")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "result",
+    ["ready", "loading", "idle", "stopping", "failed", "offline", "missing", "unauthorized"],
+)
+async def test_local_voice_status(client, monkeypatch, result):
+    api = client.server.app[server.API]
+    api.config.tts = BackendConfig(
+        "gemini", fallback=BackendConfig("local", {"url": "http://voice.invalid"})
+    )
+    monkeypatch.setenv("FAMILIAR_VOICE_TOKEN", "secret")
+    if result == "missing":
+        monkeypatch.delenv("FAMILIAR_VOICE_TOKEN")
+    calls = []
+    real_client = server.make_client
+
+    def make_client(settings):
+        original = real_client(settings)
+        # Keep the shared helper's headers, URL and timeout while supplying an offline transport.
+        return httpx.AsyncClient(
+            base_url=original.base_url,
+            headers=original.headers,
+            timeout=original.timeout,
+            transport=httpx.MockTransport(handler),
+        )
+
+    def handler(request):
+        calls.append(request)
+        assert request.url.path == "/v1/status"
+        assert request.headers["Authorization"] == "Bearer secret"
+        if result == "offline":
+            raise httpx.ConnectError("No route to host", request=request)
+        if result == "unauthorized":
+            return httpx.Response(401)
+        return httpx.Response(200, json={"state": result, "leases": 2})
+
+    monkeypatch.setattr(server, "make_client", make_client)
+    statuses = await asyncio.gather(api.local_voice(), api.local_voice())
+    response = await client.get("/api/local-voice")
+    assert response.status == 200
+    assert await response.json() == statuses[0] == statuses[1]
+    status = statuses[0]
+    expected = {
+        "offline": "unreachable",
+        "missing": "unconfigured",
+        "unauthorized": "unauthorized",
+    }.get(result, result)
+    assert status["state"] == expected
+    if result in {"ready", "loading", "idle", "stopping", "failed"}:
+        assert status == {"state": result, "leases": 2}
+    assert len(calls) == (0 if result == "missing" else 1)
+    if result == "missing":
+        assert status["error"] == "FAMILIAR_VOICE_TOKEN is not set"
+    if result == "offline":
+        assert "No route to host" in status["error"]
+    api._local_voice_at -= 11
+    await api.local_voice()
+    assert len(calls) == (0 if result == "missing" else 2)
+
+
+@pytest.mark.asyncio
+async def test_local_voice_absent(client):
+    api = client.server.app[server.API]
+    assert await api.local_voice() is None
+    response = await client.get("/api/local-voice")
+    assert response.status == 200
+    assert await response.json() is None

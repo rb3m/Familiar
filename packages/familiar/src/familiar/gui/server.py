@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import secrets
 import time
 import tomllib
@@ -13,6 +14,7 @@ from typing import Any
 from aiohttp import web
 
 from familiar.audio.player import Player
+from familiar.backends.local.client import DEFAULTS, make_client, validate
 from familiar.config import USER_CONFIG, AppConfig, BackendConfig, find_config_path, load_config
 from familiar.config_writer import save_ptt
 from familiar.fallback import close_backend
@@ -179,6 +181,9 @@ class APIService:
         self._quota: dict | None = None
         self._quota_at = float("-inf")
         self._quota_lock = asyncio.Lock()
+        self._local_voice: dict | None = None
+        self._local_voice_at = float("-inf")
+        self._local_voice_lock = asyncio.Lock()
         self._audio_lock = asyncio.Lock()
         self._ptt_lock = asyncio.Lock()
         self.config_path = config_path or find_config_path(None) or USER_CONFIG.expanduser()
@@ -236,6 +241,41 @@ class APIService:
                     await close_backend(backend)
             return self._quota
 
+    async def local_voice(self) -> dict | None:
+        spec = self.config.tts
+        while spec is not None and spec.backend != "local":
+            spec = spec.fallback
+        if spec is None:
+            return None
+        async with self._local_voice_lock:
+            if time.monotonic() - self._local_voice_at < 10:
+                return self._local_voice
+            try:
+                self._local_voice = await self._fetch_local_voice(spec)
+            except Exception as exc:
+                self._local_voice = {
+                    "state": "unreachable",
+                    "error": (str(exc) or type(exc).__name__)[:300],
+                }
+            self._local_voice_at = time.monotonic()
+            return self._local_voice
+
+    async def _fetch_local_voice(self, spec: BackendConfig) -> dict:
+        token_env = spec.settings.get("token_env", DEFAULTS["token_env"])
+        if not os.environ.get(token_env):
+            return {"state": "unconfigured", "error": f"{token_env} is not set"}
+        settings = validate({**spec.settings, "timeout_seconds": 2})
+        async with asyncio.timeout(2), make_client(settings) as client:
+            response = await client.get("/v1/status")
+            if response.status_code == 401:
+                return {"state": "unauthorized"}
+            response.raise_for_status()
+            data = response.json()
+            return {"state": data["state"], "leases": data["leases"]}
+
+    async def get_local_voice(self, request: web.Request) -> web.Response:
+        return web.json_response(await self.local_voice())
+
     async def state(self, request: web.Request) -> web.Response:
         return web.json_response(
             {
@@ -252,6 +292,7 @@ class APIService:
                 },
                 "session": self.sessions.state,
                 "quota": await self.quota(),
+                "local_voice": await self.local_voice(),
             }
         )
 
@@ -689,6 +730,7 @@ def create_app(
     app[API] = api
     app.add_routes(
         [
+            web.get("/api/local-voice", api.get_local_voice),
             web.get("/api/state", api.state),
             web.get("/api/ptt", api.get_ptt),
             web.post("/api/ptt/detect", api.detect_ptt),

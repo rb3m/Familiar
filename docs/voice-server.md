@@ -84,6 +84,12 @@ Settings live in `[tts.local]`: `url`, `token_env` (default `FAMILIAR_VOICE_TOKE
     `park_window_s` park it for `park_s`. While parked, synthesize raises retryable immediately.
   - Errors map to `BackendError`: 401 → not retryable; 400 → not retryable; 503, 5xx and
     network errors → retryable.
+- **Visibility**: the first lease failure logs a warning with the reason, and recovery logs
+  once. With `FAMILIAR_VOICE_MARKERS=1` (the GUI sets it), the voice loop prints
+  `[voice] <backend>` after each spoken sentence. `FallbackTTS.last_backend` names the backend
+  that produced it. The GUI hides these lines and colours the sentence. Its `GET /api/local-voice`
+  proxies `/v1/status` (cached 10 s) for the status card, with extra states `unreachable`,
+  `unauthorized` and `unconfigured`.
 - **Capabilities**: `{"streaming"}`, without `audio_tags` (ADR 0020), so tags are stripped.
 - **Voices**: personas name a server voice id per language,
   e.g. `voices: {local: marichka, elevenlabs: VRgX...}`.

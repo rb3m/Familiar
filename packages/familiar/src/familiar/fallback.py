@@ -74,9 +74,14 @@ class FallbackTTS(_Fallback):
     ) -> None:
         super().__init__(primary, secondary)
         self.voice_for = voice_for
+        self._last_backend: str | None = None
         # Let tags through to us if either voice can act them out; each backend gets its own cut.
         tags = performs_tags(primary) or performs_tags(secondary)
         self.capabilities = frozenset({"streaming", *([AUDIO_TAGS] if tags else [])})
+
+    @property
+    def last_backend(self) -> str | None:
+        return self._last_backend
 
     async def _synthesize(
         self, backend: TextToSpeech, text: str, language: str
@@ -86,11 +91,15 @@ class FallbackTTS(_Fallback):
             return
         voice = None if isinstance(backend, FallbackTTS) else self.voice_for(backend.name)
         async for chunk in backend.synthesize(spoken, voice, language):
+            self._last_backend = (
+                backend.last_backend if isinstance(backend, FallbackTTS) else backend.name
+            )
             yield chunk
 
     async def synthesize(
         self, text: str, voice: str | None, language: str
     ) -> AsyncIterator[AudioChunk]:
+        self._last_backend = None
         if self._disabled:
             async for chunk in self._synthesize(self.secondary, text, language):
                 yield chunk

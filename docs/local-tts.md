@@ -102,6 +102,11 @@ End to end from the Mac through Familiar's chain:
 - A busy worker answers 503 at once.
 - The worker unloads 60 s after the last lease.
 
+The first desk session (same evening) never reached the M1: macOS Local Network privacy gave
+Familiar.app `No route to host`, while the terminal tests had passed. The macOS installer now
+declares a Local Network usage string, the client logs lease failures, and the GUI shows the
+server state and which backend voiced each sentence.
+
 Open:
 - Cache the processed reference prompt per sentence (the ~0.7 s re-read).
 - Samples for the voices that still use ElevenLabs only.
