@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 from familiar.conversation import Conversation
-from familiar.interfaces import AudioChunk, AudioClip, BackendError, LLMChunk
+from familiar.interfaces import AudioChunk, AudioClip, BackendError, GameEvent, LLMChunk
+from familiar.speech import PATIENT_SPEECH
 from familiar.voice import VoiceSession
 from m1_support import run
 
@@ -293,3 +294,28 @@ def test_voice_no_marker_without_audio(monkeypatch, capsys, empty_chunk):
 
     run(make_session(tts=EmptyTTS()).run())
     assert "[voice]" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("priority", [None, "ambient", "notable", "critical"])
+def test_speak_patient_context_only_for_ambient(priority):
+    async def scenario():
+        observed = []
+
+        class ContextTTS(TTS):
+            async def synthesize(self, *args):
+                observed.append(PATIENT_SPEECH.get())
+                yield AudioChunk(b"00", 24000)
+
+        async def sentences():
+            for sentence in ("First sentence.", "Second sentence."):
+                assert PATIENT_SPEECH.get() is (priority == "ambient")
+                yield sentence
+
+        session = make_session(tts=ContextTTS())
+        event = GameEvent("banter", priority, "Crew chatter", 0) if priority is not None else None
+        timings = dict.fromkeys(("first_sentence_ms", "first_audio_ms"))
+        await session._speak(sentences(), 0, timings, event=event)
+        assert observed == [priority == "ambient"] * 2
+        assert not PATIENT_SPEECH.get()
+
+    run(scenario())

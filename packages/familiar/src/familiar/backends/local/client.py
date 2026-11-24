@@ -14,6 +14,8 @@ DEFAULTS = {
     "token_env": "FAMILIAR_VOICE_TOKEN",
     "client_name": socket.gethostname(),
     "first_audio_deadline_ms": 1000,
+    "patient_first_audio_deadline_ms": 2000,
+    "patient_ready_wait_s": 15,
     "stall_margin_ms": 300,
     "renew_s": 10,
     "park_after_misses": 3,

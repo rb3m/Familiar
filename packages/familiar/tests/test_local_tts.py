@@ -1,11 +1,13 @@
 """Offline contract tests for the leased local voice client."""
 
 import asyncio
+from itertools import pairwise
 
 import httpx
 import pytest
 from familiar.backends.local.tts import LocalTTS
 from familiar.interfaces import AudioChunk, BackendError, ConfigError
+from familiar.speech import PATIENT_SPEECH, patient_speech
 
 
 class Stream(httpx.AsyncByteStream):
@@ -378,3 +380,144 @@ async def test_fallback_backend_attribution():
     assert chain.last_backend is None
     with pytest.raises(AttributeError):
         chain.last_backend = "other"
+
+
+@pytest.mark.asyncio
+async def test_patient_deadline_and_context_reset(factory):
+    streams = []
+
+    class SlowStream(Stream):
+        async def __aiter__(self):
+            await asyncio.sleep(1.5)
+            yield b"00"
+
+    def handler(request):
+        if request.url.path != "/v1/speech":
+            return lease_response(request)
+        stream = SlowStream()
+        streams.append(stream)
+        return httpx.Response(200, stream=stream)
+
+    backend = factory(handler)
+    try:
+        await asyncio.sleep(0)
+        assert backend.settings["patient_first_audio_deadline_ms"] == 2000
+        assert backend.settings["patient_ready_wait_s"] == 15
+        with pytest.raises(BackendError, match="deadline"):
+            await collect(backend)
+        with patient_speech():
+            assert await collect(backend) == [AudioChunk(b"00", 24000)]
+        assert not PATIENT_SPEECH.get()
+        with pytest.raises(BackendError, match="deadline"):
+            await collect(backend)
+        assert len(backend._misses) == 2
+        assert all(stream.closed for stream in streams)
+    finally:
+        await backend.aclose()
+
+
+@pytest.mark.asyncio
+async def test_patient_ignores_parking(factory):
+    backend = factory(
+        lambda request: (
+            httpx.Response(200, stream=Stream())
+            if request.url.path == "/v1/speech"
+            else lease_response(request)
+        )
+    )
+    try:
+        await asyncio.sleep(0)
+        backend._park(300)
+        with pytest.raises(BackendError, match="parked"):
+            await collect(backend)
+        with patient_speech():
+            assert await collect(backend)
+        with pytest.raises(BackendError, match="parked"):
+            await collect(backend)
+    finally:
+        await backend.aclose()
+
+
+@pytest.mark.asyncio
+async def test_patient_polls_until_ready(factory):
+    polls = []
+
+    def handler(request):
+        if request.url.path == "/v1/status":
+            polls.append(asyncio.get_running_loop().time())
+            if len(polls) == 1:
+                return httpx.Response(503)
+            state = "ready" if len(polls) == 3 else "loading"
+            return httpx.Response(200, json={"state": state})
+        if request.url.path == "/v1/speech":
+            return httpx.Response(200, stream=Stream())
+        return lease_response(request, "loading")
+
+    backend = factory(handler)
+    try:
+        await asyncio.sleep(0)
+        with pytest.raises(BackendError):
+            await collect(backend)
+        assert not polls
+        with patient_speech():
+            assert await collect(backend)
+        assert len(polls) == 3
+        assert all(later - earlier >= 0.9 for earlier, later in pairwise(polls))
+    finally:
+        await backend.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blocked_status", [False, True])
+async def test_patient_readiness_timeout(factory, blocked_status):
+    async def handler(request):
+        if request.url.path == "/v1/status" and blocked_status:
+            await asyncio.Event().wait()
+        return lease_response(request, "loading")
+
+    backend = factory(handler, patient_ready_wait_s=0.02)
+    try:
+        with patient_speech(), pytest.raises(BackendError, match="not ready") as caught:
+            await asyncio.wait_for(collect(backend), 1)
+        assert caught.value.retryable
+        assert not PATIENT_SPEECH.get()
+    finally:
+        await backend.aclose()
+
+
+@pytest.mark.asyncio
+async def test_patient_misses_still_park(factory):
+    backend = factory(
+        lambda request: (
+            httpx.Response(200, stream=Stream(block=True))
+            if request.url.path == "/v1/speech"
+            else lease_response(request)
+        ),
+        patient_first_audio_deadline_ms=1,
+        park_after_misses=1,
+    )
+    try:
+        await asyncio.sleep(0)
+        with patient_speech(), pytest.raises(BackendError, match="deadline"):
+            await collect(backend)
+        assert backend._parked_until == 300
+    finally:
+        await backend.aclose()
+
+
+@pytest.mark.parametrize("key", ["patient_first_audio_deadline_ms", "patient_ready_wait_s"])
+@pytest.mark.parametrize("value", [0, -1, True, float("nan"), float("inf"), "15"])
+def test_invalid_patient_settings(key, value, monkeypatch):
+    monkeypatch.setenv("FAMILIAR_VOICE_TOKEN", "secret")
+    with pytest.raises(ConfigError, match=key):
+        LocalTTS({"url": "http://voice.invalid", key: value})
+
+
+def test_patient_context_resets_after_exception_and_nested_blocks():
+    assert not PATIENT_SPEECH.get()
+    with pytest.raises(RuntimeError), patient_speech():
+        with patient_speech():
+            assert PATIENT_SPEECH.get()
+        assert PATIENT_SPEECH.get()
+        raise RuntimeError("interrupted")
+    assert not PATIENT_SPEECH.get()

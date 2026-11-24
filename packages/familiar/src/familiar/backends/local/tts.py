@@ -9,6 +9,7 @@ from contextlib import suppress
 from urllib.parse import quote
 
 from familiar.interfaces import PLUGIN_API_VERSION, AudioChunk, BackendError
+from familiar.speech import PATIENT_SPEECH
 
 from .client import backend_errors, check_response, make_client, validate
 
@@ -107,11 +108,25 @@ class LocalTTS:
             self._park(self.settings["park_s"])
             self._misses.clear()
 
+    async def _wait_ready(self) -> None:
+        with suppress(TimeoutError):
+            async with asyncio.timeout(self.settings["patient_ready_wait_s"]):
+                while not self._ready and not self._closed:
+                    with suppress(BackendError):
+                        await self.status()
+                    if self._ready:
+                        return
+                    await asyncio.sleep(1)
+
     async def synthesize(
         self, text: str, voice: str | None, language: str
     ) -> AsyncIterator[AudioChunk]:
         self._start_renewal()
-        if self._closed or not self._ready or self._clock() < self._parked_until:
+        patient = PATIENT_SPEECH.get()
+        if patient and not self._closed and not self._ready:
+            await self._wait_ready()
+        parked = not patient and self._clock() < self._parked_until
+        if self._closed or not self._ready or parked:
             raise BackendError("Local voice is not ready or is parked", retryable=True)
         if not voice:
             # Retryable: this sentence falls back, but other personas keep the local voice.
@@ -121,7 +136,10 @@ class LocalTTS:
         with backend_errors():
             try:
                 # Include response headers in the deadline: a server can stall before them too.
-                async with asyncio.timeout(self.settings["first_audio_deadline_ms"] / 1000):
+                deadline = (
+                    "patient_first_audio_deadline_ms" if patient else "first_audio_deadline_ms"
+                )
+                async with asyncio.timeout(self.settings[deadline] / 1000):
                     response = await self._client.send(
                         self._client.build_request(
                             "POST",

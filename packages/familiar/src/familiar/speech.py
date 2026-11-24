@@ -1,10 +1,26 @@
 """What the voice says: the text minus stage directions. Transcripts keep the raw text."""
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import cache
 from typing import Any
 
 from familiar.interfaces import load_data
+
+PATIENT_SPEECH: ContextVar[bool] = ContextVar("patient_speech", default=False)
+
+
+@contextmanager
+def patient_speech() -> Iterator[None]:
+    """Allow a slower local voice start for speech that is not urgent."""
+    token = PATIENT_SPEECH.set(True)
+    try:
+        yield
+    finally:
+        PATIENT_SPEECH.reset(token)
+
 
 AUDIO_TAGS = "audio_tags"  # TTS capability: acts out [sighs]-style tags (ElevenLabs v3)
 

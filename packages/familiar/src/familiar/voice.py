@@ -28,7 +28,7 @@ from familiar.interfaces import (
     TextToSpeech,
 )
 from familiar.persona import Persona
-from familiar.speech import looks_like_call, speakable
+from familiar.speech import PATIENT_SPEECH, looks_like_call, speakable
 from familiar.transcript import TranscriptLog
 
 # Longest wait for companion services (e.g. music ducking) before audio or recording starts.
@@ -228,6 +228,8 @@ class VoiceSession:
         if event is None:
             # The player is waiting for an answer: keep music ducked from release onwards.
             self._start_speech(critical)
+        # Ambient turns (banter) aren't urgent: the local voice may take longer to start.
+        patient = PATIENT_SPEECH.set(event is not None and event.priority == "ambient")
         try:
             await self._flush_speech()
             async with aclosing(sentences):
@@ -275,6 +277,7 @@ class VoiceSession:
                         self.conversation.acknowledge_playback()
             await self.player.wait_idle()
         finally:
+            PATIENT_SPEECH.reset(patient)
             if timings["first_audio_ms"] is not None and self.director is not None:
                 self.director.notify_spoke()
             self._busy("speaking", False)

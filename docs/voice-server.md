@@ -64,7 +64,8 @@ Every request needs `Authorization: Bearer <token>`; otherwise **401**. JSON unl
 
 ## Client (`local` backend) behaviour
 Settings live in `[tts.local]`: `url`, `token_env` (default `FAMILIAR_VOICE_TOKEN`),
-`client_name`, `first_audio_deadline_ms` (1000), `stall_margin_ms` (300), `renew_s` (10),
+`client_name`, `first_audio_deadline_ms` (1000), `patient_first_audio_deadline_ms` (2000),
+`patient_ready_wait_s` (15), `stall_margin_ms` (300), `renew_s` (10),
 `park_after_misses` (3 within `park_window_s` 120), `park_s` (300), `stall_park_s` (20),
 `timeout_seconds`.
 - **Lease**: taken in the background at construction (the backend is built inside the running
@@ -84,6 +85,12 @@ Settings live in `[tts.local]`: `url`, `token_env` (default `FAMILIAR_VOICE_TOKE
     `park_window_s` park it for `park_s`. While parked, synthesize raises retryable immediately.
   - Errors map to `BackendError`: 401 → not retryable; 400 → not retryable; 503, 5xx and
     network errors → retryable.
+- **Patient (ambient) turns**: unprompted ambient speech uses
+  `patient_first_audio_deadline_ms`, ignores parking, and polls status about once a second for
+  up to `patient_ready_wait_s` if the server is not ready. Status errors are ignored during
+  this wait; if readiness never arrives, a retryable error sends the sentence to the fallback.
+  Deadline misses and stalls still count towards parking. User replies and notable/critical
+  events keep the urgent behaviour above.
 - **Visibility**: the first lease failure logs a warning with the reason, and recovery logs
   once. With `FAMILIAR_VOICE_MARKERS=1` (the GUI sets it), the voice loop prints
   `[voice] <backend>` after each spoken sentence. `FallbackTTS.last_backend` names the backend
