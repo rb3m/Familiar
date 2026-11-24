@@ -104,10 +104,14 @@ url = "http://voice-server.local:8765"   # token from FAMILIAR_VOICE_TOKEN
 Personas name a server voice per language (`voices: {local: sarah, elevenlabs: ...}`).
 The GUI shows the server's state in a card above the ElevenLabs meter, and underlines each
 spoken sentence in the colour of the backend that voiced it (green local, blue ElevenLabs,
-amber Gemini). On macOS, Familiar.app needs Local Network permission to reach the server:
-reinstall it with `packaging/macos/install.sh` and click Allow, or turn it on under
-System Settings › Privacy & Security › Local Network. Without it, connections fail with
-"No route to host" and every sentence falls back.
+amber Gemini). On macOS, Local Network privacy blocks Familiar.app from LAN hosts ("No route
+to host"), and the app can't be granted that permission. Install the SSH tunnel daemon and point
+Familiar at loopback (ADR 0030):
+
+```sh
+sudo packaging/macos/install-voice-tunnel.sh you@voice-server-ip ~/.ssh/your_key
+# then in config.toml: [tts.local] url = "http://127.0.0.1:8766"
+```
 Setup and the HTTP API are in `voice-server/README.md` and `docs/voice-server.md`. Measurements
 and model choice are in `docs/local-tts.md` and ADR 0029.
 

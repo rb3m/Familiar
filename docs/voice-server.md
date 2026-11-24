@@ -90,6 +90,10 @@ Settings live in `[tts.local]`: `url`, `token_env` (default `FAMILIAR_VOICE_TOKE
   that produced it. The GUI hides these lines and colours the sentence. Its `GET /api/local-voice`
   proxies `/v1/status` (cached 10 s) for the status card, with extra states `unreachable`,
   `unauthorized` and `unconfigured`.
+- **macOS clients** reach the server through `packaging/macos/install-voice-tunnel.sh`: a
+  launchd daemon (running as the user) that keeps `ssh -L 127.0.0.1:8766 -> server:8765` open,
+  because Local Network privacy blocks Familiar.app (ADR 0030). `url` is then
+  `http://127.0.0.1:8766`.
 - **Capabilities**: `{"streaming"}`, without `audio_tags` (ADR 0020), so tags are stripped.
 - **Voices**: personas name a server voice id per language,
   e.g. `voices: {local: marichka, elevenlabs: VRgX...}`.

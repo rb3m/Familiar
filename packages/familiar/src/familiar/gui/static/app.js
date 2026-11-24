@@ -462,7 +462,7 @@ function renderLocalVoice(status) {
   const error = status.error || (status.state === 'unauthorized' ? 'Check the local voice bearer token.' : '');
   if (error) root.append(element('div', '', error));
   if (error.includes('No route to host')) {
-    root.append(element('div', '', 'Allow Familiar under System Settings › Privacy & Security › Local Network.'));
+    root.append(element('div', '', 'macOS blocks Familiar.app from the LAN. Install the voice tunnel: packaging/macos/install-voice-tunnel.sh.'));
   }
 }
 

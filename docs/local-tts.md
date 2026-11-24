@@ -103,9 +103,11 @@ End to end from the Mac through Familiar's chain:
 - The worker unloads 60 s after the last lease.
 
 The first desk session (same evening) never reached the M1: macOS Local Network privacy gave
-Familiar.app `No route to host`, while the terminal tests had passed. The macOS installer now
-declares a Local Network usage string, the client logs lease failures, and the GUI shows the
-server state and which backend voiced each sentence.
+Familiar.app `No route to host`, while the terminal tests had passed. An osacompile applet
+can't be granted Local Network access (shared executable UUID, ad hoc signature; Apple TN3179).
+A launchd daemon holding an SSH tunnel to the M1 fixes it (ADR 0030): first audio through the
+tunnel was 0.77–0.79 s, the same as direct. The client now logs lease failures, and the GUI
+shows the server state and which backend voiced each sentence.
 
 Open:
 - Cache the processed reference prompt per sentence (the ~0.7 s re-read).
