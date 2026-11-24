@@ -110,6 +110,7 @@ def make_session(**overrides):
     persona = SimpleNamespace(
         display_name="Test",
         voice=lambda *args: "fake-voice",
+        respellings=lambda _language: {},
         system_prompt=lambda _language, _game=None: "prompt",
     )
     log = Log()
@@ -319,3 +320,19 @@ def test_speak_patient_context_only_for_ambient(priority):
         assert not PATIENT_SPEECH.get()
 
     run(scenario())
+
+
+def test_voice_respells_spoken_text_only(capsys):
+    class RussianLLM(LLM):
+        async def stream(self, *args):
+            yield LLMChunk("*Bože moj*, davai!")
+
+    session = make_session()
+    session.conversation.llm = RussianLLM()
+    session.conversation.speaker.respellings = lambda _language: {
+        "bože moj": "боже мой",
+        "davai": "давай",
+    }
+    run(session.run())
+    assert session.player.audio == ["Боже мой, давай!"]
+    assert "Test: *Bože moj*, davai!" in capsys.readouterr().out  # the transcript keeps Latin

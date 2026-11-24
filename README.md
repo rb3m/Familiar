@@ -158,7 +158,11 @@ occasionally call back to older moments. These stay labelled as things the crew 
 as game facts. Persona YAML
 supports language-specific `aliases`, event-kind/prefix `interests`, optional one-line
 `relationships`, and `tastes` (e.g. `music: ["70s city pop", "quiet folk"]`, hints for the
-DJ's own music picks) in your own persona files; see Mira's YAML for examples.
+DJ's own music picks) in your own persona files; see Mira's YAML for examples. Each language
+can also carry `spoken`, a respelling table for the voice only: `{"bozhe moj": "боже мой",
+"*net*": "*нет*"}`. Keys match whole words regardless of case and diacritics, and a key in
+asterisks matches only an emphasised word (for words that are also English). Transcripts keep
+what was written.
 
 ATS/ETS2 telemetry comes from a local TruckSim GPS telemetry server (default
 `http://localhost:31377`); see `[games.ats]` in `config.example.toml`.

@@ -28,6 +28,7 @@ from familiar.interfaces import (
     TextToSpeech,
 )
 from familiar.persona import Persona
+from familiar.respell import respell
 from familiar.speech import PATIENT_SPEECH, looks_like_call, speakable
 from familiar.transcript import TranscriptLog
 
@@ -248,7 +249,11 @@ class VoiceSession:
                         logging.getLogger(__name__).warning(
                             "%s wrote a tool call as text (not spoken): %s", label, sentence
                         )
-                    spoken = speakable(sentence, self.tts)
+                    # Respell first: "*net*"-style keys need the asterisks that speakable drops.
+                    spoken = speakable(
+                        respell(sentence, self.conversation.speaker.respellings(self.language)),
+                        self.tts,
+                    )
                     if not spoken:
                         # Only a stage direction: nothing to say, so nothing was missed.
                         self.conversation.acknowledge_playback()

@@ -115,6 +115,10 @@ class Persona:
         """Return a backend voice, or None when none is configured."""
         return self.languages.get(language, {}).get("voices", {}).get(tts_backend)
 
+    def respellings(self, language: str) -> dict[str, str]:
+        """Written word -> form the voice should read (familiar.respell); empty when none."""
+        return self.languages.get(language, {}).get("spoken", {})
+
 
 def validate_id(persona_id: object) -> None:
     """Reject IDs that cannot safely name a persona file."""
@@ -152,6 +156,15 @@ def validate_persona(data: object) -> dict:
             for key, value in voices.items()
         ):
             raise ConfigError("Persona voices must map backend names to strings or null")
+        spoken = settings.get("spoken", {})
+        if not isinstance(spoken, dict) or any(
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+            for key, value in spoken.items()
+        ):
+            raise ConfigError("Persona spoken must map written words to non-empty spoken forms")
     hooks = data.get("game_hooks", {})
     if not isinstance(hooks, dict) or any(
         not isinstance(key, str) or not isinstance(value, str) for key, value in hooks.items()
