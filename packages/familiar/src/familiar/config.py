@@ -1,5 +1,6 @@
 """Load application settings, resolving paths relative to their TOML file."""
 
+import json
 import math
 import os
 import tomllib
@@ -79,7 +80,7 @@ class AppConfig:
     )
     transcript_dir: Path = Path("data/transcripts")
     llm: BackendConfig = field(default_factory=lambda: BackendConfig("gemini"))
-    ptt: BackendConfig = field(default_factory=lambda: BackendConfig("terminal"))
+    ptt: list[BackendConfig] = field(default_factory=lambda: [BackendConfig("terminal")])
     stt: BackendConfig | None = None
     tts: BackendConfig | None = None
     game: str | None = None
@@ -94,6 +95,11 @@ class AppConfig:
     research: dict = field(default_factory=lambda: RESEARCH_DEFAULTS.copy())
     system: dict = field(default_factory=lambda: SYSTEM_DEFAULTS.copy())
     config_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        # Older embedded callers can still pass a single backend; store only the list form.
+        if isinstance(self.ptt, BackendConfig):
+            self.ptt = [self.ptt]
 
 
 def session_settings(
@@ -163,6 +169,83 @@ def _backend(data: dict, kind: str, default: str | None = None) -> BackendConfig
     for item in reversed(names):
         chain = BackendConfig(item, section.get(item, {}).copy(), chain)
     return BackendConfig(name, settings.copy(), chain)
+
+
+def _key_ptt_settings(settings: dict) -> dict:
+    modifiers = settings.get("modifiers", [])
+    if isinstance(modifiers, list) and all(isinstance(item, str) for item in modifiers):
+        modifiers = sorted(set(modifiers))
+    return {"consume": True, **settings, "modifiers": modifiers}
+
+
+def _evdev_ptt_settings(settings: dict) -> dict:
+    device = settings.get("device")
+    if isinstance(device, str) and not device.startswith("/dev/input/"):
+        device = device.casefold()
+    return {"button": "BTN_TRIGGER", **settings, "device": device}
+
+
+def _ptt_identity(binding: BackendConfig) -> str:
+    """Compare effective settings, including defaults and unordered modifiers."""
+    normalizers = {
+        "mouse": lambda settings: {"consume": True, **settings},
+        "key": _key_ptt_settings,
+        "evdev": _evdev_ptt_settings,
+    }
+    normalize = normalizers.get(binding.backend, dict)
+    return json.dumps([binding.backend, normalize(binding.settings)], sort_keys=True)
+
+
+def validate_ptt_bindings(bindings: list[BackendConfig]) -> None:
+    if not isinstance(bindings, list) or not bindings:
+        raise ConfigError("ptt.bindings must be a non-empty list")
+    if len(bindings) > 1 and any(item.backend == "terminal" for item in bindings):
+        raise ConfigError("terminal PTT must be the only binding")
+    identities = [_ptt_identity(item) for item in bindings]
+    if len(set(identities)) != len(identities):
+        raise ConfigError("Duplicate PTT bindings")
+
+
+def ptt_bindings(entries: object) -> list[BackendConfig]:
+    """Parse API-shaped bindings; backend-specific validation belongs to the backend."""
+    if not isinstance(entries, list) or not entries:
+        raise ConfigError("ptt.bindings must be a non-empty list")
+    bindings = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ConfigError("Each PTT binding must be an object")
+        backend, settings = entry.get("backend"), entry.get("settings")
+        if not isinstance(backend, str) or not backend.strip():
+            raise ConfigError("PTT backend must be a non-empty string")
+        if not isinstance(settings, dict):
+            raise ConfigError("PTT settings must be an object")
+        bindings.append(BackendConfig(backend, settings.copy()))
+    validate_ptt_bindings(bindings)
+    return bindings
+
+
+def _ptt(data: dict) -> list[BackendConfig]:
+    section = data.get("ptt", {})
+    if not isinstance(section, dict):
+        raise ConfigError("[ptt] must be a table")
+    if "bindings" not in section:
+        binding = _backend(data, "ptt", "terminal")
+        assert binding is not None
+        return [binding]
+    if section.keys() - {"bindings"}:
+        raise ConfigError("Cannot mix legacy PTT settings and ptt.bindings")
+    entries = section["bindings"]
+    if not isinstance(entries, list) or any(not isinstance(item, dict) for item in entries):
+        raise ConfigError("ptt.bindings must be a list of tables")
+    return ptt_bindings(
+        [
+            {
+                "backend": item.get("backend"),
+                "settings": {key: value for key, value in item.items() if key != "backend"},
+            }
+            for item in entries
+        ]
+    )
 
 
 def _path(value: object, base: Path) -> Path:
@@ -392,7 +475,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         user_personas_dir=_path(data.get("user_personas_dir", "~/.config/familiar/personas"), base),
         transcript_dir=_path(data.get("transcript_dir", "data/transcripts"), base),
         llm=llm,
-        ptt=_backend(data, "ptt", "terminal"),
+        ptt=_ptt(data),
         stt=_backend(data, "stt"),
         tts=_backend(data, "tts"),
     )

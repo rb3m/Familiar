@@ -67,7 +67,9 @@ def validate_key_settings(settings: dict) -> None:
     if type(key) is not int or key not in ALLOWED_KEYS:
         raise PluginError(KEY_ERROR)
     modifiers = settings.get("modifiers", [])
-    if not isinstance(modifiers, list) or not set(modifiers) <= MODIFIERS.keys():
+    if not isinstance(modifiers, list) or any(
+        not isinstance(item, str) or item not in MODIFIERS for item in modifiers
+    ):
         raise PluginError(f"key PTT modifiers must be a list of: {', '.join(MODIFIERS)}")
     if not isinstance(settings.get("consume", True), bool):
         raise PluginError("key PTT consume must be a boolean")

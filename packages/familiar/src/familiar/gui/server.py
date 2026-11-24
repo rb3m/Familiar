@@ -15,7 +15,14 @@ from aiohttp import web
 
 from familiar.audio.player import Player
 from familiar.backends.local.client import DEFAULTS, make_client, validate
-from familiar.config import USER_CONFIG, AppConfig, BackendConfig, find_config_path, load_config
+from familiar.config import (
+    USER_CONFIG,
+    AppConfig,
+    BackendConfig,
+    find_config_path,
+    load_config,
+    ptt_bindings,
+)
 from familiar.config_writer import save_ptt
 from familiar.fallback import close_backend
 from familiar.interfaces import ConfigError, Message, PluginError, read_user_data, save_user_data
@@ -539,8 +546,19 @@ class APIService:
             raise SessionConflictError("Stop the session or finish button assignment first")
 
     async def get_ptt(self, request: web.Request) -> web.Response:
-        spec = self.config.ptt
-        return web.json_response(self.ptt_info(spec.backend, spec.settings))
+        kinds = detectable_kinds()
+        bindings = [self.ptt_info(spec.backend, spec.settings) for spec in self.config.ptt]
+        return web.json_response(
+            {
+                "bindings": [
+                    {key: item[key] for key in ("backend", "settings", "label")}
+                    for item in bindings
+                ],
+                "detectable": bool(kinds),
+                "kind": next(iter(kinds), None),
+                "kinds": list(kinds),
+            }
+        )
 
     async def detect_ptt(self, request: web.Request) -> web.Response:
         self.check_ptt_idle()
@@ -600,13 +618,15 @@ class APIService:
     async def put_ptt(self, request: web.Request) -> web.Response:
         self.check_ptt_idle()
         data = await body(request)
-        backend, settings = data.get("backend"), data.get("settings")
-        if not isinstance(settings, dict):
-            raise ConfigError("settings must be an object")
-        self.validate_ptt(backend, settings)
+        bindings = ptt_bindings(data.get("bindings"))
+        for binding in bindings:
+            self.validate_ptt(binding.backend, binding.settings)
         self.check_ptt_idle()
         async with self._ptt_lock:
-            save_ptt(self.config_path, backend, settings)
+            save_ptt(
+                self.config_path,
+                [{"backend": item.backend, "settings": item.settings} for item in bindings],
+            )
             self.config = replace(self.config, ptt=load_config(self.config_path).ptt)
             self.sessions.config = self.config
         return await self.get_ptt(request)

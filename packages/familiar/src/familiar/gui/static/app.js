@@ -1075,7 +1075,21 @@ function addLanguageControl() {
 
 function renderPTT() {
   const locked = Boolean(state?.session.running || sessionBusy || pttBusy);
-  $('#ptt-label').textContent = pttProposal?.label || ptt?.label || 'Unavailable';
+  $('#ptt-label').textContent = pttProposal ? `Add: ${pttProposal.label}` : '';
+  const list = $('#ptt-bindings');
+  list.replaceChildren();
+  for (const [index, binding] of (ptt?.bindings || []).entries()) {
+    const row = document.createElement('li');
+    const label = document.createElement('span');
+    label.textContent = binding.label;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove';
+    remove.disabled = locked || ptt.bindings.length === 1;
+    remove.addEventListener('click', () => persistPTT(ptt.bindings.filter((_, i) => i !== index)));
+    row.append(label, remove);
+    list.append(row);
+  }
   const kinds = ptt?.kinds || (ptt?.kind ? [ptt.kind] : []);
   const assignments = $('#ptt-assignments');
   assignments.replaceChildren();
@@ -1113,11 +1127,16 @@ async function assignPTT(kind) {
 }
 
 async function savePTT() {
+  const bindings = (ptt?.bindings || []).filter(binding => binding.backend !== 'terminal');
+  await persistPTT([...bindings, pttProposal]);
+}
+
+async function persistPTT(bindings) {
   pttBusy = true;
   renderPTT();
   updateStartAvailability();
   try {
-    ptt = await put('/api/ptt', { backend: pttProposal.backend, settings: pttProposal.settings });
+    ptt = await put('/api/ptt', { bindings: bindings.map(({ backend, settings }) => ({ backend, settings })) });
     pttProposal = null;
     $('#ptt-status').textContent = 'Push-to-talk saved.';
   } catch (error) {

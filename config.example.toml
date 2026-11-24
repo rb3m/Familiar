@@ -89,11 +89,24 @@ timeout_seconds = 30.0
 [ptt]
 backend = "terminal"       # Enter starts recording, Enter stops; Ctrl-C exits
 
-# Linux joystick/HOTAS: run familiar ptt-setup to detect device and button.
-# Set backend = "evdev" above to enable. The game retains access to the device.
-# [ptt.evdev]
-# device = "Thrustmaster"  # substring of device name, or /dev/input/eventN
-# button = "BTN_TRIGGER"  # evdev button name or integer code
+# Several controls can be push-to-talk at once; holding any one records. Replace the [ptt]
+# table above with a list of [[ptt.bindings]]. `familiar ptt-setup` (or the GUI panel) adds
+# the control you press; `--replace` starts the list over. Terminal must be the only binding.
+# Linux uses evdev for keys, mouse buttons and joysticks; the game keeps access to the device.
+# An unplugged device doesn't stop the session: it waits and resumes when plugged back in.
+# [ptt]
+# [[ptt.bindings]]
+# backend = "evdev"
+# device = "Keychron"       # substring of the device name, or /dev/input/eventN
+# button = "KEY_F13"        # evdev key/button name or integer code
+#
+# [[ptt.bindings]]
+# backend = "evdev"
+# device = "Thrustmaster"
+# button = "BTN_TRIGGER"
+#
+# macOS: backend = "mouse" with button = 4, or backend = "key" with key = 105 (F13);
+# both take consume = true (default); key also takes modifiers = ["control"].
 
 # Game backends receive their own settings table; absent tables default to {}.
 [games.ats]

@@ -419,7 +419,14 @@ async def _voice(args: argparse.Namespace) -> None:
                 print(f"Cannot check ElevenLabs quota: {exc}", file=sys.stderr)
         conversation, adapter, director = runtime.conversation(args)
         transcript = conversation.transcript
-        ptt = runtime.backend("ptt", runtime.config.ptt)
+        from familiar.ptt.combined import CombinedPTT
+
+        ptt = CombinedPTT(
+            [
+                (f"{index + 1}: {spec.backend}", runtime.backend("ptt", spec))
+                for index, spec in enumerate(runtime.config.ptt)
+            ]
+        )
         session = runtime.session
         stereo = bool(session and session.stereo)
         # VoiceSession owns cleanup once started; remove the setup cleanup callbacks.
@@ -468,7 +475,7 @@ async def _voices(args: argparse.Namespace) -> None:
 
 
 async def _ptt_setup(args: argparse.Namespace) -> None:
-    from familiar.config import USER_CONFIG, find_config_path
+    from familiar.config import USER_CONFIG, BackendConfig, find_config_path, validate_ptt_bindings
     from familiar.config_writer import save_ptt
     from familiar.ptt.key import key_label
     from familiar.ptt.setup import detect, detectable_kinds
@@ -491,8 +498,15 @@ async def _ptt_setup(args: argparse.Namespace) -> None:
         raise SystemExit(1)
     path = find_config_path(args.config) or USER_CONFIG.expanduser()
     settings = {key: value for key, value in proposal.items() if key != "backend"}
-    save_ptt(path, proposal["backend"], settings)
-    print(f"Saved to {path}: push-to-talk = {label}.")
+    bindings = []
+    if path.is_file() and not getattr(args, "replace", False):
+        bindings = [item for item in load_config(path).ptt if item.backend != "terminal"]
+    bindings.append(BackendConfig(proposal["backend"], settings))
+    validate_ptt_bindings(bindings)
+    save_ptt(path, [{"backend": item.backend, "settings": item.settings} for item in bindings])
+    print(f"Saved push-to-talk bindings to {path}:")
+    for item in bindings:
+        print(f"  {item.backend}: {item.settings}")
 
 
 async def _gui(args: argparse.Namespace) -> None:
@@ -542,6 +556,7 @@ def main() -> None:
         "ptt-setup", help="Assign mouse or key PTT on macOS or joystick PTT on Linux"
     )
     ptt_setup.add_argument("--config")
+    ptt_setup.add_argument("--replace", action="store_true", help="Replace existing bindings")
     ptt_setup.add_argument("--kind", choices=("mouse", "key", "joystick"))
     voices = commands.add_parser("voices", help="List ElevenLabs voices and quota")
     voices.add_argument("--config")

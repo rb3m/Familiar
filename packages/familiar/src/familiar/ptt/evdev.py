@@ -1,11 +1,15 @@
 """Linux joystick PTT without exclusive grabs."""
 
 import asyncio
+import os
 import sys
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from familiar.interfaces import PLUGIN_API_VERSION, PluginError
+
+RECONNECT_POLL_S = 2.0
 
 
 def evdev_module() -> Any:
@@ -46,26 +50,36 @@ def _find_device(module: Any, selector: str, button: int) -> Any:
     if selector.startswith("/dev/input/"):
         try:
             return module.InputDevice(selector)
-        except OSError as exc:
-            raise PluginError(
-                f"Cannot read {selector}; check /dev/input permissions: {exc}"
-            ) from exc
+        except OSError:
+            return None
     fallback = None
     name = selector.casefold()
     for path in module.list_devices():
+        device = None
         try:
             device = module.InputDevice(path)
             rank = _match_rank(device, name, button, module.ecodes)
         except OSError:
+            if device is not None:
+                device.close()
             continue
         if rank == 0:
             return device
         if fallback is None and rank == 1:
             fallback = path
         device.close()
-    if fallback is not None:
+    if fallback is None:
+        return None
+    try:
         return module.InputDevice(fallback)
-    raise PluginError(f"PTT device {selector!r} not found/readable; check /dev/input permissions")
+    except OSError:
+        return None
+
+
+def _permission_hint() -> str:
+    if any(not os.access(path, os.R_OK) for path in Path("/dev/input").glob("event*")):
+        return "; check /dev/input permissions"
+    return ""
 
 
 class EvdevPTT:
@@ -77,23 +91,60 @@ class EvdevPTT:
         self.settings = settings
         self._device = None
 
+    async def _wait_device(self, module: Any, selector: str, button: int, announce: bool) -> Any:
+        device = await asyncio.to_thread(_find_device, module, selector, button)
+        if device is not None:
+            return device
+        if announce:
+            self._status("waiting for device" + _permission_hint())
+        while device is None:
+            await asyncio.sleep(RECONNECT_POLL_S)
+            device = await asyncio.to_thread(_find_device, module, selector, button)
+        return device
+
+    def _status(self, message: str) -> None:
+        print(
+            f"PTT {self.settings.get('button', 'BTN_TRIGGER')} on "
+            f"{self.settings['device']}: {message}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    async def _presses(self, module: Any, button: int) -> AsyncIterator[bool]:
+        """Press/release of one open device; ends when the device goes away."""
+        # A button already down on (re)connect is ignored until released: no phantom recording.
+        ignored = button in self._device.active_keys()
+        self._status("connected")
+        async for event in self._device.async_read_loop():
+            if event.type != module.ecodes.EV_KEY or event.code != button:
+                continue
+            if event.value == 0:
+                ignored = False
+            if ignored or event.value not in {0, 1}:
+                continue
+            yield bool(event.value)
+
     async def events(self) -> AsyncIterator[bool]:
         module = evdev_module()
         selector = self.settings.get("device")
         if not isinstance(selector, str) or not selector:
             raise PluginError("evdev PTT requires a device name or /dev/input path")
         button = parse_button(self.settings.get("button", "BTN_TRIGGER"), module.ecodes)
-        self._device = await asyncio.to_thread(_find_device, module, selector, button)
+        announce = True
         try:
-            async for event in self._device.async_read_loop():
-                if event.type != module.ecodes.EV_KEY or event.code != button:
-                    continue
-                if event.value in {0, 1}:
-                    yield bool(event.value)
-        except OSError as exc:
-            raise PluginError(
-                f"PTT device disconnected; check /dev/input permissions: {exc}"
-            ) from exc
+            while True:
+                self._device = await self._wait_device(module, selector, button, announce)
+                announce = False
+                held = False
+                try:
+                    async for held in self._presses(module, button):
+                        yield held
+                except OSError:
+                    pass
+                await self.aclose()
+                self._status("disconnected; will resume when it is plugged back in")
+                if held:
+                    yield False
         finally:
             await self.aclose()
 

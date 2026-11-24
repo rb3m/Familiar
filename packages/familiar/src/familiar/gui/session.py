@@ -131,7 +131,7 @@ class SessionManager:
         async with self._lock:
             if self._state["running"]:
                 raise SessionConflictError("A session is already running")
-            if self.config.ptt.backend == "terminal":
+            if len(self.config.ptt) == 1 and self.config.ptt[0].backend == "terminal":
                 raise ConfigError("Assign a push-to-talk button in the Push-to-talk panel first")
             self.process = await asyncio.create_subprocess_exec(
                 *command,

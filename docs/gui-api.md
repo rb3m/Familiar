@@ -16,19 +16,20 @@ get `403`. The frontend reads the token from `location.search` once and keeps it
 Non-2xx responses have JSON `{"error": "human readable message"}`.
 
 ## Endpoints
-- `GET /api/ptt` → `{"backend", "settings", "label", "detectable": bool,
+- `GET /api/ptt` → `{"bindings": [{"backend", "settings", "label"}], "detectable": bool,
   "kinds": ["mouse", "key"], "kind": "mouse" | "key" | "joystick" | null}`.
   Labels include `Mouse button 4`, `BTN_TRIGGER on Thrustmaster`, `Key Ctrl+F12`, and
   `Terminal (Enter)`. `kinds` lists platform detection options (macOS: mouse/key;
-  Linux: joystick; others: empty); `kind` is the first option or null for older clients.
+  Linux: joystick/key/mouse; others: empty); `kind` is the first option or null for older clients.
 - `POST /api/ptt/detect` body `{"timeout": 30, "kind": "key"}` (optional, positive seconds, at most 60)
-  → waits for one press and returns the same shape as `GET /api/ptt` with proposed settings,
+  → waits for one press and returns one proposal: `{"backend", "settings", "label",
+  "detectable", "kind", "kinds"}`,
   without saving. `409` while a session or detection is running; `408` on timeout.
   Optional `kind` defaults to the first platform kind; unsupported kinds return `400`.
   Key detection consumes only F1-F20/keypad keys and passes other keys through; it records
   held modifiers, e.g. `{"key": 111, "modifiers": ["control"]}`.
   Mouse detection consumes spare buttons to prevent back/forward navigation.
-- `PUT /api/ptt` body `{"backend", "settings"}` → validates and saves to the server's config
+- `PUT /api/ptt` body `{"bindings": [{"backend", "settings"}, ...]}` → validates and saves to the server's config
   path, reloads its PTT config, and returns the same shape as GET. Mouse requires an integer
   `button >= 2` and optional boolean `consume` (default true). Key requires an integer
   `key` in the F1-F20/keypad virtual-keycode mapping, optional `modifiers` (a list of
@@ -36,6 +37,10 @@ Non-2xx responses have JSON `{"error": "human readable message"}`.
   is assigned) and optional boolean `consume` (default true), with no other settings; evdev requires nonempty
   `device` and `button` strings; terminal accepts empty settings. `400` on invalid input,
   `409` while a session or detection runs. Session start is also blocked during detection.
+  The list must be nonempty, with no duplicate effective bindings; terminal must be the sole
+  binding. Assignment adds a proposal; Save appends it (replacing the terminal default), and
+  Remove saves the remaining list. The last binding cannot be removed. Terminal-only sessions
+  cannot start from the GUI. Saves replace legacy PTT tables with `[[ptt.bindings]]` tables.
   All PTT endpoints use the token and origin checks described above.
 - `GET /api/state` → `{"games": [{"id": "ats", "name": "American Truck Simulator", "icon": "🚛"}, ...],
   "personas": [PersonaSummary], "languages": [{"id": "en", "name": "English"}, ...],

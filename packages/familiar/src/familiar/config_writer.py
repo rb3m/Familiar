@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-_TABLE = re.compile(r"^\s*#?\s*\[([A-Za-z0-9_.\-]+)\]\s*(?:#.*)?$")
+_TABLE = re.compile(r"^\s*#?\s*\[\[?([A-Za-z0-9_.\-]+)\]\]?\s*(?:#.*)?$")
 
 
 def _table_name(line: str) -> str | None:
@@ -17,7 +17,7 @@ def _is_section(name: str | None, section: str) -> bool:
 
 
 def replace_section(text: str, section: str, block: str) -> str:
-    """Replace `[section]` and its `[section.*]` sub-tables (commented ones too) with block.
+    """Replace section tables and array tables (including commented headers) with block.
 
     The block is appended when the section does not exist yet. Other tables and comments are
     left untouched.
@@ -48,18 +48,25 @@ def _key(key: str) -> str:
     return key if _BARE_KEY.match(key) else json.dumps(key)
 
 
-def ptt_block(backend: str, settings: dict) -> str:
+def _value(value: object) -> str:
+    if isinstance(value, dict):
+        entries = (f"{_key(key)} = {_value(item)}" for key, item in value.items())
+        return "{" + ", ".join(entries) + "}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_value(item) for item in value) + "]"
+    return json.dumps(value, ensure_ascii=False)
+
+
+def ptt_block(bindings: list[dict]) -> str:
     lines = ["[ptt]"]
-    lines.append(f"backend = {json.dumps(backend)}")
-    if settings:
-        lines.extend(["", f"[ptt.{backend}]"])
-    for key, value in settings.items():
-        lines.append(f"{_key(key)} = {json.dumps(value, ensure_ascii=False)}")
+    for binding in bindings:
+        lines.extend(["", "[[ptt.bindings]]", f"backend = {json.dumps(binding['backend'])}"])
+        lines.extend(f"{_key(key)} = {_value(value)}" for key, value in binding["settings"].items())
     return "\n".join(lines) + "\n"
 
 
-def save_ptt(path: Path, backend: str, settings: dict) -> None:
-    """Save push-to-talk settings, creating the file if needed."""
+def save_ptt(path: Path, bindings: list[dict]) -> None:
+    """Save push-to-talk bindings, creating the file if needed."""
     text = path.read_text() if path.is_file() else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(replace_section(text, "ptt", ptt_block(backend, settings)))
+    path.write_text(replace_section(text, "ptt", ptt_block(bindings)))

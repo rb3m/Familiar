@@ -122,7 +122,7 @@ uv run familiar gui                                # launcher window
 uv run familiar chat                               # text chat in the terminal
 uv run familiar voice --game ats --persona mira    # voice, with ATS telemetry
 uv run familiar voice --session path/to/session.toml  # saved crew selection
-uv run familiar ptt-setup                          # push-to-talk: joystick (Linux), mouse (macOS)
+uv run familiar ptt-setup                          # add a push-to-talk control (--replace to start over)
 uv run familiar plugins                            # list installed backends and game packs
 ```
 
@@ -241,7 +241,9 @@ remarks use only facts from your tags. See `config.example.toml` for tuning and 
 Run `uv run familiar gui` (the macOS app installer opens this launcher by default).
 In the launcher's **Push-to-talk** panel, choose **Assign mouse button…** or **Assign key…**,
 press a spare mouse/trackball button or an F1-F20/keypad key (modifiers count: Ctrl+F12
-leaves plain F12 to Chrome's DevTools), then **Save**. Left and right clicks cannot be assigned. Alternatively,
+leaves plain F12 to Chrome's DevTools), then **Save**. Each Save adds a binding, so a key, a
+mouse button and a controller button can all be push-to-talk at once; **Remove** drops one.
+On Linux an unplugged device doesn't end the session: it waits and resumes on re-plug. Left and right clicks cannot be assigned. Alternatively,
 run `uv run familiar ptt-setup --kind mouse` or `--kind key` and press the same control
 twice to confirm.
 

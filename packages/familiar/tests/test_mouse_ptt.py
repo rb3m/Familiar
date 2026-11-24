@@ -230,7 +230,7 @@ async def test_cli_mouse_confirmation(monkeypatch, tmp_path, capsys, confirmatio
         assert path.read_text() == ""
         return
     await _ptt_setup(Namespace(config=str(path)))
-    assert load_config(path).ptt.settings == {"button": 4}
+    assert load_config(path).ptt[0].settings == {"button": 4}
     assert "Press the mouse button" in capsys.readouterr().out
 
 
@@ -337,7 +337,7 @@ async def test_cli_key_confirmation(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(setup, "detect", detector)
     path = tmp_path / "config.toml"
     await _ptt_setup(Namespace(config=str(path), kind="key"))
-    assert load_config(path).ptt.settings == {"key": 105}
+    assert load_config(path).ptt[0].settings == {"key": 105}
     assert detector.await_count == 2
     detector.assert_awaited_with(kind="key")
     assert "Press the key" in capsys.readouterr().out

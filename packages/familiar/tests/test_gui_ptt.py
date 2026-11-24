@@ -13,7 +13,7 @@ from test_gui import DirectClient
 @pytest.fixture
 def ptt_client(tmp_path):
     path = tmp_path / "config.toml"
-    config = AppConfig(ptt=BackendConfig("terminal"))
+    config = AppConfig(ptt=[BackendConfig("terminal")])
     app = server.create_app(config, config_path=path, token="secret")
     return DirectClient(app), app[server.API], path
 
@@ -22,17 +22,21 @@ async def test_get_and_save(ptt_client):
     client, service, path = ptt_client
     response = await client.get("/api/ptt")
     assert response.status == 200
-    assert (await response.json())["label"] == "Terminal (Enter)"
+    assert (await response.json())["bindings"][0]["label"] == "Terminal (Enter)"
     response = await client.put(
         "/api/ptt",
         json={
-            "backend": "mouse",
-            "settings": {"button": 4, "consume": False},
+            "bindings": [
+                {
+                    "backend": "mouse",
+                    "settings": {"button": 4, "consume": False},
+                }
+            ]
         },
     )
     assert response.status == 200
-    assert (await response.json())["label"] == "Mouse button 4"
-    assert load_config(path).ptt.settings == {"button": 4, "consume": False}
+    assert (await response.json())["bindings"][0]["label"] == "Mouse button 4"
+    assert load_config(path).ptt[0].settings == {"button": 4, "consume": False}
     assert service.sessions.config.ptt == service.config.ptt
 
 
@@ -63,7 +67,7 @@ async def test_detect_proposal_not_saved(ptt_client, monkeypatch):
 )
 async def test_put_validation(ptt_client, settings):
     client, _, path = ptt_client
-    assert (await client.put("/api/ptt", json=settings)).status == 400
+    assert (await client.put("/api/ptt", json={"bindings": [settings]})).status == 400
     assert not path.exists()
 
 
@@ -75,8 +79,12 @@ async def test_running_conflicts(ptt_client):
         await client.put(
             "/api/ptt",
             json={
-                "backend": "mouse",
-                "settings": {"button": 4},
+                "bindings": [
+                    {
+                        "backend": "mouse",
+                        "settings": {"button": 4},
+                    }
+                ]
             },
         )
     ).status == 409
@@ -101,8 +109,12 @@ async def test_detection_excludes_detection_save_and_start(ptt_client, monkeypat
             await client.put(
                 "/api/ptt",
                 json={
-                    "backend": "mouse",
-                    "settings": {"button": 4},
+                    "bindings": [
+                        {
+                            "backend": "mouse",
+                            "settings": {"button": 4},
+                        }
+                    ]
                 },
             )
         ).status == 409
@@ -146,13 +158,17 @@ async def test_evdev_save(ptt_client):
     response = await client.put(
         "/api/ptt",
         json={
-            "backend": "evdev",
-            "settings": {"device": "Thrustmaster", "button": "BTN_TRIGGER"},
+            "bindings": [
+                {
+                    "backend": "evdev",
+                    "settings": {"device": "Thrustmaster", "button": "BTN_TRIGGER"},
+                }
+            ]
         },
     )
     assert response.status == 200
-    assert (await response.json())["label"] == "BTN_TRIGGER on Thrustmaster"
-    assert load_config(path).ptt.backend == "evdev"
+    assert (await response.json())["bindings"][0]["label"] == "BTN_TRIGGER on Thrustmaster"
+    assert load_config(path).ptt[0].backend == "evdev"
 
 
 @pytest.mark.parametrize(
@@ -200,7 +216,9 @@ async def test_invalid_detect_kind(ptt_client, monkeypatch, kind):
 )
 async def test_invalid_key_settings(ptt_client, settings):
     client, _, path = ptt_client
-    response = await client.put("/api/ptt", json={"backend": "key", "settings": settings})
+    response = await client.put(
+        "/api/ptt", json={"bindings": [{"backend": "key", "settings": settings}]}
+    )
     assert response.status == 400
     assert not path.exists()
 
@@ -209,9 +227,35 @@ async def test_invalid_key_settings(ptt_client, settings):
 async def test_key_config_round_trip(ptt_client, consume):
     client, service, path = ptt_client
     settings = {"key": 105, "consume": consume}
-    response = await client.put("/api/ptt", json={"backend": "key", "settings": settings})
+    response = await client.put(
+        "/api/ptt", json={"bindings": [{"backend": "key", "settings": settings}]}
+    )
     assert response.status == 200
-    assert (await response.json())["label"] == "Key F13"
-    assert load_config(path).ptt.settings == settings
-    assert load_config(path).ptt.backend == "key"
+    assert (await response.json())["bindings"][0]["label"] == "Key F13"
+    assert load_config(path).ptt[0].settings == settings
+    assert load_config(path).ptt[0].backend == "key"
+    assert service.sessions.config.ptt == service.config.ptt
+
+
+async def test_list_add_remove_and_invalid_lists(ptt_client):
+    client, service, path = ptt_client
+    bindings = [
+        {"backend": "mouse", "settings": {"button": 4}},
+        {"backend": "key", "settings": {"key": 105}},
+    ]
+    response = await client.put("/api/ptt", json={"bindings": bindings})
+    assert response.status == 200
+    assert len((await response.json())["bindings"]) == 2
+    for invalid in (
+        [],
+        [bindings[0], bindings[0]],
+        [bindings[0], {"backend": "terminal", "settings": {}}],
+    ):
+        assert (await client.put("/api/ptt", json={"bindings": invalid})).status == 400
+    response = await client.put("/api/ptt", json={"bindings": bindings[1:]})
+    assert response.status == 200
+    assert (await (await client.get("/api/ptt")).json())["bindings"] == [
+        {**bindings[1], "label": "Key F13"}
+    ]
+    assert len(load_config(path).ptt) == 1
     assert service.sessions.config.ptt == service.config.ptt

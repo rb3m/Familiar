@@ -139,7 +139,10 @@ def test_evdev_filter_and_button_parsing(monkeypatch):
         )
         monkeypatch.setattr("familiar.ptt.evdev.evdev_module", lambda: module)
         ptt = EvdevPTT({"device": "HOTAS", "button": "BTN_TRIGGER"})
-        assert [pressed async for pressed in ptt.events()] == [True, False]
+        events = ptt.events()
+        assert await anext(events) is True
+        assert await anext(events) is False
+        await events.aclose()
         assert device.closed
         assert parse_button(288, CODES) == 288
         assert parse_button("BTN_BASE3", CODES) == 294
@@ -243,9 +246,9 @@ button = 288
     assert config.stt.fallback.settings == {"model": "transcribe"}
     assert config.tts.settings == {"api_key_env": "OTHER_KEY"}
     assert config.tts.fallback.backend == "gemini"
-    assert config.ptt.settings == {"device": "HOTAS", "button": 288}
+    assert config.ptt[0].settings == {"device": "HOTAS", "button": 288}
     path.write_text("")
-    assert load_config(path).ptt.backend == "terminal"
+    assert load_config(path).ptt[0].backend == "terminal"
     for invalid in ["fallback = 42", 'fallback = "elevenlabs"', 'fallback = ""']:
         path.write_text('[tts]\nbackend = "elevenlabs"\n' + invalid)
         with pytest.raises(ConfigError):
@@ -401,3 +404,198 @@ def test_nested_tts_resolves_only_real_backend_voices():
         await chain.aclose()
 
     run(scenario())
+
+
+@pytest.mark.asyncio
+async def test_combined_overlap_and_child_failure(capsys):
+    from familiar.ptt.combined import CombinedPTT
+
+    class Source:
+        def __init__(self):
+            self.queue = asyncio.Queue()
+            self.processed = asyncio.Event()
+            self.closed = False
+
+        async def events(self):
+            while True:
+                value = await self.queue.get()
+                self.processed.set()
+                if value is None:
+                    return
+                if isinstance(value, Exception):
+                    raise value
+                yield value
+
+        async def send(self, value):
+            self.processed.clear()
+            self.queue.put_nowait(value)
+            await self.processed.wait()
+            await asyncio.sleep(0)
+
+        async def aclose(self):
+            self.closed = True
+
+    a, b = Source(), Source()
+    combined = CombinedPTT([("A", a), ("B", b)])
+    events = combined.events()
+    first = asyncio.create_task(anext(events))
+    await a.send(True)
+    assert await first is True
+    pending = asyncio.create_task(anext(events))
+    await a.send(True)
+    await b.send(True)
+    await a.send(False)
+    await a.send(False)
+    assert not pending.done()
+    await b.send(False)
+    assert await pending is False
+    pending = asyncio.create_task(anext(events))
+    await a.send(True)
+    assert await pending is True
+    pending = asyncio.create_task(anext(events))
+    await a.send(PluginError("failed"))
+    assert await pending is False
+    pending = asyncio.create_task(anext(events))
+    await b.send(True)
+    assert await pending is True
+    pending = asyncio.create_task(anext(events))
+    await b.send(None)
+    assert await pending is False
+    with pytest.raises(StopAsyncIteration):
+        await anext(events)
+    await combined.aclose()
+    assert a.closed and b.closed
+    assert "PTT A stopped: failed" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("selector", ["HOTAS", "/dev/input/event99"])
+async def test_evdev_wait_disconnect_and_held_reconnect(monkeypatch, capsys, selector):
+    from familiar.ptt import evdev
+
+    class UnpluggedDevice(Device):
+        async def async_read_loop(self):
+            async for event in super().async_read_loop():
+                yield event
+            raise OSError("unplugged")
+
+    first = UnpluggedDevice([(1, 288, 1)])
+    second = UnpluggedDevice(
+        [(1, 288, 1), (1, 288, 2), (1, 288, 0), (1, 288, 1), (1, 288, 0)], held=[288]
+    )
+    first.name = second.name = "HOTAS"
+    attempts = 0
+
+    def open_device(path):
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 2:
+            raise FileNotFoundError(path)
+        if attempts == 3:
+            return first
+        return second
+
+    module = SimpleNamespace(
+        ecodes=CODES, list_devices=lambda: ["/dev/input/event99"], InputDevice=open_device
+    )
+    monkeypatch.setattr(evdev, "evdev_module", lambda: module)
+    monkeypatch.setattr(evdev, "RECONNECT_POLL_S", 0.001)
+    ptt = EvdevPTT({"device": selector, "button": "BTN_TRIGGER"})
+    events = ptt.events()
+    async with asyncio.timeout(1):
+        assert await anext(events) is True
+        assert await anext(events) is False  # unplug releases
+        assert await anext(events) is False  # held-on-reconnect release, no True before it
+        assert await anext(events) is True
+        assert await anext(events) is False
+    await events.aclose()
+    assert first.closed and second.closed
+    output = capsys.readouterr().err
+    assert output.count("waiting for device") == 1
+    assert output.count(": connected") == 2
+    assert "disconnected; will resume" in output
+
+
+@pytest.mark.asyncio
+async def test_evdev_unknown_button_fails_before_wait(monkeypatch):
+    monkeypatch.setattr("familiar.ptt.evdev.evdev_module", lambda: SimpleNamespace(ecodes=CODES))
+    events = EvdevPTT({"device": "missing", "button": "UNKNOWN"}).events()
+    with pytest.raises(PluginError, match="Unknown evdev button"):
+        await anext(events)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replace", [True, False])
+async def test_cli_setup_adds_or_replaces_bindings(tmp_path, monkeypatch, capsys, replace):
+    from argparse import Namespace
+    from unittest.mock import AsyncMock
+
+    from familiar.cli import _ptt_setup
+    from familiar.config_writer import save_ptt
+
+    path = tmp_path / "config.toml"
+    save_ptt(path, [{"backend": "mouse", "settings": {"button": 4}}])
+    monkeypatch.setattr(setup, "detect", AsyncMock(return_value={"backend": "key", "key": 105}))
+    await _ptt_setup(Namespace(config=str(path), kind="key", replace=replace))
+    assert [item.backend for item in load_config(path).ptt] == {
+        True: ["key"],
+        False: ["mouse", "key"],
+    }[replace]
+    assert "key: {'key': 105}" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_cli_setup_creates_missing_config(tmp_path, monkeypatch):
+    from argparse import Namespace
+    from unittest.mock import AsyncMock
+
+    from familiar.cli import _ptt_setup
+
+    path = tmp_path / "config.toml"
+    monkeypatch.setattr(setup, "detect", AsyncMock(return_value={"backend": "key", "key": 105}))
+    await _ptt_setup(Namespace(config=str(path), kind="key"))
+    assert load_config(path).ptt[0].backend == "key"
+
+
+@pytest.mark.asyncio
+async def test_combined_cancellation_closes_child_iterator():
+    from familiar.ptt.combined import CombinedPTT
+
+    started, cancelled = asyncio.Event(), asyncio.Event()
+
+    class Source:
+        closed = False
+
+        async def events(self):
+            try:
+                started.set()
+                await asyncio.Event().wait()
+                yield True
+            finally:
+                cancelled.set()
+
+        async def aclose(self):
+            self.closed = True
+
+    source = Source()
+    combined = CombinedPTT([("silent", source)])
+    events = combined.events()
+    task = asyncio.create_task(anext(events))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancelled.is_set()
+    await combined.aclose()
+    assert source.closed
+
+
+def test_evdev_permission_hint(monkeypatch):
+    from familiar.ptt import evdev
+
+    paths = ["/dev/input/event42"]
+    monkeypatch.setattr(evdev, "Path", lambda _: SimpleNamespace(glob=lambda pattern: paths))
+    monkeypatch.setattr(evdev.os, "access", lambda path, mode: False)
+    assert "/dev/input permissions" in evdev._permission_hint()
+    paths.clear()
+    assert evdev._permission_hint() == ""
